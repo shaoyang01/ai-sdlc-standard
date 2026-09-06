@@ -333,8 +333,14 @@ case "${ACTION}" in
       known = %w[requirement-intake solution-design solution-gate task-planning implementation code-review knowledge-sync]
       seq = decl["declaration_seq"].to_i
       if seq <= state["publish_seq"]
-        warn "NO-OP REPLAY: declaration seq #{seq} already covered"
-        exit 0
+        decl_digest = Digest::SHA256.hexdigest(JSON.generate(decl))
+        log_entry = (state["declaration_log"] || []).find { |d| d["seq"] == seq }
+        if log_entry && log_entry["input_digest"] == decl_digest
+          warn "NO-OP REPLAY: merged declaration seq #{seq} with identical input digest"
+          exit 0
+        end
+        warn "ADMISSION_DENIED: merged declaration seq #{seq} replay with DIFFERENT input"
+        exit 1
       end
       if seq > state["publish_seq"] + 1
         warn "ADMISSION_DENIED: declaration gap"
@@ -357,13 +363,24 @@ case "${ACTION}" in
       if reg_ids.uniq.size != reg_ids.size
         errors << "batch-internal duplicate finding_id in registers"
       end
-      # candidate state: apply gate fields to a copy BEFORE validating accept actions
+      # candidate state: apply FULL entry update (including version and lifecycle fields)
+      # to a copy BEFORE validating accept actions (G3-R3-H1)
       candidate = JSON.parse(JSON.generate(state))
-      if node && entry && decl["gate_result"]
+      if node && entry
         entry_c = candidate["entries"].find { |e| e["node"] == node }
-        entry_c["gate_result"] = decl["gate_result"]
-        entry_c["decision_depth"] = decl["decision_depth"]
-        entry_c["decision_status"] = decl["decision_status"]
+        entry_c["status"] = "current"
+        entry_c["artifact_path"] = decl["artifact_path"]
+        entry_c["version"] = decl["version"]
+        entry_c["digest"] = decl["digest"]
+        entry_c["updated_at"] = now
+        if decl["gate_result"]
+          entry_c["gate_result"] = decl["gate_result"]
+          entry_c["decision_depth"] = decl["decision_depth"]
+          entry_c["decision_status"] = decl["decision_status"]
+        end
+        if decl["decision_status"] == "ESCALATED"
+          candidate["depth"]["required_depth"] = decl["decision_depth"]
+        end
       end
       actions.each do |a|
         row = (candidate["finding_index"] || []).find { |f| f["finding_id"] == a["finding_id"] }
@@ -383,7 +400,8 @@ case "${ACTION}" in
         if row["status"] != "OPEN"
           same = row["status"] == (a["action"] == "accept" ? "ACCEPTED" : "RESOLVED") &&
                  row["closed_by"] == a["closed_by"] && row["closure_evidence_ref"] == a["evidence_ref"] &&
-                 row["closure_evidence_digest"] == a["evidence_digest"]
+                 row["closure_evidence_digest"] == a["evidence_digest"] &&
+                 row["closure_bound_revision_id"] == a["bound_revision_id"]
           errors << "finding #{a["finding_id"]}: conflicting replay" unless same
           next
         end
@@ -416,20 +434,9 @@ case "${ACTION}" in
         errors.each { |x| warn "  - #{x}" }
         exit 1
       end
-      entry["status"] = "current"
-      entry["artifact_path"] = decl["artifact_path"]
-      entry["version"] = decl["version"]
-      entry["digest"] = decl["digest"]
-      entry["updated_at"] = now
-      entry["source_event_ref"] = decl["source_ref"]
-      if decl["gate_result"]
-        entry["gate_result"] = decl["gate_result"]
-        entry["decision_depth"] = decl["decision_depth"]
-        entry["decision_status"] = decl["decision_status"]
-      end
-      if decl["decision_status"] == "ESCALATED"
-        state["depth"]["required_depth"] = decl["decision_depth"]
-      end
+      # apply the SAME candidate that was validated (G3-R3-H1: no re-assembly)
+      state["entries"] = candidate["entries"]
+      state["depth"] = candidate["depth"]
       (decl["stale_nodes"] || []).each do |sn|
         se = state["entries"].find { |e| e["node"] == sn }
         se["status"] = "stale"; se["updated_at"] = now
@@ -444,7 +451,7 @@ case "${ACTION}" in
       end
       actions.each do |a|
         row = state["finding_index"].find { |f| f["finding_id"] == a["finding_id"] }
-        next unless row["status"] == "OPEN"
+        next unless row && row["status"] == "OPEN"
         row["status"] = a["action"] == "accept" ? "ACCEPTED" : "RESOLVED"
         row["closed_by"] = a["closed_by"]
         row["closure_evidence_ref"] = a["evidence_ref"]
@@ -585,7 +592,7 @@ case "${ACTION}" in
     NODE="$(req_opt node)"
     case "${NODE}" in requirement-intake|solution-design|solution-gate|task-planning|implementation|code-review|knowledge-sync) ;; *) echo "Unknown node: ${NODE}" >&2; exit 2 ;; esac
     load_state
-    NODE="${NODE}" LIB_DIR="${LIB_DIR}" STATE_FILE="${STATE_FILE}" ruby -rjson -rdigest -e '
+    NODE="${NODE}" LIB_DIR="${LIB_DIR}" STATE_FILE="${STATE_FILE}" ruby -ryaml -rjson -rdigest -e '
       state = JSON.parse(File.read(ENV["STATE_FILE"]))
       node = ENV["NODE"]
       gate = state["entries"].find { |e| e["node"] == "solution-gate" }
@@ -603,7 +610,7 @@ case "${ACTION}" in
         open_findings.select do |f|
           ei = order.index(f["earliest_affected_node_id"])
           ti = order.index(target)
-          ei && ti && ti >= ei
+          ei && ti && ti > ei  # strictly downstream: target AFTER earliest (rework target itself is NOT blocked)
         end
       end
       binding_complete = lambda do |f|
@@ -657,11 +664,13 @@ case "${ACTION}" in
           rec = File.join(ENV["LIB_DIR"], impl["artifact_path"])
           if File.file?(rec)
             content = File.read(rec)
-            # G3-R2-M1: field VALUES must be non-empty, not just field names present
+            # G3-R3-M1: parse structured field values (comma-separated binding line)
             missing = []
-            %w[baseRevision reviewedRevision changeDigest].each do |k|
-              m = content.match(/#{k}=([^\s\n]+)/)
-              missing << k if m.nil? || m[1].strip.empty? || m[1] == "PENDING"
+            { "baseRevision" => /baseRevision=([^,\s\n]+)/,
+              "reviewedRevision" => /reviewedRevision=([^,\s\n]+)/,
+              "changeDigest" => /changeDigest=([^,\s\n]+)/ }.each do |k, re|
+              m = content.match(re)
+              missing << k if m.nil? || m[1].strip.empty?
             end
             reasons << "implementation record evidence binding incomplete/empty: #{missing.join(",")}" unless missing.empty?
           end
@@ -671,12 +680,17 @@ case "${ACTION}" in
         if (r = blocking_for.call(node))
           reasons << r
         end
-        # A4: routed declaration check (G3-R2-M1)
-        kt = File.join(ENV["LIB_DIR"], "..", ".sdlc", "business_domain", "knowledge-target.yaml")
+        # A4: routed declaration check (G3-R3-M1: correct path + YAML parse)
+        # library/<id>/ -> project root is 3 levels up (library/<id> -> library -> project root)
+        project_root = File.expand_path("..", File.expand_path("..", ENV["LIB_DIR"]))
+        kt = File.join(project_root, ".sdlc", "business_domain", "knowledge-target.yaml")
         if File.file?(kt)
-          kt_content = File.read(kt)
-          unless kt_content.match?(/status:\s*"routed"/) || kt_content.match?(/status:\s*routed/)
-            reasons << "knowledge-target not routed (PROPOSAL_ONLY mode)"
+          begin
+            kt_state = YAML.safe_load(File.read(kt), permitted_classes: [Time], aliases: false)
+            routed = kt_state && kt_state["status"] == "routed"
+            reasons << "knowledge-target not routed (status=#{kt_state["status"].inspect})" unless routed
+          rescue StandardError => e
+            reasons << "knowledge-target parse failure: #{e.class}"
           end
         else
           reasons << "knowledge-target declaration missing (BLOCKED: run initializer first)"
@@ -712,17 +726,22 @@ case "${ACTION}" in
       state.delete("manifest_digest")
       corrected = []
       unresolvable = []
-      # G3-R2-H3: verify ALL entries with artifact bindings (current AND stale)
+      # G3-R3-H3: verify ALL entries with artifact bindings (current AND stale);
+      # nil digest and missing files are unresolvable, not skippable
       (state["entries"] || []).each do |e|
-        next if e["artifact_path"].nil? || e["digest"].nil?
+        next if e["artifact_path"].nil? && e["status"] == "pending"  # legitimate pending entry
+        if e["artifact_path"].nil? && e["status"] != "pending"
+          unresolvable << { "node" => e["node"], "issue" => "non-pending entry without artifact_path" }
+          next
+        end
         path = File.join(ENV["LIB_DIR"], e["artifact_path"])
         unless File.file?(path)
           unresolvable << { "node" => e["node"], "issue" => "artifact file missing", "recorded_digest" => e["digest"] }
           next
         end
         actual = Digest::SHA256.file(path).hexdigest
-        if actual != e["digest"]
-          corrected << { "node" => e["node"], "issue" => "digest drift corrected from actual artifact", "recorded_digest" => e["digest"], "corrected_digest" => actual }
+        if e["digest"].nil? || e["digest"] != actual
+          corrected << { "node" => e["node"], "issue" => e["digest"].nil? ? "nil digest corrected from actual artifact" : "digest drift corrected from actual artifact", "recorded_digest" => e["digest"].to_s, "corrected_digest" => actual }
           e["digest"] = actual
         end
       end

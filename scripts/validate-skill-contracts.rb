@@ -954,8 +954,11 @@ else
     "Gate Artifact Version:"
   ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
   # G3-R2-M3: prevent proof-ritual restoration (Decision-086)
-  if gate_template.include?("ACCEPTED_RISK proof") || gate_template.include?("Accepted By:")
+  if gate_template.include?("## Risk Acceptance") || gate_template.include?("Accepted By:")
     errors << "gate-result-template: proof-ritual language must not be restored (Decision-086)"
+  end
+  unless gate_template.include?("## Risk Refs")
+    errors << "gate-result-template missing ## Risk Refs (Decision-086)"
   end
   {
     /^## Design Depth Decision/ => 1,

@@ -196,16 +196,18 @@ assert_contains "${LIB}/manifest.md" "status: RESOLVED"
 assert_contains "${LIB}/manifest.md" "closed_by: code-review"
 assert_contains "${LIB}/manifest.md" "closure_bound_revision_id: REV2"
 
-# V4: non-scan source with OPEN row must NOT take ACCEPTED (proper counterexample)
+# V4: non-scan source with OPEN row — prepare valid PWR conditions FIRST, only source differs
 bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
   --discovered-at code-review --category implementation-defect --earliest implementation \
   --source-revision REV1 --evidence-ref "05-代码审核/x.md#L7" > /dev/null 2>&1
 assert_exit 0 $?
+# At this point solution-gate has PASS_WITH_RISK (from F3) and version 1.0.0
+# So PWR conditions are met; the ONLY violation is non-scan source
 bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
   --action accept --closed-by formal_verdict --evidence-ref y --evidence-digest z \
-  --bound-revision-id REV1 > /dev/null 2>&1
+  --bound-revision-id 1.0.0 > /dev/null 2>&1
 RC=$?
-if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule)"; else fail "V4: expected rejection, got ${RC}"; fi
+if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule, all other conditions valid)"; else fail "V4: expected rejection, got ${RC}"; fi
 # V4b: scan finding accept via code-review closed_by also rejected (role rule)
 bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
   --action resolve --closed-by implementation --evidence-ref x --evidence-digest y \
@@ -391,7 +393,22 @@ bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-se
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 assert_exit 0 $?
-grep -q "已覆盖" "${PLAN2}" && pass "N8: reworked plan coverage ledger has item markings" || fail "N8: reworked plan ledger has no item markings"
+# N8: ledger per-item assertions — normal file passes, deletion of any item fails
+for item in "跨系统接口契约" "状态机/回滚"; do
+  grep -q "${item}" "${PLAN2}" && pass "N8: ledger item '${item}' present" || fail "N8: ledger item '${item}' missing"
+done
+# mutation: delete one ledger item -> must be detectable
+sed -i '' '/状态机\/回滚/d' "${PLAN2}" 2>/dev/null || sed -i '/状态机\/回滚/d' "${PLAN2}"
+grep -q "状态机/回滚" "${PLAN2}" && fail "N8: ledger deletion NOT detectable" || pass "N8: ledger item deletion IS detectable (mutation verified)"
+# restore for the rest of the test
+cat > "${PLAN2}" <<'G3FIX'
+# 技术方案 v2（DEEP 补强）
+## Depth Coverage Ledger
+| 档位要求项 | 方案覆盖 |
+| --- | --- |
+| 跨系统接口契约 | 已覆盖 |
+| 状态机/回滚 | 已覆盖 |
+G3FIX
 bash "${PUBLISHER}" "${LIB2}" check-admission --node task-planning > "${WORK_ROOT}/f10.out" 2>&1
 assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f10.out" "ADMISSION ELIGIBLE: task-planning"
@@ -444,6 +461,20 @@ bash "${PUBLISHER}" "${LIB2}" finding-action --finding-id 20260905-esc-F01 \
   --evidence-digest cafe123 --bound-revision-id 2.1.0 > "${WORK_ROOT}/f11c.out" 2>&1
 assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f11c.out" "NO-OP REPLAY"
+# H2: entry replay byte-identical assertion (same seq + same inputs -> no-op)
+MD_BEFORE="$(digest_file "${LIB2}/manifest.md")"
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \
+  --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
+  --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
+RC=$?
+MD_AFTER="$(digest_file "${LIB2}/manifest.md")"
+if [[ "${RC}" == "0" && "${MD_BEFORE}" == "${MD_AFTER}" ]]; then pass "H2: entry replay byte-identical (no-op verified)"; else fail "H2: entry replay expected no-op (before=${MD_BEFORE:0:8} after=${MD_AFTER:0:8} rc=${RC})"; fi
+# H2: conflicting binding rejection (bound_revision_id changed)
+bash "${PUBLISHER}" "${LIB2}" finding-action --finding-id 20260905-esc-F01 \
+  --action accept --closed-by formal_verdict --evidence-ref "02-方案审核/20260905-esc_方案审核.md#risk-ref" \
+  --evidence-digest cafe123 --bound-revision-id WRONG-REV > /dev/null 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "H2: conflicting binding replay rejected"; else fail "H2: conflicting binding replay expected rejection, got ${RC}"; fi
 # entry 重放字节不变断言（H2）
 MD_BEFORE="$(digest_file "${LIB2}/manifest.md")"
 bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \

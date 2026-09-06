@@ -100,7 +100,7 @@
 - Follow-up Required: yes/no
 - Follow-up Owner:
 
-`PASS_WITH_RISK` 按 Decision-086 自动推进：verdict scope 级裁决即验收；无 `ACCEPTED_RISK proof` 消费要求、无独立接受者/审批字段（旧仪式废止，manual-runtime-semantic-contract §7.1）。
+`PASS_WITH_RISK` 按 Decision-086 自动推进：verdict scope 级裁决即验收；不要求消费额外的风险证明文件或独立接受者/审批字段（旧仪式已废止，manual-runtime-semantic-contract §7.1）。
 
 ## Re-Gate Check
 
