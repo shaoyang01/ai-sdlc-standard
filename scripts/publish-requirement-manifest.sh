@@ -373,6 +373,7 @@ case "${ACTION}" in
         entry_c["version"] = decl["version"]
         entry_c["digest"] = decl["digest"]
         entry_c["updated_at"] = now
+        entry_c["source_event_ref"] = decl["source_ref"]
         if decl["gate_result"]
           entry_c["gate_result"] = decl["gate_result"]
           entry_c["decision_depth"] = decl["decision_depth"]
@@ -383,6 +384,11 @@ case "${ACTION}" in
         end
       end
       actions.each do |a|
+        # G3-R4-H1: closed enum validation BEFORE any replay/status check
+        unless %w[resolve accept].include?(a["action"])
+          errors << "unknown action: #{a["action"].inspect} (must be resolve or accept)"
+          next
+        end
         row = (candidate["finding_index"] || []).find { |f| f["finding_id"] == a["finding_id"] }
         if row.nil?
           # may be registered in the same batch
@@ -529,52 +535,51 @@ case "${ACTION}" in
         exit 1
       end
       errors = []
-      # per-action responsibility (G3-R2-H1): resolve -> discovering node; accept -> formal_verdict
-      if ENV["ACT"] == "resolve"
-        errors << "closed_by (#{ENV["CBY"]}) must be the discovering node (#{row["discovered_at"]}) — independent closure verification (contract §5.2)" unless ENV["CBY"] == row["discovered_at"]
-        errors << "resolve requires --bound-revision-id (current ACTIVE revision)" if ENV["BOUND"].to_s.empty?
-      else
-        errors << "ACCEPTED only applies to scan source (discoveredAt=solution-gate)" unless row["discovered_at"] == "solution-gate"
-        errors << "closed_by (#{ENV["CBY"]}) must be formal_verdict — the PWR adjudicator (contract §7.1)" unless ENV["CBY"] == "formal_verdict"
-        ge = (state["entries"] || []).find { |e| e["node"] == "solution-gate" }
-        if ge.nil? || ge["gate_result"].nil?
-          errors << "accept requires a published solution-gate verdict"
-        elsif ge["gate_result"] == "FAIL"
-          errors << "accept rejected: latest verdict is FAIL (ADMISSION_DENIED)"
-        elsif ge["gate_result"] != "PASS_WITH_RISK"
-          errors << "accept requires gate_result=PASS_WITH_RISK (got #{ge["gate_result"]})"
-        end
-        errors << "accept requires --bound-revision-id (PWR ruling evidence revision)" if ENV["BOUND"].to_s.empty?
-        # real ruling-revision verification: bound revision must be the verdict artifact version
-        if ENV["BOUND"] && ge && ge["version"] && ENV["BOUND"] != ge["version"]
-          errors << "bound_revision_id (#{ENV["BOUND"]}) must match the verdict artifact version (#{ge["version"]})"
-        end
-      end
-      errors << "evidence_digest missing" if ENV["EDG"].to_s.empty?
-      # idempotent replay: full closure binding equality -> no-op (G3-R2-H2)
-      if errors.empty? && row["status"] != "OPEN"
+      # G3-R4-H2: replay check FIRST — historical replays succeed even after Gate upgrade
+      if row["status"] != "OPEN"
         target = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
         if row["status"] == target && row["closed_by"] == ENV["CBY"] &&
            row["closure_evidence_ref"] == ENV["EREF"] && row["closure_evidence_digest"] == ENV["EDG"] &&
-           (row["closure_bound_revision_id"] == ENV["BOUND"] || (ENV["ACT"] == "accept" && row["closure_bound_revision_id"].nil? && ENV["BOUND"].to_s.empty?))
+           row["closure_bound_revision_id"] == ENV["BOUND"]
           warn "NO-OP REPLAY: finding #{fid} already #{row["status"]} with identical closure binding"
           File.write(ENV["REPLAY_MARKER"], "replay")
           exit 0
         end
         errors << "finding #{fid} is #{row["status"]}, not OPEN; identical effective replays are no-op, conflicting replays are rejected"
+      else
+        # First-time migration on OPEN row: full role/Gate/revision validation
+        if ENV["ACT"] == "resolve"
+          errors << "closed_by (#{ENV["CBY"]}) must be the discovering node (#{row["discovered_at"]}) — independent closure verification (contract §5.2)" unless ENV["CBY"] == row["discovered_at"]
+          errors << "resolve requires --bound-revision-id (current ACTIVE revision)" if ENV["BOUND"].to_s.empty?
+        else
+          errors << "ACCEPTED only applies to scan source (discoveredAt=solution-gate)" unless row["discovered_at"] == "solution-gate"
+          errors << "closed_by (#{ENV["CBY"]}) must be formal_verdict — the PWR adjudicator (contract §7.1)" unless ENV["CBY"] == "formal_verdict"
+          ge = (state["entries"] || []).find { |e| e["node"] == "solution-gate" }
+          if ge.nil? || ge["gate_result"].nil?
+            errors << "accept requires a published solution-gate verdict"
+          elsif ge["gate_result"] == "FAIL"
+            errors << "accept rejected: latest verdict is FAIL (ADMISSION_DENIED)"
+          elsif ge["gate_result"] != "PASS_WITH_RISK"
+            errors << "accept requires gate_result=PASS_WITH_RISK (got #{ge["gate_result"]})"
+          end
+          errors << "accept requires --bound-revision-id (PWR ruling evidence revision)" if ENV["BOUND"].to_s.empty?
+          if ENV["BOUND"] && ge && ge["version"] && ENV["BOUND"] != ge["version"]
+            errors << "bound_revision_id (#{ENV["BOUND"]}) must match the verdict artifact version (#{ge["version"]})"
+          end
+        end
       end
+      errors << "evidence_digest missing" if ENV["EDG"].to_s.empty?
       unless errors.empty?
         warn "ADMISSION_DENIED: lifecycle action validation failed:"
         errors.each { |x| warn "  - #{x}" }
         exit 1
       end
-      # apply
+      # apply (G3-R4-H3: NO head updated_at for pure lifecycle actions)
       row["status"] = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
       row["closed_by"] = ENV["CBY"]
       row["closure_evidence_ref"] = ENV["EREF"]
       row["closure_evidence_digest"] = ENV["EDG"]
       row["closure_bound_revision_id"] = ENV["BOUND"]
-      state["updated_at"] = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
       File.write(ENV["STATE_FILE"], JSON.generate(state))
     ' || exit 1
     if [[ -s "${REPLAY_MARKER}" ]]; then

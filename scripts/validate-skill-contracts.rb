@@ -957,6 +957,9 @@ else
   if gate_template.include?("## Risk Acceptance") || gate_template.include?("Accepted By:")
     errors << "gate-result-template: proof-ritual language must not be restored (Decision-086)"
   end
+  if gate_template.include?("ACCEPTED_RISK proof")
+    errors << "gate-result-template: proof consumption requirement must not be restored (Decision-086)"
+  end
   unless gate_template.include?("## Risk Refs")
     errors << "gate-result-template missing ## Risk Refs (Decision-086)"
   end

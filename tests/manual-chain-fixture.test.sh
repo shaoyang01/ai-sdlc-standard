@@ -201,8 +201,9 @@ bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 
   --discovered-at code-review --category implementation-defect --earliest implementation \
   --source-revision REV1 --evidence-ref "05-代码审核/x.md#L7" > /dev/null 2>&1
 assert_exit 0 $?
-# At this point solution-gate has PASS_WITH_RISK (from F3) and version 1.0.0
-# So PWR conditions are met; the ONLY violation is non-scan source
+# At this point solution-gate has PASS (from F3), version 1.0.0
+# The scan-source rule is tested independently of PWR conditions:
+# even with formal_verdict as closed_by and valid bound revision, non-scan is rejected
 bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
   --action accept --closed-by formal_verdict --evidence-ref y --evidence-digest z \
   --bound-revision-id 1.0.0 > /dev/null 2>&1
@@ -396,6 +397,8 @@ assert_exit 0 $?
 # N8: ledger per-item assertions — normal file passes, deletion of any item fails
 for item in "跨系统接口契约" "状态机/回滚"; do
   grep -q "${item}" "${PLAN2}" && pass "N8: ledger item '${item}' present" || fail "N8: ledger item '${item}' missing"
+  # check the item has a coverage marking (not just the name)
+  grep -A1 "${item}" "${PLAN2}" | grep -q "已覆盖" && pass "N8: '${item}' marked as covered" || fail "N8: '${item}' has no coverage marking"
 done
 # mutation: delete one ledger item -> must be detectable
 sed -i '' '/状态机\/回滚/d' "${PLAN2}" 2>/dev/null || sed -i '/状态机\/回滚/d' "${PLAN2}"
