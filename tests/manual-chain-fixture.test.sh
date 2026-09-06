@@ -196,8 +196,8 @@ assert_contains "${LIB}/manifest.md" "status: RESOLVED"
 assert_contains "${LIB}/manifest.md" "closed_by: code-review"
 assert_contains "${LIB}/manifest.md" "closure_bound_revision_id: REV2"
 
-# V4: scan-source rule — use isolated PWR copy (not the main chain's PASS gate)
-# Setup: copy the main chain state, then publish a PWR verdict on the copy
+# V4: scan-source rule — independent init on isolated PWR copy
+MAIN_SNAPSHOT="$(digest_file "${LIB}/manifest.md")"
 V4_LIB="${WORK_ROOT}/v4-pwr/library/20260905-v4"
 mkdir -p "${V4_LIB}/00-需求资料" "${V4_LIB}/01-技术方案" "${V4_LIB}/02-方案审核"
 echo s > "${V4_LIB}/00-需求资料/s.md"
@@ -240,8 +240,9 @@ bash "${PUBLISHER}" "${V4_LIB}" finding-action --finding-id 20260905-v4-F02 \
   --bound-revision-id 1.0.0 > /dev/null 2>&1
 RC=$?
 if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule, all other PWR conditions valid)"; else fail "V4: expected rejection, got ${RC}"; fi
-# Verify main chain manifest byte-unchanged (isolation proof)
+# G3-R6-L1: isolation assertion
 MAIN_MD_AFTER="$(digest_file "${LIB}/manifest.md")"
+if [[ "${MAIN_SNAPSHOT}" == "${MAIN_MD_AFTER}" ]]; then pass "V4 isolation: main chain manifest byte-unchanged"; else fail "V4: main chain manifest modified by isolated PWR copy"; fi
 # V4b: on the MAIN chain, register F02 and test role rule
 bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
   --discovered-at code-review --category implementation-defect --earliest implementation \
