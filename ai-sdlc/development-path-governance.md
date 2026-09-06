@@ -31,7 +31,7 @@ requirement-intake -> solution-design -> solution-gate -> task-planning
   -> C03 Delivery Tail（READY_FOR_MANUAL_GIT_HANDOFF / blocked / failed）
 ```
 
-- `solution-gate` 通过（Gate = PASS / PASS_WITH_RISK）且 `decision_status = DECIDED` 后，才能进入任务规划与实现。
+- `solution-gate` 通过（Gate = PASS / PASS_WITH_RISK）且 `decision_status = CONFIRMED` 后，才能进入任务规划与实现。
 - `decision_status = BLOCKED_UNKNOWN` 不得进入实现，必须返回最早受影响节点补齐事实。
 - `code-review` 揭示方案缺口时，必须按根因回流 `solution-design` / `task-planning`，不得只修代码。
 - `knowledge-sync` 完成后进入 C03 Delivery Tail；Delivery Tail 的确定性准入检查由 LOOP runtime 执行，`sdlc-gate-runner` 已退役（Decision-045）。
@@ -40,7 +40,7 @@ requirement-intake -> solution-design -> solution-gate -> task-planning
 
 方案门禁的正式裁决输出互斥的设计深度（完整规则见 [Complexity Routing](complexity-routing.md)）：
 
-- `depth = LIGHT | STANDARD | DEEP`；`decision_status = DECIDED | BLOCKED_UNKNOWN`。
+- `depth = LIGHT | STANDARD | DEEP`；`decision_status = CONFIRMED | BLOCKED_UNKNOWN`。
 - `solution-gate` 是唯一深度裁决点；`BLOCKED_UNKNOWN` 不进入实现。
 - Decision Scope / Delta 隔离（FULL_REQUIREMENT / DELTA_CHANGE、Ignored Aggregate Triggers）与用户 override（`user_requested`）、later Gate 升级（`later_gate_required`）语义平移保留。
 - 深度升级经 finding → 最早受影响节点 Re-Gate 由机器强制下游失效；不得用文档记录代替机器失效。

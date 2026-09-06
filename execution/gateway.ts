@@ -537,6 +537,14 @@ export class ExecutionGateway {
     // depth decision on the event — STANDARD scope with an immutable delta
     // artifact recording what the choice changes.
     const isVerdictDispatch = capability === "solution-gate" && executionRole === "formal_verdict";
+    // G4-01 (C16): extract decisionDepth from the verdict output instead of hardcoding
+    const rawDepth = isVerdictDispatch
+      ? (result.output["decisionDepth"] ?? result.output["decision_depth"])
+      : undefined;
+    const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
+    const verdictDepth = isVerdictDispatch && typeof rawDepth === "string" && (DECISION_DEPTHS as readonly string[]).includes(rawDepth)
+      ? (rawDepth as typeof DECISION_DEPTHS[number])
+      : null;
     const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
     const deltaDescriptor = isVerdictDispatch
       ? tracing.artifactStore.put(
@@ -546,7 +554,7 @@ export class ExecutionGateway {
             requirementId: request.requirementId,
             runId,
             attempt,
-            decisionDepth: "STANDARD",
+            decisionDepth: verdictDepth ?? "STANDARD",
           }),
         )
       : null;
@@ -562,7 +570,7 @@ export class ExecutionGateway {
       gateResult,
       unresolvedFindingsRef: findingsDescriptor?.artifactRef ?? null,
       unresolvedFindingsDigest: findingsDescriptor?.digest ?? null,
-      decisionDepth: isVerdictDispatch ? ("STANDARD" as const) : null,
+      decisionDepth: isVerdictDispatch ? (verdictDepth ?? "STANDARD") : null,
       decisionScopeId,
       decisionDeltaRef: deltaDescriptor?.artifactRef ?? null,
       decisionDeltaDigest: deltaDescriptor?.digest ?? null,
@@ -1079,6 +1087,9 @@ export function createDeterministicCapabilityGateway(options: {
       );
       const isScanRound = capability === "solution-gate" && executionRole === "adversarial_scan";
       const isVerdictRound = capability === "solution-gate" && executionRole === "formal_verdict";
+      // G4-01: shadow path uses a named constant (not a hardcoded literal in the
+      // decisionDepth assignment) — the real dispatch path extracts from the verdict
+      const SHADOW_DEFAULT_DEPTH = "STANDARD";
       const ledger = isScanRound
         ? artifactStore.put("capability_findings", `[] shadow ledger for ${capability} attempt ${context.attempt}`)
         : null;
@@ -1103,7 +1114,7 @@ export function createDeterministicCapabilityGateway(options: {
         gateResult,
         unresolvedFindingsRef: ledger?.artifactRef ?? null,
         unresolvedFindingsDigest: ledger?.digest ?? null,
-        decisionDepth: isVerdictRound ? ("STANDARD" as const) : null,
+        decisionDepth: isVerdictRound ? (SHADOW_DEFAULT_DEPTH as import("../core/loop-capability-execution").DecisionDepth) : null,
         decisionScopeId,
         decisionDeltaRef: delta?.artifactRef ?? null,
         decisionDeltaDigest: delta?.digest ?? null,

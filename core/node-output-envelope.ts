@@ -17,7 +17,7 @@
 //   - gate node (isLoopArtifactGateCapability): gateResult REQUIRED and one of
 //     PASS / FAIL / PASS_WITH_RISK (an agent may never self-assert
 //     NOT_APPLICABLE — that is a system projection);
-//   - PASS_WITH_RISK requires non-empty riskAcceptanceRefs (delivery-tail rule);
+//   - PASS_WITH_RISK risk refs are informational (Decision-086: no separate acceptance proof);
 //     any other verdict must carry none;
 //   - non-gate node: gateResult must be absent/null;
 //   - findings: closed shape {id, severity ∈ CRITICAL/HIGH/MEDIUM/LOW, message,
@@ -172,9 +172,9 @@ export function parseNodeOutputEnvelope(
       riskAcceptanceRefs.push(ref);
     }
   }
-  if (gateResult === "PASS_WITH_RISK" && riskAcceptanceRefs.length === 0) {
-    fail("ENVELOPE_RISK_REFS", "PASS_WITH_RISK requires non-empty riskAcceptanceRefs");
-  }
+  // G4-02 (C17/Decision-086): PASS_WITH_RISK no longer requires non-empty
+  // riskAcceptanceRefs — the verdict's scope-level judgment is the acceptance.
+  // Risk refs are informational and travel with the finding index, not the envelope.
   if (gateResult !== "PASS_WITH_RISK" && riskAcceptanceRefs.length > 0) {
     fail("ENVELOPE_RISK_REFS", "riskAcceptanceRefs are only valid with PASS_WITH_RISK");
   }

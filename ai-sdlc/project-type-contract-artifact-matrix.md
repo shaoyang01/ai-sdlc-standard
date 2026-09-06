@@ -48,7 +48,7 @@ Prohibited: silent skip. Deferred without Accepted By. Deferred without Verifica
 | `07 交付总结`（C03 Delivery Tail） | Required at manual git handoff（READY_FOR_MANUAL_GIT_HANDOFF 前） | Same | Same | Same | Same |
 
 Rules:
-- `02 方案审核` is the only conclusive Gate (PASS / FAIL / PASS_WITH_RISK) plus Design Depth Decision (`decision_status = DECIDED` 才可进入实现；`BLOCKED_UNKNOWN` 阻塞)。
+- `02 方案审核` is the only conclusive Gate (PASS / FAIL / PASS_WITH_RISK) plus Design Depth Decision (`decision_status = CONFIRMED` 才可进入实现；`BLOCKED_UNKNOWN` 阻塞)。
 - `05 代码审核` closure 结论（closed / blocked / risk_accepted）与 `06 知识同步` decision（NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT）不是 Gate。
 - `07 交付总结` 不映射节点能力，不输出 Gate。
 
@@ -85,7 +85,7 @@ Rules:
 
 In v2, only solution-gate (formal_verdict) outputs a conclusive Gate; node admission checks are executed deterministically by the LOOP runtime (generation, current revision, Gate result, Design Depth Decision, finding status). `sdlc-gate-runner` is retired. [RETIRED — C03-B]
 
-**PASS**: all required artifacts Produced/Reused, OR Deferred with accepted_by + verification_alternative + re_gate_required, OR Not Applicable with valid project-type justification; Gate Result is PASS / PASS_WITH_RISK and `decision_status = DECIDED`.
+**PASS**: all required artifacts Produced/Reused, OR Deferred with accepted_by + verification_alternative + re_gate_required, OR Not Applicable with valid project-type justification; Gate Result is PASS / PASS_WITH_RISK and `decision_status = CONFIRMED`.
 
 **BLOCKED**: required artifact missing, Deferred without accepted_by, Deferred without verification_alternative, Not Applicable without project-type justification, profile unknown and no conservative baseline/user confirmation, artifact matrix absent, artifact status stale, source_artifacts missing for Reused, `decision_status = BLOCKED_UNKNOWN` at implementation entry, stale/forged Gate or depth decision used as admission basis, solution-gate two roles executed by the same Agent binding, PASS_WITH_RISK without accepted-risk evidence.
 

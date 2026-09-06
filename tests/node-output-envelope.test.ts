@@ -101,12 +101,7 @@ function main(): void {
   );
 
   console.log("envelope: risk refs");
-  expectCode(
-    "ENVELOPE_RISK_REFS",
-    wrap({ summary: "x", body: "y", gateResult: "PASS_WITH_RISK", riskAcceptanceRefs: [] }),
-    GATE,
-    "PASS_WITH_RISK without refs",
-  );
+  // G4-02 (Decision-086): PASS_WITH_RISK without refs is now legal — no ENVELOPE_RISK_REFS
   expectCode(
     "ENVELOPE_RISK_REFS",
     wrap({ summary: "x", body: "y", gateResult: "FAIL", riskAcceptanceRefs: ["D1"] }),
