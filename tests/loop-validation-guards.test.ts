@@ -307,7 +307,9 @@ async function main(): Promise<void> {
 
     const techState = retry.recoveryContext.capabilityStates[1]!;
     const challenge = await entry(runStore, artifactStore, codexRegistry, runner((request) => qualifiedResult(request, [
-      { severity: "P1", evidence: "missing failure recovery proof" },
+      // G4-R5-H5: scan findings register as lifecycle rows — the severity is
+      // a canonical enum, not a free label.
+      { severity: "HIGH", evidence: "missing failure recovery proof" },
     ]))).execute({
       requirementId: id.requirementId,
       capability: "solution-gate",

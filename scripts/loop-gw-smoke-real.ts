@@ -6,22 +6,28 @@
 // review → hermes), so a real smoke must inject a RealCapabilityGateway backed
 // by all three real CLIs, not the retired codex-only ExecutionGateway path.
 //
-// Scope (C03-LOOP-GW): drive run() with capabilitySource "real" against the
-// spruce_logistics_gateway working tree and let the chain produce the fix for
-// the three authorized defects. runProduction() hard-refuses real dispatch
-// (PRODUCTION_REAL_NOT_AUTHORIZED), so this smoke goes through run() with
-// injected realGatewayDeps — the same run()-entry pattern as the old script.
-// This script never commits, never pushes, and never edits target-repo files
-// itself; only the dispatched agent CLIs may touch the attempt workspace.
+// Scope (C03-LOOP-GW, G4-R5-H7 re-entry): drive the PRODUCTION ENTRY —
+// parseProductionEntryRequest → runProduction — with capabilitySource "real"
+// and the injected real gateway surface. runProduction admits "real" exactly
+// because the adapter surface is injected here (G4-R5-H7 assembly/
+// authorization split); the CLIs themselves still require the operator env
+// confirmations below. The attempt workspace is PINNED to the prepared task
+// worktree (workspacePathFor(identity) under controlRoot) by runProduction —
+// the business root is never an attempt cwd. This script never commits, never
+// pushes, and never edits target-repo files itself; only the dispatched agent
+// CLIs may touch the attempt workspace.
 //
-// Required environment confirmation (set by this script, fail-closed if the
-// operator cleared them — they are the operator's authorization surface):
-//   SDLC_EXECUTION_MODE=codex
-//   SDLC_CODEX_REAL_DISPATCH=enabled
-//   SDLC_KIMI_GATEWAY_REAL_DISPATCH=enabled
-//   SDLC_HERMES_GATEWAY_REAL_DISPATCH=enabled
-//   SDLC_HERMES_GATEWAY_INTEGRATION=enabled
-//   SDLC_HERMES_CLI_COMMAND_EXECUTION=enabled
+// Required environment confirmation (G4-R5-M1: set by the OPERATOR in the
+// invoking shell — the script never enables the dispatch flags itself, per
+// the Hermes phase-2 controlled-enablement gate. The script verifies that
+// every flag below is present with its value "enabled" and dies fail-closed
+// when the operator has not authorized them):
+//   SDLC_EXECUTION_MODE
+//   SDLC_CODEX_REAL_DISPATCH
+//   SDLC_KIMI_GATEWAY_REAL_DISPATCH
+//   SDLC_HERMES_GATEWAY_REAL_DISPATCH
+//   SDLC_HERMES_GATEWAY_INTEGRATION
+//   SDLC_HERMES_CLI_COMMAND_EXECUTION
 //
 // Timeout note (C03-LOOP-GW brief vs. HEAD): the brief's "120 s per attempt"
 // knob belonged to the retired codexRealDispatchConfig path. The Q1 adapter
@@ -40,11 +46,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { LoopArtifactStore } from "../core/loop-artifact-store";
-import { LoopRunStore } from "../core/loop-run-store";
+import { LoopGitWorkspaceManager } from "../core/loop-git-workspace";
 import { LoopPosixProcessRunner } from "../core/loop-posix-process-runner";
+import { LoopRunStore } from "../core/loop-run-store";
+import {
+  PRODUCTION_ENTRY_SCHEMA,
+  parseProductionEntryRequest,
+  ProductionEntryError,
+} from "../core/loop-production-entry";
 import { RealCapabilityAdapter } from "../execution/real-capability-adapter";
 import { AGENT_CLI_PROFILES, type AgentCliProviderId } from "../execution/agent-cli-profile";
-import { createRuntimeBindingRegistry, run } from "../runtime";
+import { createRuntimeBindingRegistry, runProduction, ProductionRunError } from "../runtime";
 
 // Target-repo root is machine-specific: the original kimi-session host used
 // /Users/eric/..., this machine uses /Users/eric_shaoooo/... (W-GW-FIX re-run
@@ -97,12 +109,25 @@ function resolveCli(provider: AgentCliProviderId): string {
   die(`no runnable ${basename} on PATH`);
 }
 
+function git(args: readonly string[], cwd: string): string {
+  const probe = spawnSync("git", args, { encoding: "utf8", cwd, timeout: 15_000 });
+  if (probe.status !== 0) {
+    die(`git ${args.join(" ")} failed in ${cwd}: ${(probe.stderr ?? "").trim()}`);
+  }
+  return probe.stdout.trim();
+}
+
 async function main(): Promise<number> {
+  // G4-R5-M1: the operator's shell owns the flag enablement — the smoke
+  // verifies every flag is present and exactly "enabled", refusing to run
+  // otherwise. It never writes these flags itself.
   for (const [key, value] of Object.entries(REQUIRED_ENV)) {
-    if (process.env[key] !== undefined && process.env[key] !== value) {
-      die(`environment confirmation ${key} must be "${value}" (got "${process.env[key]}")`);
+    if (process.env[key] !== value) {
+      die(
+        `environment confirmation ${key} must be set to "${value}" by the operator shell ` +
+          `(got ${process.env[key] === undefined ? "unset" : `"${process.env[key]}"`})`,
+      );
     }
-    process.env[key] = value;
   }
 
   const spruceRoot = realpathSync(TARGET_REPO);
@@ -114,9 +139,10 @@ async function main(): Promise<number> {
     stdinMode: "optional" as const,
   }));
 
-  // Scratch root for journal + control; the ATTEMPT workspace is the spruce
-  // working tree itself. realpath: /tmp is a symlink on macOS and the runner
-  // only accepts canonical paths.
+  // Scratch root for journal + control; the ATTEMPT workspace is the prepared
+  // task worktree under controlRoot (workspacePathFor of the parsed identity)
+  // — pinned by runProduction, never the business root. realpath: /tmp is a
+  // symlink on macOS and the runner only accepts canonical paths.
   const root = realpathSync(mkdtempSync(join(tmpdir(), "loop-gw-smoke-")));
   const control = join(root, "control");
   mkdirSync(control, { recursive: true });
@@ -127,9 +153,56 @@ async function main(): Promise<number> {
   runStore.init();
   const bindingRegistry = createRuntimeBindingRegistry();
 
-  const runner = new LoopPosixProcessRunner({
+  // Read-only git preflight runner for the workspace manager (inspect +
+  // LOCAL worktree prepare; no commit/push/PR — the human Git boundary is
+  // untouched).
+  const gitRunner = new LoopPosixProcessRunner({
+    executables: [{ id: "git", executablePath: "git", allowDynamicArgs: true, stdinMode: "optional" }],
+    allowedCwdRoots: [spruceRoot, control],
+    fixedEnv: {
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      PATH: process.env.PATH ?? "/usr/bin:/bin",
+      LC_ALL: "C",
+      LANG: "C",
+    },
+    allowedRequestEnvKeys: [],
+    defaultTimeoutMs: 15000,
+  });
+  const workspaceManager = new LoopGitWorkspaceManager({ runner: gitRunner, gitExecutableId: "git" });
+
+  // The production entry request is minted from the ACTUAL repository state
+  // (read-only git queries) — base branch HEAD is the run's expected base.
+  const baseBranch = "main";
+  const expectedBaseSha = git(["rev-parse", baseBranch], spruceRoot);
+  const requirementId = `REQ-LOOP-GW-${Date.now().toString(36)}`;
+  const runId = `run-${requirementId}`;
+  const parsed = parseProductionEntryRequest(
+    {
+      schema: PRODUCTION_ENTRY_SCHEMA,
+      requirementId,
+      repository: "spruce_logistics_gateway",
+      repositoryPath: spruceRoot,
+      baseBranch,
+      expectedBaseSha,
+      taskBranch: `runtime/${requirementId}`,
+      controlRoot: control,
+      sourceFiles: [],
+      bindingRegistryVersion: bindingRegistry.version,
+      executionProfileVersion: "1.0.0",
+      mode: "real",
+    },
+    { now: () => new Date().toISOString(), runId },
+  );
+
+  const requirementText = REQUIREMENT;
+
+  // The agent-CLI dispatch runner: the adapter's CLIs run INSIDE the prepared
+  // attempt worktree only (runProduction pins attemptWorkspace to it).
+  const agentRunner = new LoopPosixProcessRunner({
     executables,
-    allowedCwdRoots: [spruceRoot],
+    allowedCwdRoots: [spruceRoot, control],
     fixedEnv: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: process.env.HOME ?? "/tmp",
@@ -139,16 +212,18 @@ async function main(): Promise<number> {
     },
     allowedRequestEnvKeys: [],
   });
-  const adapter = new RealCapabilityAdapter(runner);
+  const adapter = new RealCapabilityAdapter(agentRunner);
 
-  const requirementId = `REQ-LOOP-GW-${Date.now().toString(36)}`;
-  const result = await run(REQUIREMENT, {
+  const result = await runProduction(parsed, requirementText, {
     capabilitySource: "real",
-    requirementId,
+    // G4-R5-H7: the injected adapter surface is the production-door
+    // authorization; the attemptWorkspace placeholder is overridden by the
+    // prepared-worktree pin inside runProduction.
+    realGatewayDeps: { adapter, attemptWorkspace: () => spruceRoot },
     runStore,
     artifactStore,
-    bindingRegistry,
-    realGatewayDeps: { adapter, attemptWorkspace: () => spruceRoot },
+    inspectWorkspace: (identity) => workspaceManager.inspect(identity),
+    prepareWorkspace: (identity) => workspaceManager.prepare(identity),
   });
 
   // Closed summary only — never raw CLI stdout / environment.
@@ -180,6 +255,7 @@ async function main(): Promise<number> {
     journalTrace,
     journalPath: result.journal_path,
     fixtureRoot: root,
+    expectedBaseSha,
     executables: executables.map((e) => ({ id: e.id, path: e.executablePath })),
   };
   process.stdout.write(`LOOP_GW_SMOKE_SUMMARY ${JSON.stringify(summary, null, 2)}\n`);
@@ -192,6 +268,14 @@ main()
   })
   .catch((error: unknown) => {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    if (
+      error instanceof ProductionEntryError ||
+      error instanceof ProductionRunError
+    ) {
+      process.stderr.write(`LOOP_GW_SMOKE_ERROR ${error.code}: ${error.message}\n`);
+      process.exitCode = 1;
+      return;
+    }
     process.stderr.write(`LOOP_GW_SMOKE_ERROR ${message}\n`);
     process.exitCode = 1;
   });

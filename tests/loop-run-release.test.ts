@@ -173,7 +173,7 @@ function seedGatePwrStop(fx: Fixture, severity: "MEDIUM" | "CRITICAL" = "MEDIUM"
       : null;
     const executorAgent = executionRole === "primary" ? "kimi" : executionRole === "adversarial_scan" ? "codex" : "hermes";
     return Object.freeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -202,6 +202,7 @@ function seedGatePwrStop(fx: Fixture, severity: "MEDIUM" | "CRITICAL" = "MEDIUM"
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
       decisionDepth: isSucceededVerdict ? ("STANDARD" as const) : null,
+      decisionStatus: isSucceededVerdict ? ("CONFIRMED" as const) : null,
       decisionScopeId: isSucceededVerdict ? `${runId}:decision:1` : null,
       decisionDeltaRef: delta?.artifactRef ?? null,
       decisionDeltaDigest: delta?.digest ?? null,
@@ -353,43 +354,41 @@ async function main(): Promise<void> {
       ok.release === "SCOPE_RESET" && ok.resumeRunId === "run-x" && ok.releaseBy === "current-user");
   }
 
-  // ── shape 2: gate PASS_WITH_RISK stop → RISK_ACCEPTED accepts the findings ──
+  // ── shape 2: gate PASS_WITH_RISK → the human RISK_ACCEPTED ritual is retired ──
+  // G4-R5-H6 (Decision-086/087): the CONFIRMED PWR ruling accepted its
+  // scan-source findings inside the verdict's terminal transaction; there is
+  // no human risk-acceptance release left to perform.
   {
     const fx = makeFixture("run-001", "req-001");
-    const { decisionScopeId, openFindingId } = seedGatePwrStop(fx);
+    seedGatePwrStop(fx);
     const stores = (): { runStore: LoopRunStore; artifactStore: LoopArtifactStore } =>
       ({ runStore: fx.runStore, artifactStore: fx.artifactStore });
 
     check("SCOPE_RESET refused at a gate stop",
       procedureCode(() => runReleaseProcedureWithStores(stores, "req-001", "run-001", "SCOPE_RESET", "current-user", "n"))
         === "RELEASE_CODE_NOT_APPLICABLE");
-
-    const receipt = runReleaseProcedureWithStores(stores, "req-001", "run-001", "RISK_ACCEPTED", "current-user", "risks accepted for the three-condition plan");
-    check("release receipt names the run", receipt.run_id === "run-001");
-    check("release receipt carries the verdict scope", receipt.decision_scope_id === decisionScopeId);
-    check("release accepted exactly the open blocking finding",
-      receipt.findings_accepted.length === 1 && receipt.findings_accepted[0] === openFindingId);
-    check("evidence artifact is a human_action_required ref",
-      (receipt.evidence_ref ?? "").startsWith("loop-artifact:v1:human_action_required:"));
-    const finding = fx.runStore.listFindings("run-001").find((f) => f.findingId === openFindingId)!;
-    check("finding transitioned to ACCEPTED_RISK", finding.status === "ACCEPTED_RISK");
-    check("acceptance is bound to the verdict scope", finding.riskAcceptedScopeId === decisionScopeId);
-    check("acceptance names the operator", finding.riskAcceptedBy === "current-user");
-
-    check("second release refused (nothing left open)",
-      procedureCode(() => runReleaseProcedureWithStores(stores, "req-001", "run-001", "RISK_ACCEPTED", "current-user", "again"))
-        === "RELEASE_TARGET_NOT_RELEASABLE");
+    check("RISK_ACCEPTED refused: the formal_verdict ruling is the acceptance (no human ritual)",
+      procedureCode(() => runReleaseProcedureWithStores(stores, "req-001", "run-001", "RISK_ACCEPTED", "current-user", "risks accepted"))
+        === "RELEASE_CODE_NOT_APPLICABLE");
   }
 
-  // ── shape 2b: CRITICAL blocking finding is not risk-acceptable ──
+  // ── shape 2b: CRITICAL blocking finding is not risk-acceptable (store rule) ──
   {
     const fx = makeFixture("run-002", "req-002");
-    seedGatePwrStop(fx, "CRITICAL");
-    check("critical blocking finding refuses release",
-      procedureCode(() => runReleaseProcedureWithStores(
-        (): { runStore: LoopRunStore; artifactStore: LoopArtifactStore } => ({ runStore: fx.runStore, artifactStore: fx.artifactStore }),
-        "req-002", "run-002", "RISK_ACCEPTED", "current-user", "n",
-      )) === "RELEASE_CRITICAL_FINDING");
+    const seeded = seedGatePwrStop(fx, "CRITICAL");
+    let criticalCode = "";
+    try {
+      fx.runStore.acceptFindingRisk(fx.identity.runId, seeded.openFindingId, {
+        riskAcceptedBy: "formal_verdict",
+        riskAcceptanceEvidenceRef: seeded.verdictArtifactRef,
+        riskAcceptanceEvidenceDigest: seeded.verdictDigest,
+        decisionScopeId: seeded.decisionScopeId,
+      });
+    } catch (error) {
+      criticalCode = error instanceof LoopRunJournalError ? error.code : "OTHER";
+    }
+    check("critical finding refuses acceptance with the store rule (ILLEGAL_TRANSITION)",
+      criticalCode === "ILLEGAL_TRANSITION");
   }
 
   // ── shape 1: durably blocked regate budget → both codes via the store ──
@@ -430,9 +429,13 @@ async function main(): Promise<void> {
     const { decisionScopeId, openFindingId } = seed;
 
     const before = recoverRunContext(fx.runStore, "req-005");
-    check("without acceptance: gate decision BLOCKED_UNKNOWN",
+    // Invalidation semantics: the OPEN finding staled the design current AND
+    // its downstream (the round-1 gate revision included), so the round-1
+    // verdict lost its current binding — BLOCKED_UNKNOWN until the rework
+    // re-materializes a bound gate current.
+    check("before rework: round-1 verdict decision BLOCKED_UNKNOWN (invalidation semantics)",
       before.solutionGateDecision?.status === "BLOCKED_UNKNOWN");
-    check("without acceptance: the OPEN finding routes a rework restart at solution-design",
+    check("before rework: the OPEN finding routes a rework restart at solution-design",
       before.nextExecutionPoint?.capability === "solution-design");
 
     // Rework round: regenerate the design (attempt 2) and re-adjudicate
@@ -456,7 +459,7 @@ async function main(): Promise<void> {
       const delta = isSucceededVerdict ? fx.artifactStore.put("solution_review", `delta ${nextTs()}`) : null;
       const agent = executionRole === "primary" ? "kimi" : executionRole === "adversarial_scan" ? "codex" : "hermes";
       return Object.freeze({
-        schemaVersion: 4,
+        schemaVersion: 5,
         executionEventId: `${runId}:capability:${seq}:${status}`,
         runId, sequence: seq, capability, executionRole, nodeId: capability,
         attempt, status, createdAt: nextTs(),
@@ -475,6 +478,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: o.consumedFindingsRef ?? null,
         consumedFindingsDigest: o.consumedFindingsDigest ?? null,
         decisionDepth: isSucceededVerdict ? ("LIGHT" as const) : null,
+        decisionStatus: isSucceededVerdict ? ("CONFIRMED" as const) : null,
         decisionScopeId: isSucceededVerdict ? `${runId}:decision:2` : null,
         decisionDeltaRef: delta?.artifactRef ?? null,
         decisionDeltaDigest: delta?.digest ?? null,
@@ -543,7 +547,9 @@ async function main(): Promise<void> {
       attempt: 2, inputArtifactRef: v3t.ref, inputArtifactVersion: v3t.version, inputDigest: v3t.digest,
       outputArtifactRef: verdictBlob2.artifactRef, outputArtifactVersion: "2.0.0", outputDigest: verdictBlob2.digest,
       gateResult: "PASS_WITH_RISK" as const,
-      nextStepEligibility: "BLOCKED" as const,
+      // G4-R5-H2: a CONFIRMED PWR verdict with no unresolved own findings
+      // admits — exactly what the real gateway writes (Decision-086).
+      nextStepEligibility: "ELIGIBLE" as const,
       consumedFindingsRef: scanLedger2.artifactRef, consumedFindingsDigest: scanLedger2.digest,
     });
     fx.runStore.appendCapabilityExecution(v3);
@@ -556,44 +562,57 @@ async function main(): Promise<void> {
       producerExecutionId: v3.executionEventId, gateResult: "PASS_WITH_RISK",
       upstreamRevisionIds: [`${runId}:revision:solution-design:2`], createdAt: nextTs(),
     })).record;
-    // acceptance binds the NEW scope (decision:2)
-    const acceptance = fx.artifactStore.put("human_action_required", `accept ADV-006/007 ${nextTs()}`);
-    fx.runStore.acceptFindingRisk(fx.identity.runId, openFindingId, {
-      riskAcceptedBy: "current-user",
-      riskAcceptanceEvidenceRef: acceptance.artifactRef,
-      riskAcceptanceEvidenceDigest: acceptance.digest,
-      decisionScopeId: `${runId}:decision:2`,
+    // acceptance is NOT a human action any more (G4-R5-H6): the only legal
+    // subject is the formal_verdict ruling itself, and a design-source
+    // finding is not scan-source — it can never be risk-accepted at all.
+    const refusalCode = (subject: string): string => {
+      try {
+        fx.runStore.acceptFindingRisk(fx.identity.runId, openFindingId, {
+          riskAcceptedBy: subject,
+          riskAcceptanceEvidenceRef: verdictBlob2.artifactRef,
+          riskAcceptanceEvidenceDigest: verdictBlob2.digest,
+          decisionScopeId: `${runId}:decision:2`,
+        });
+        return "NO_ERROR";
+      } catch (error) {
+        return error instanceof LoopRunJournalError ? error.code : "OTHER";
+      }
+    };
+    check("human 'current-user' acceptance is refused (subject rule, §5.2)",
+      refusalCode("current-user") === "ILLEGAL_TRANSITION");
+    check("formal_verdict acceptance is refused for a non-scan-source finding",
+      refusalCode("formal_verdict") === "ILLEGAL_TRANSITION");
+    // The design-source finding closes through REWORK: the discovering node
+    // (solution-design) re-verifies against its fresh revision (§5.2 —
+    // closure verifier = discovering node) and registers the resolution.
+    const resolved = fx.runStore.resolveFinding(fx.identity.runId, openFindingId, {
+      resolvedByNodeId: "solution-design",
+      resolvedByRevisionId: `${runId}:revision:solution-design:2`,
+      resolutionEvidenceRef: design2.artifactRef,
+      resolutionEvidenceDigest: design2.digest,
     });
-    for (const f of fx.runStore.listFindings("run-005")) {
-    }
+    check("discovering node resolves the reworked finding", resolved.record.status === "RESOLVED");
     const after = recoverRunContext(fx.runStore, "req-005");
-        check("with same-scope acceptance: gateDecision DECIDED (new scope decision:2)",
+    check("with the CONFIRMED PWR ruling: gateDecision DECIDED without any acceptance ritual",
       after.solutionGateDecision?.status === "DECIDED");
-    check("with same-scope acceptance: verdict eligibility rederived, chain advances to task-planning",
+    check("with the CONFIRMED PWR ruling: chain advances to task-planning",
       after.nextExecutionPoint?.capability === "task-planning");
 
-    // ── P-K-d: the dispatch acceptance gate (deriveDispatchCommand) ──
-    // Plan C shape: the seeded PWR verdict records ELIGIBLE (agent judgment),
-    // so the linear walk admits task-planning and the GATE lives at dispatch.
-    // Plan C shape: no findings rows on the PWR verdict — the event records
-    // ELIGIBLE so next = task-planning, and the GATE lives at dispatch.
+    // ── P-K-d (rewritten per G4-R5-H2/Decision-086) ──
+    // The old "PWR parks pending human acceptance" shape is retired: a
+    // CONFIRMED PWR verdict with a bound gate current IS the admitting
+    // ruling — recovery projects DECIDED and the walk advances to
+    // task-planning. There is no post-hoc acceptance rederivation left.
     const fx2 = makeFixture("run-006", "req-006");
-    seedGatePwrStop(fx2, "MEDIUM", "ELIGIBLE", false);
+    const seeded2 = seedGatePwrStop(fx2, "MEDIUM", "ELIGIBLE", false);
     const rec2 = recoverRunContext(fx2.runStore, "req-006");
-    check("PWR with an empty ledger parks honestly (BLOCKED_UNKNOWN, no dispatch)",
-      rec2.nextExecutionPoint === null && rec2.solutionGateDecision?.status === "BLOCKED_UNKNOWN");
-
-    // The full DECIDED → task-planning flow (acceptance row + active gate
-    // current) is validated end-to-end on the REAL run4 journal in the
-    // operator probes; this synthetic fixture documents the honest interim
-    // behavior: an order-row finding invalidates downstream currents, so the
-    // decision stays BLOCKED_UNKNOWN until the rework products re-materialize
-    // the gate current (the invalidation semantics are correct).
-    check("PWR + registered order finding: decision BLOCKED_UNKNOWN (invalidation semantics)",
-      rec2.solutionGateDecision?.status === "BLOCKED_UNKNOWN");
-    // The legacy-shape rederivation (BLOCKED verdict event + same-scope
-    // acceptance) is covered by the shape-2 test above (its DECIDED +
-    // task-planning assertions exercise the identical P-K admission).
+    check("CONFIRMED PWR with a bound gate current: DECIDED, dispatch advances",
+      rec2.solutionGateDecision?.status === "DECIDED" &&
+        rec2.nextExecutionPoint?.capability === "task-planning");
+    const command2 = deriveDispatchCommand(rec2);
+    check("dispatch command derives task-planning on the pinned verdict output",
+      command2 !== null && command2.capability === "task-planning" &&
+        command2.inputArtifactRef === seeded2.verdictArtifactRef);
   }
 
   console.log(`\nResults: ${passed} passed, 0 failed`);

@@ -261,6 +261,7 @@ async function main(): Promise<void> {
       //    拒绝语义必须是「解决必须指向当前 ACTIVE revision」。
       await expectCode("ILLEGAL_TRANSITION", () =>
         env.runStore.resolveFinding(first.run_id, findingId, {
+          resolvedByNodeId: "implementation",
           resolvedByRevisionId: staleRecord.revisionId,
           resolutionEvidenceRef: staleRecord.artifactRef,
           resolutionEvidenceDigest: staleRecord.digest,
@@ -276,6 +277,7 @@ async function main(): Promise<void> {
       ok(implCurrent.revisionId !== staleImplementation.revisionId && implCurrent.validity === "ACTIVE",
         "CC2-R: rebuild produced a fresh ACTIVE implementation current");
       env.runStore.resolveFinding(first.run_id, findingId, {
+        resolvedByNodeId: "implementation",
         resolvedByRevisionId: implCurrent.revisionId,
         resolutionEvidenceRef: `loop-artifact:v1:${implCurrent.artifactKind}:sha256:${implCurrent.digest}`,
         resolutionEvidenceDigest: implCurrent.digest,
@@ -358,7 +360,7 @@ async function main(): Promise<void> {
                 inputDigest: String(context.inputDigest),
                 consumedFindingsRef: typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
                 consumedFindingsDigest: typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
-                decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+                decisionDepth: null, decisionStatus: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
                 processInvocationDigest: null, processExitCode: null, processSignal: null,
                 processDurationMs: null, processTruncated: null,
                 stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
@@ -381,7 +383,8 @@ async function main(): Promise<void> {
                 outputArtifactRef: product.artifactRef, outputArtifactVersion: String(context.outputArtifactVersion),
                 outputDigest: product.digest,
                 gateResult: "FAIL" as const, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
-                decisionDepth: "STANDARD" as const, decisionScopeId: `${runId}:decision:${context.attempt}`,
+                decisionDepth: "STANDARD" as const, decisionStatus: "CONFIRMED" as const,
+                decisionScopeId: `${runId}:decision:${context.attempt}`,
                 decisionDeltaRef: delta.artifactRef, decisionDeltaDigest: delta.digest,
                 nextStepEligibility: "BLOCKED" as const, errorCode: null, retryable: null, reasonCode: null }));
               return Object.freeze({ success: true, node: request.node, agent,
@@ -442,7 +445,7 @@ async function main(): Promise<void> {
         inputArtifactRef: intakeCurrent.artifactRef, inputArtifactVersion: intakeCurrent.semver,
         inputDigest: intakeCurrent.digest,
         consumedFindingsRef: null, consumedFindingsDigest: null,
-        decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+        decisionDepth: null, decisionStatus: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
@@ -491,7 +494,7 @@ async function main(): Promise<void> {
         inputArtifactRef: intakeCurrent.artifactRef, inputArtifactVersion: intakeCurrent.semver,
         inputDigest: intakeCurrent.digest,
         consumedFindingsRef: null, consumedFindingsDigest: null,
-        decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+        decisionDepth: null, decisionStatus: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,

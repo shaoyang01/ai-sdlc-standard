@@ -39,7 +39,9 @@ function check(name: string, cond: boolean): void {
 }
 
 function envelope(obj: Record<string, unknown>): string {
-  return `prose before\n${NODE_OUTPUT_ENVELOPE_BEGIN}\n${JSON.stringify(obj)}\n${NODE_OUTPUT_ENVELOPE_END}\nprose after`;
+  // G4-R5-H4: every valid envelope declares its node business status.
+  const withStatus = { nodeStatus: "SUCCEEDED", ...obj };
+  return `prose before\n${NODE_OUTPUT_ENVELOPE_BEGIN}\n${JSON.stringify(withStatus)}\n${NODE_OUTPUT_ENVELOPE_END}\nprose after`;
 }
 
 function harness() {
@@ -179,7 +181,11 @@ async function main(): Promise<void> {
 
   // ── B. role → outcome mapping (pure, table-driven) ──
   const verdictEnv = parseNodeOutputEnvelope(
-    envelope({ summary: "s", body: "b", gateResult: "PASS", findings: [], riskAcceptanceRefs: [] }),
+    envelope({
+      summary: "s", body: "b", gateResult: "PASS",
+      decisionStatus: "CONFIRMED", decisionDepth: "STANDARD",
+      findings: [], riskAcceptanceRefs: [],
+    }),
     "solution-gate",
     { isVerdict: true },
   );
@@ -210,7 +216,9 @@ async function main(): Promise<void> {
   );
   const ord = buildCapabilityOutcome(ordEnv, "task-planning", "primary");
   check("ordinary node carries no gateResult", ord.gateResult === null);
-  check("ordinary node carries no findings", ord.unresolvedFindings === null);
+  // G4-R5-H5: every canonical role may carry findings (whole-chain
+  // discovery duty) — an ordinary node exposes an (empty) ledger, not null.
+  check("ordinary node carries an (empty) findings ledger", Array.isArray(ord.unresolvedFindings));
 
   assert.ok(v);
   console.log(`\nResults: ${passed} passed, 0 failed`);

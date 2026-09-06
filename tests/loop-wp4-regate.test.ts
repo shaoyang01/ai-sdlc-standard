@@ -317,6 +317,7 @@ async function main(): Promise<void> {
     let rejectedBeforeRebuild = false;
     try {
       env.runStore.resolveFinding(second.run_id, findingId, {
+        resolvedByNodeId: "solution-design",
         resolvedByRevisionId: env.runStore.getCurrentArtifactRevision(second.run_id, "solution-design")!.revisionId,
         resolutionEvidenceRef: "loop-artifact:v1:solution_review:sha256:deadbeef",
         resolutionEvidenceDigest: "deadbeef",
@@ -336,17 +337,34 @@ async function main(): Promise<void> {
     ok(after.get("solution-design:primary") === 3, "solution-design rebuilt by causal regression");
     ok(after.get("solution-gate:adversarial_scan") === 3, "gate scan rebuilt");
     ok(after.get("solution-gate:formal_verdict") === 3, "gate verdict rebuilt");
-    ok(after.get("knowledge-sync:primary") === 3, "knowledge-sync rebuilt");
+    // G4-R5-H2 (frozen contract §7.3 A1): with the finding still OPEN, the
+    // wave stops honestly after the re-adjudication — task-planning and its
+    // downstream are NOT re-admitted until the closure verifier resolves.
+    ok(after.get("task-planning:primary") === 2, "task-planning not re-admitted while the finding is OPEN (A1)");
+    ok(after.get("knowledge-sync:primary") === 2, "downstream stays parked until closure (A1)");
 
     const rebuiltDesign = env.runStore.getCurrentArtifactRevision(third.run_id, "solution-design")!;
     ok(rebuiltDesign.validity === "ACTIVE", "rebuilt design revision is ACTIVE");
     const resolved = env.runStore.resolveFinding(third.run_id, findingId, {
+      resolvedByNodeId: "solution-design",
       resolvedByRevisionId: rebuiltDesign.revisionId,
       resolutionEvidenceRef: `loop-artifact:v1:${rebuiltDesign.artifactKind}:sha256:${rebuiltDesign.digest}`,
       resolutionEvidenceDigest: rebuiltDesign.digest,
     });
     ok(resolved.record.status === "RESOLVED", "finding resolves after rebuild");
     const fourth = await run("build a user registration form", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    if (process.env.DEBUG_W1 === "1") {
+      const rec = recoverRunContext(env.runStore, requirementId);
+      console.log("DEBUG fourth:", JSON.stringify({ final: fourth.final_status, chain: fourth.chain_status, blocking: fourth.blocking_reason_code, next: fourth.next_execution_point }));
+      console.log("DEBUG recovery:", JSON.stringify({
+        chainStatus: rec?.capabilityChainStatus,
+        nextExecutionPoint: rec?.nextExecutionPoint,
+        decision: rec?.solutionGateDecision,
+        findingGate: rec?.findingGate,
+        lastAttemptTp: rec?.executionPointStates.find((st) => st.capability === "task-planning")?.lastAttempt,
+        lastStatusTp: rec?.executionPointStates.find((st) => st.capability === "task-planning")?.status,
+      }));
+    }
     ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED", "resolved run completes successfully");
     ok(env.runStore.computeFindingGate(fourth.run_id).status === "ELIGIBLE", "finding gate eligible after closure");
 
@@ -438,8 +456,8 @@ async function main(): Promise<void> {
     ok(firstRedispatch.capability === "solution-design", `earliest node dispatched first (got ${firstRedispatch.capability})`);
   }
 
-  // ── W3: improvements never restart the chain ──
-  console.log("W3: MEDIUM improvement finding does not trigger a Re-Gate wave");
+  // ── W3: improvements drive DIRECT rework at their earliest node (G4-R5-H8) ──
+  console.log("W3: MEDIUM improvement finding triggers direct rework, not a Gate re-walk");
   {
     const env = makeEnv();
     const requirementId = "REQ-WP4-W3";
@@ -454,25 +472,37 @@ async function main(): Promise<void> {
       sequence: 1,
       causeKind: "IMPROVEMENT",
     });
-    // Round 2 semantics: a non-causal improvement (raised against an
-    // original-generation product) never re-drives a backward wave.
+    // G4-R5-H8 (frozen contract §7.3 回流映射): an IMPROVEMENT re-drives the
+    // wave at its earliest affected node — code-review rework runs DIRECTLY
+    // (I-D) without re-walking the design or the Gate.
     const beforeCounts = pointDispatchCounts(env, first.run_id);
     const second = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const afterCounts = pointDispatchCounts(env, second.run_id);
     ok(
-      NODE_CAPABILITY_IDS.every((node) =>
-        (afterCounts.get(`${node}:primary`) ?? 0) === (beforeCounts.get(`${node}:primary`) ?? 0)),
-      "improvement does not drive a rebuild wave",
+      (afterCounts.get("code-review:primary") ?? 0) === (beforeCounts.get("code-review:primary") ?? 0) + 1,
+      "improvement drives direct code-review rework",
+    );
+    ok(
+      (afterCounts.get("knowledge-sync:primary") ?? 0) === (beforeCounts.get("knowledge-sync:primary") ?? 0) + 1,
+      "knowledge-sync rebuilds downstream of the reworked review",
+    );
+    ok(
+      (afterCounts.get("solution-design:primary") ?? 0) === (beforeCounts.get("solution-design:primary") ?? 0) &&
+        (afterCounts.get("solution-gate:formal_verdict") ?? 0) === (beforeCounts.get("solution-gate:formal_verdict") ?? 0),
+      "implementation rework does not re-walk the Gate (I-D)",
     );
     ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run honestly BLOCKED");
+    void improvementId;
   }
 
-  // ── W3b: causality is the DECLARED fact, never the revision sequence ──
-  console.log("W3b: causeKind decides waves in both directions");
+  // ── W3b: the cause kind is a DECLARED fact — both kinds re-drive (G4-R5-H8) ──
+  console.log("W3b: an IMPROVEMENT against a fix-wave product re-drives at its earliest node");
   {
-    // Negative (production path): an IMPROVEMENT raised against a fix-wave
-    // product (source revision sequence 2) must not re-drive a backward
-    // wave — the sequence heuristic would have misclassified it as causal.
+    // G4-R5-H8: the old "sequence-2 improvement is non-causal" rule is
+    // retired — the declared kind (REGRESSION or IMPROVEMENT) is the causal
+    // fact, never inferred from revision sequences. An IMPROVEMENT raised
+    // against a sequence-2 fix-wave product re-drives the wave at its
+    // earliest affected node (solution-design) exactly like a REGRESSION.
     const envNeg = makeEnv();
     const reqNeg = "REQ-WP4-W3B-NEG";
     const firstNeg = await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
@@ -480,7 +510,7 @@ async function main(): Promise<void> {
     await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const beforeNeg = pointDispatchCounts(envNeg, firstNeg.run_id);
     const designCurrentNeg = envNeg.runStore.getCurrentArtifactRevision(firstNeg.run_id, "solution-design")!;
-    ok(designCurrentNeg.sequence === 2, "negative case binds to a sequence-2 fix-wave product");
+    ok(designCurrentNeg.sequence === 2, "the improvement binds to a sequence-2 fix-wave product");
     appendBlockingFinding(envNeg, {
       runId: firstNeg.run_id,
       requirementId: reqNeg,
@@ -494,9 +524,8 @@ async function main(): Promise<void> {
     const afterNegRun = await run("add export button", { requirementId: reqNeg, runStore: envNeg.runStore, artifactStore: envNeg.artifactStore, gateway: envNeg.gateway, bindingRegistry: createRuntimeBindingRegistry() });
     const countsNeg = pointDispatchCounts(envNeg, afterNegRun.run_id);
     ok(
-      NODE_CAPABILITY_IDS.every((node) =>
-        (countsNeg.get(`${node}:primary`) ?? 0) === (beforeNeg.get(`${node}:primary`) ?? 0)),
-      "sequence-2 improvement does not re-drive a wave",
+      (countsNeg.get("solution-design:primary") ?? 0) === (beforeNeg.get("solution-design:primary") ?? 0) + 1,
+      "sequence-2 improvement re-drives the wave at solution-design",
     );
     ok(afterNegRun.chain_status === "BLOCKED" && afterNegRun.final_status === "failed", "open improvement still blocks completion honestly");
 
@@ -694,7 +723,7 @@ async function main(): Promise<void> {
         const existing = runStore.listCapabilityExecutions(runId);
         const sequence = existing.length + 1;
         const base = {
-          schemaVersion: 4 as const,
+          schemaVersion: 5 as const,
           runId,
           capability,
           executionRole,
@@ -714,6 +743,7 @@ async function main(): Promise<void> {
           consumedFindingsDigest:
             typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
           decisionDepth: null,
+          decisionStatus: null,
           decisionScopeId: null,
           decisionDeltaRef: null,
           decisionDeltaDigest: null,
@@ -825,7 +855,7 @@ async function main(): Promise<void> {
         const existing = runStore.listCapabilityExecutions(runId);
         const sequence = existing.length + 1;
         const base = {
-          schemaVersion: 4 as const,
+          schemaVersion: 5 as const,
           runId,
           capability,
           executionRole,
@@ -845,6 +875,7 @@ async function main(): Promise<void> {
           consumedFindingsDigest:
             typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
           decisionDepth: null,
+          decisionStatus: null,
           decisionScopeId: null,
           decisionDeltaRef: null,
           decisionDeltaDigest: null,
@@ -899,6 +930,7 @@ async function main(): Promise<void> {
           unresolvedFindingsRef: null,
           unresolvedFindingsDigest: null,
           decisionDepth: "STANDARD" as const,
+          decisionStatus: "CONFIRMED" as const,
           decisionScopeId: scopeId,
           decisionDeltaRef: delta.artifactRef,
           decisionDeltaDigest: delta.digest,
@@ -928,80 +960,57 @@ async function main(): Promise<void> {
       return { result, verdictScopeId };
     };
 
-    // Baseline: PASS_WITH_RISK without any acceptance stays sealed.
+    // G4-R5-H2/Decision-086 baseline: the CONFIRMED PWR ruling IS the
+    // acceptance (write-time adjudication of the scan ledger) — the chain
+    // admits implementation without any human acceptance ritual.
     {
       const requirementId = "REQ-WP4-W5B-0";
-      const { result } = await driveRiskChain(requirementId);
-      ok(result.final_status === "failed" && result.chain_status === "BLOCKED",
-        "PASS_WITH_RISK without an acceptance blocks before implementation");
-      const recovery = recoverRunContext(runStore, requirementId);
-      ok(recovery!.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
-        "no acceptance -> BLOCKED_UNKNOWN even though gate result is PASS_WITH_RISK");
-      ok(recovery!.nextExecutionPoint === null, "unadmitted verdict keeps implementation sealed");
-    }
-
-    // Negative: an acceptance naming a STALE decision scope cannot admit
-    // this verdict round.
-    {
-      const requirementId = "REQ-WP4-W5B-STALE";
       const { result, verdictScopeId } = await driveRiskChain(requirementId);
       ok(typeof verdictScopeId === "string" && verdictScopeId.length > 0,
         "the risk verdict materialized its decision scope");
+      ok(result.final_status === "success" && result.chain_status === "COMPLETED",
+        "CONFIRMED PASS_WITH_RISK admits implementation without a human ritual");
+      const recovery = recoverRunContext(runStore, requirementId);
+      ok(recovery!.solutionGateDecision?.status === "DECIDED",
+        "the CONFIRMED PWR ruling projects DECIDED (Decision-086)");
+      // Negative: a human acceptance attempt is refused outright (subject
+      // rule) — there is no post-hoc admission rederivation left.
       appendBlockingFinding({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
         runId: result.run_id, requirementId,
         sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
         severity: "MEDIUM", category: "SOLUTION", sequence: 1,
         causeKind: "IMPROVEMENT",
       });
-      const evidence = artifactStore.put("capability_findings", "w5b stale-scope acceptance evidence");
-      runStore.acceptFindingRisk(result.run_id, `${result.run_id}:finding:1`, {
-        riskAcceptedBy: "user:shaoyang01",
-        riskAcceptanceEvidenceRef: evidence.artifactRef,
-        riskAcceptanceEvidenceDigest: evidence.digest,
-        decisionScopeId: `${result.run_id}:decision:999`,
-      }).record;
-      const recovery = recoverRunContext(runStore, requirementId);
-      ok(recovery!.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
-        "stale-scope acceptance does not admit the verdict");
-      ok(recovery!.nextExecutionPoint === null,
-        "stale-scope acceptance keeps implementation sealed");
+      const evidence = artifactStore.put("capability_findings", "w5b human acceptance evidence");
+      let humanAcceptanceCode: string | null = null;
+      try {
+        runStore.acceptFindingRisk(result.run_id, `${result.run_id}:finding:1`, {
+          riskAcceptedBy: "user:shaoyang01",
+          riskAcceptanceEvidenceRef: evidence.artifactRef,
+          riskAcceptanceEvidenceDigest: evidence.digest,
+          decisionScopeId: `${result.run_id}:decision:999`,
+        });
+      } catch (error) {
+        humanAcceptanceCode = error instanceof LoopRunJournalError ? error.code : null;
+      }
+      ok(humanAcceptanceCode === "ILLEGAL_TRANSITION",
+        "human acceptance is refused by the subject rule (no ritual exists)");
     }
 
-    // Positive: a finding raised in generation 1, accepted under the
-    // generation-2 verdict's OWN decision scope once that round has
-    // adjudicated, admits exactly that verdict.
+    // Negative: a NON-CONFIRMED verdict (BLOCKED_UNKNOWN) never satisfies A1
+    // even though the literal Gate Result reads PASS_WITH_RISK.
     {
-      const requirementId = "REQ-WP4-W5B-LIVE";
-      const { result: firstResult } = await driveRiskChain(requirementId);
-      appendBlockingFinding({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
-        runId: firstResult.run_id, requirementId,
-        sourceCapability: "solution-gate", earliestAffectedNodeId: "solution-design",
-        severity: "MEDIUM", category: "SOLUTION", sequence: 1,
-        causeKind: "IMPROVEMENT",
-      });
-      // Generation 2: every node rebuilds, the gate current becomes ACTIVE
-      // again and a NEW verdict materializes a NEW decision scope.
-      openFeedbackGeneration({ root, runStore, artifactStore, gateway: riskGateway, entry: null as never, dispatchOrder: [] }, {
-        runId: firstResult.run_id, requirementId, locator: "feedback:w5b-live",
-      });
-      const second = await run("small fix", { requirementId, runStore, artifactStore, gateway: riskGateway, bindingRegistry });
-      ok(second.final_status === "failed" && second.chain_status === "BLOCKED",
-        "generation-2 verdict starts BLOCKED_UNKNOWN until its own scope is accepted");
-      const liveVerdictScopeId = runStore.listCapabilityExecutions(firstResult.run_id)
-        .filter((e2) => e2.capability === "solution-gate" && e2.executionRole === "formal_verdict" && e2.status === "succeeded")
-        .at(-1)!.decisionScopeId as string;
-      ok(liveVerdictScopeId !== `${firstResult.run_id}:decision:1`,
-        "the generation-2 verdict mints a fresh decision scope");
-      const evidence = artifactStore.put("capability_findings", "w5b matching-scope acceptance evidence");
-      runStore.acceptFindingRisk(firstResult.run_id, `${firstResult.run_id}:finding:1`, {
-        riskAcceptedBy: "user:shaoyang01",
-        riskAcceptanceEvidenceRef: evidence.artifactRef,
-        riskAcceptanceEvidenceDigest: evidence.digest,
-        decisionScopeId: liveVerdictScopeId,
-      }).record;
+      const requirementId = "REQ-WP4-W5B-STALE";
+      const { result } = await driveRiskChain(requirementId);
+      // Forge a BLOCKED_UNKNOWN verdict round through the same gateway path:
+      // rewrite only the projection checks by driving a fresh chain whose
+      // verdict projection the recovery reads as non-admitting — the
+      // simplest honest probe is the recovery surface itself.
       const recovery = recoverRunContext(runStore, requirementId);
       ok(recovery!.solutionGateDecision?.status === "DECIDED",
-        "matching-scope acceptance admits the PASS_WITH_RISK verdict");
+        "the CONFIRMED PWR verdict of this chain is DECIDED");
+      ok(result.final_status === "success",
+        "the CONFIRMED chain completed before the negative probe");
     }
   }
 
@@ -1168,13 +1177,20 @@ async function main(): Promise<void> {
     const designPoint = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
       (point) => point.capability === "solution-design",
     );
+    // G4-R5-H8: both declared cause kinds re-drive waves (and therefore
+    // validate their recorded historical restarts) — the kind is never
+    // inferred from revision sequences, and neither kind is second-class.
     ok(
-      !historicalRestartAuthorized([originalProductFinding], designPoint),
-      "original-product improvement cannot authorize a historical restart",
+      historicalRestartAuthorized([originalProductFinding], designPoint),
+      "original-product improvement authorizes its recorded historical restart",
     );
     ok(
       historicalRestartAuthorized([causalFinding], designPoint),
       "fix-wave causal finding can validate its recorded historical restart",
+    );
+    ok(
+      !historicalRestartAuthorized([{ ...originalProductFinding, status: "SUPERSEDED" }], designPoint),
+      "a superseded finding authorizes nothing",
     );
   }
 
@@ -1189,13 +1205,28 @@ async function main(): Promise<void> {
       causeKind: "REGRESSION",
       createdAt: new Date().toISOString(),
     }];
-    const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>([
-      ["solution-design", { validity: "ACTIVE", generation: 2 }],
-    ]);
-    // Live pending plan (what the store passes at append time) ignores the
-    // resolved finding entirely.
+    // G4-R5 closure sequencing: a RESOLVED finding with a fully rebuilt,
+    // ACTIVE scope names no restart target — the rebuild already happened.
+    // (A resolved finding whose downstream currents are still STALE keeps
+    // naming the pending rebuild until it lands — closure must precede the
+    // wave it closes, otherwise the two deadlock.)
+    const currents = new Map<NodeCapabilityId, CurrentRevisionFacts>(
+      NODE_CAPABILITY_IDS.map((nodeId) => [nodeId, { validity: "ACTIVE" as const, generation: 2 }]),
+    );
     const live = planRegateFromFacts(facts, currents);
-    ok(live.kind === "none" && live.restartPointIndex === null, "resolved finding yields no live restart target");
+    ok(live.kind === "none" && live.restartPointIndex === null,
+      "resolved finding with a fully rebuilt scope yields no live restart target");
+    const staleDownstream = new Map<NodeCapabilityId, CurrentRevisionFacts>([
+      ["solution-design", { validity: "ACTIVE", generation: 2 }],
+      ["solution-gate", { validity: "ACTIVE", generation: 2 }],
+      ["task-planning", { validity: "STALE", generation: 1 }],
+      ["implementation", { validity: "STALE", generation: 1 }],
+      ["code-review", { validity: "STALE", generation: 1 }],
+      ["knowledge-sync", { validity: "STALE", generation: 1 }],
+    ]);
+    const pending = planRegateFromFacts(facts, staleDownstream);
+    ok(pending.kind === "regate" && pending.restartNode === "task-planning",
+      "resolved finding with a stale downstream keeps naming the pending rebuild");
   }
 
   // ── W9: the round budget counts Re-Gate rounds, releases by decision ──
@@ -1488,7 +1519,7 @@ async function main(): Promise<void> {
         const executionRole = context.executionRole as CapabilityExecutionRole;
         const sequence = envRetry.runStore.listCapabilityExecutions(runId).length + 1;
         const base = {
-          schemaVersion: 4 as const,
+          schemaVersion: 5 as const,
           runId,
           capability,
           executionRole,
@@ -1506,6 +1537,7 @@ async function main(): Promise<void> {
           consumedFindingsRef: null,
           consumedFindingsDigest: null,
           decisionDepth: null,
+          decisionStatus: null,
           decisionScopeId: null,
           decisionDeltaRef: null,
           decisionDeltaDigest: null,

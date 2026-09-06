@@ -385,7 +385,7 @@ export function runReleaseProcedureWithStores(
   releasedBy: string,
   releaseNote: string,
 ): ReleaseReceipt {
-  const { runStore, artifactStore } = buildStores();
+  const { runStore } = buildStores();
 
   const snapshot = runStore.getSnapshot(runId);
   if (snapshot === undefined) {
@@ -430,56 +430,18 @@ export function runReleaseProcedureWithStores(
       "a gate PASS_WITH_RISK stop only accepts RISK_ACCEPTED; rework flows through the Re-Gate machinery, not a release",
     );
   }
-  const gate = runStore.computeFindingGate(runId);
-  if (gate.blockingFindings.length === 0) {
-    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", "no blocking findings to release");
-  }
-  const findings = runStore.listFindings(runId);
-  const byId = new Map(findings.map((f) => [f.findingId, f]));
-  const targets: string[] = [];
-  for (const id of gate.blockingFindings) {
-    const finding = byId.get(id);
-    if (finding === undefined) {
-      throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", `blocking finding ${id} not found in journal`);
-    }
-    if (finding.status !== "OPEN") continue;
-    if (finding.severity === "CRITICAL") {
-      throw new LoopRunCliError(
-        "RELEASE_CRITICAL_FINDING",
-        `finding ${id} is CRITICAL; risk acceptance is not available for critical findings`,
-      );
-    }
-    targets.push(id);
-  }
-  if (targets.length === 0) {
-    throw new LoopRunCliError("RELEASE_TARGET_NOT_RELEASABLE", "all blocking findings are already closed");
-  }
-  const evidence = artifactStore.put("human_action_required", `${JSON.stringify({
-    schema: "loop-release-evidence:v1",
-    run_id: runId,
-    release,
-    released_by: releasedBy,
-    note: releaseNote,
-    finding_ids: targets,
-    decision_scope_id: last.decisionScopeId,
-    released_at: new Date().toISOString(),
-  }, null, 2)}\n`);
-  for (const findingId of targets) {
-    runStore.acceptFindingRisk(runId, findingId, {
-      riskAcceptedBy: releasedBy,
-      riskAcceptanceEvidenceRef: evidence.artifactRef,
-      riskAcceptanceEvidenceDigest: evidence.digest,
-      decisionScopeId: last.decisionScopeId,
-    });
-  }
-  return {
-    run_id: runId,
-    release,
-    released_by: releasedBy,
-    decision_scope_id: last.decisionScopeId,
-    findings_accepted: targets,
-    evidence_ref: evidence.artifactRef,
-  };
+  // G4-R5-H6 (Decision-086/087, frozen contract §5.2/§7.1): the human
+  // RISK_ACCEPTED release ritual is RETIRED. The formal_verdict's own
+  // CONFIRMED PWR ruling accepts its scan findings inside the verdict's
+  // terminal transaction (durable RISK_ACCEPTANCE proofs, riskAcceptedBy
+  // formal_verdict); ACCEPTED is scan-source only and CRITICAL findings are
+  // never acceptable. A PWR stop is not a human gate — fail closed here.
+  throw new LoopRunCliError(
+    "RELEASE_CODE_NOT_APPLICABLE",
+    "PASS_WITH_RISK is adjudicated by the formal_verdict ruling itself (Decision-086): " +
+      "the ruling accepted its scan-source findings at the verdict terminal; " +
+      "non-scan findings resolve through rework, not through a human release",
+  );
 }
 
 async function main(argv: readonly string[]): Promise<number> {

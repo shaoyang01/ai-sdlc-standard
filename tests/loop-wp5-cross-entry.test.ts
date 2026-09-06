@@ -382,6 +382,7 @@ async function main(): Promise<void> {
       // RESOLVED orchestration: resolution requires the rebuilt ACTIVE current.
       const implCurrent = afterWave.currentArtifactMap.find((fact) => fact.nodeId === "implementation")!;
       env.runStore.resolveFinding(first.run_id, findingId, {
+        resolvedByNodeId: "implementation",
         resolvedByRevisionId: implCurrent.revisionId,
         resolutionEvidenceRef: `loop-artifact:v1:${implCurrent.artifactKind}:sha256:${implCurrent.digest}`,
         resolutionEvidenceDigest: implCurrent.digest,
@@ -890,6 +891,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -1151,6 +1153,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -1245,6 +1248,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -1516,7 +1520,7 @@ async function main(): Promise<void> {
         inputArtifactVersion: intakeCurrent.semver,
         inputDigest: intakeCurrent.digest,
         consumedFindingsRef: null, consumedFindingsDigest: null,
-        decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+        decisionDepth: null, decisionStatus: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,

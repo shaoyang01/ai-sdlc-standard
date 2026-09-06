@@ -61,10 +61,42 @@ function main(): void {
     const s = build("solution-gate", "formal_verdict");
     ok(s.includes('"PASS"') && s.includes('"FAIL"') && s.includes('"PASS_WITH_RISK"'), "gate: verdict values listed");
     ok(s.includes("NOT_APPLICABLE") && /may NOT use NOT_APPLICABLE/.test(s), "gate: forbids self-asserting NOT_APPLICABLE");
-    ok(s.includes("riskAcceptanceRefs") && s.includes("REQUIRED non-empty"), "gate: PASS_WITH_RISK requires risk refs");
+    // G4-R5-M1 + Decision-086 (G4-02): a PWR ruling without specific refs
+    // stays legal — the refs are evidence pointers, not the acceptance.
+    ok(
+      s.includes("riskAcceptanceRefs") && /optional/.test(s),
+      "gate: risk refs optional per Decision-086 (old REQUIRED assertion retired)",
+    );
     ok(s.includes("findings"), "gate: findings instructions present");
     ok(/CRITICAL.*HIGH.*MEDIUM.*LOW/.test(s.replace(/\n/g, " ")), "gate: severity enum listed");
     ok(s.includes("REGRESSION") && s.includes("IMPROVEMENT"), "gate: cause enum listed");
+    // G4-R5-H3: the §4.3 combination table is instructed, not guessed.
+    ok(
+      s.includes('"CONFIRMED"') && s.includes('"ESCALATED"') && s.includes('"BLOCKED_UNKNOWN"'),
+      "gate: decisionStatus enum listed",
+    );
+    ok(/exactly null with BLOCKED_UNKNOWN/.test(s), "gate: BLOCKED_UNKNOWN requires the explicit null depth");
+    ok(/REQUIRED non-null with CONFIRMED\/ESCALATED/.test(s), "gate: CONFIRMED/ESCALATED require non-null depth");
+  }
+
+  console.log("prompt: node business status (G4-R5-H4)");
+  for (const cap of NODE_CAPABILITY_IDS as readonly NodeCapabilityId[]) {
+    const role = cap === "solution-gate" ? "formal_verdict" : "primary";
+    const s = build(cap, role);
+    ok(
+      /"nodeStatus": one of "SUCCEEDED", "BLOCKED", "FAILED"/.test(s),
+      `${cap}: nodeStatus business result instructed`,
+    );
+  }
+
+  console.log("prompt: finding category names the reflow target (G4-R5-H5)");
+  for (const cap of ["solution-gate", "code-review"] as NodeCapabilityId[]) {
+    const s = build(cap, cap === "solution-gate" ? "adversarial_scan" : "primary");
+    ok(
+      /"category": one of "REQUIREMENT"\|"SOLUTION"\|"PLANNING"\|"IMPLEMENTATION"\|"REVIEW"\|"KNOWLEDGE"/.test(s),
+      `${cap}: finding category enum instructed`,
+    );
+    ok(/problem layer/.test(s), `${cap}: category describes the problem layer`);
   }
 
   console.log("prompt: non-gate nodes must not claim verdict");

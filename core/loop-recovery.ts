@@ -28,6 +28,7 @@ import {
 import { planRegateFromFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
 import {
   findPendingRevisionProducerExecution,
+  type DecisionStatus,
   type LoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionStatus,
   type LoopCapabilityGateResult,
@@ -155,15 +156,12 @@ export interface RunRecoveryContext {
    */
   findingGate: { status: "ELIGIBLE" | "BLOCKED"; blockingFindingIds: readonly string[] };
   /**
-   * W-GW-DIAG P-K (Decision-080): decision scopes carrying a human
-   * ACCEPTED_RISK decision. A PASS_WITH_RISK verdict bound to one of these
-   * scopes is admitted forward even though its event nextStepEligibility
-   * stays BLOCKED (events are immutable; acceptance is the rederivation).
-   */
-  /**
-   * WP4: depth decision bound to the latest formal_verdict round.
-   * PASS → DECIDED; FAIL / missing / PASS_WITH_RISK without a current
-   * ACCEPTED_RISK proof → BLOCKED_UNKNOWN (implementation must not start).
+   * G4-R5-H2 (frozen contract §7.3 A1): depth decision bound to the latest
+   * formal_verdict round. DECIDED only when the verdict event itself carries
+   * decisionStatus=CONFIRMED with an admitting Gate Result (PASS /
+   * PASS_WITH_RISK), a materialized depth/scope/delta, and an identity-bound
+   * current Gate revision. ESCALATED / BLOCKED_UNKNOWN / FAIL / unbound →
+   * BLOCKED_UNKNOWN (task-planning must not start).
    */
   solutionGateDecision: {
     status: "DECIDED" | "BLOCKED_UNKNOWN";
@@ -338,6 +336,8 @@ export interface ExecutionPointRecoveryState {
   gateResult: LoopCapabilityGateResult | null;
   /** W-GW-DIAG P-K: the verdict round's materialized decision scope. */
   decisionScopeId: string | null;
+  /** G4-R5-H1: the verdict round's §4.3 decision status (v5 events only). */
+  decisionStatus: DecisionStatus | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   retryable: boolean | null;
   /** v3 (Round 1): the persisted Finding Ledger of a scan round. */
@@ -522,6 +522,7 @@ function recoverRunContextInTransaction(
         effectiveOutputDigest: lastSucceeded?.outputDigest ?? null,
         gateResult: lastSucceeded?.gateResult ?? null,
         decisionScopeId: last?.decisionScopeId ?? null,
+        decisionStatus: last?.decisionStatus ?? null,
         nextStepEligibility: last?.nextStepEligibility ?? null,
         retryable: last?.retryable ?? null,
         unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
@@ -550,6 +551,15 @@ function recoverRunContextInTransaction(
       nextExecutionPoint = pointState.retryable === true ? point : null;
       break;
     }
+    if (pointState.status === "blocked") {
+      // G4-R5-H4 (D-087): a blocked node business result is a completed
+      // attempt with a blocker report — the recovery re-drives the SAME
+      // point (the chain validator accepts the unchanged-claim re-attempt
+      // and the upstream-refreshed re-attempt). Downstream work never
+      // derives from a blocked terminal.
+      nextExecutionPoint = point;
+      break;
+    }
     if (pointState.status === "started") {
       nextExecutionPoint = null;
       break;
@@ -559,27 +569,10 @@ function recoverRunContextInTransaction(
       break;
     }
     if (pointState.nextStepEligibility !== "ELIGIBLE") {
-      // W-GW-DIAG P-K (Decision-080): a PASS_WITH_RISK verdict that judged
-      // itself BLOCKED pending risk admission is admitted forward once the
-      // human decision exists — an ACCEPTED_RISK finding bound to the SAME
-      // decisionScopeId (the identical proof the PWR-DECIDED rule below
-      // requires). The event field stays immutable; eligibility is rederived
-      // from accepted facts. Without that proof: fail-closed as before.
-      const pwrVerdictAwaitingAdmission =
-        pointState.status === "succeeded" &&
-        pointState.capability === "solution-gate" &&
-        pointState.executionRole === "formal_verdict" &&
-        pointState.gateResult === "PASS_WITH_RISK" &&
-        pointState.decisionScopeId !== null;
-      if (pwrVerdictAwaitingAdmission) {
-        const admitted = findings.some(
-          (finding) =>
-            finding.status === "ACCEPTED_RISK" &&
-            finding.riskAcceptedScopeId !== null &&
-            finding.riskAcceptedScopeId === pointState.decisionScopeId,
-        );
-        if (admitted) continue;
-      }
+      // G4-R5-H2: eligibility is carried by the event itself (derived from
+      // the verdict's §4.3 ruling at write time). There is no post-hoc
+      // rederivation that can admit a BLOCKED terminal — the reflow paths
+      // (Re-Gate wave, feedback restart) are the only ways forward.
       nextExecutionPoint = null;
       break;
     }
@@ -626,6 +619,12 @@ function recoverRunContextInTransaction(
     latestFeedback === undefined || latestFeedback.previousGeneration === null
       ? null
       : { previousGeneration: latestFeedback.previousGeneration };
+  // G4-R5: succeeded execution points whose own terminal blocked their
+  // eligibility are the wave's mandatory re-drives (see planRegateFromFacts).
+  const blockedPointIndexes = executionPointStates
+    .map((state, index) =>
+      state.status === "succeeded" && state.nextStepEligibility === "BLOCKED" ? index : -1)
+    .filter((index) => index >= 0);
   const plan = planRegateFromFacts(
     findings.map((finding) => ({
       findingId: finding.findingId,
@@ -638,6 +637,7 @@ function recoverRunContextInTransaction(
     currentByNode,
     pointLastAttempts,
     feedbackChange,
+    blockedPointIndexes,
   );
   if (plan.kind === "regate" && plan.restartPointIndex !== null) {
     regateTargetIndex = plan.restartPointIndex;
@@ -720,34 +720,21 @@ function recoverRunContextInTransaction(
       gateCurrentRevision !== undefined &&
       gateCurrentRevision.producerExecutionId === lastVerdict.executionEventId;
     const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
-    // PASS_WITH_RISK is DECIDED only with an ACCEPTED_RISK proof from the
-    // SAME decision scope: the risk-accepted finding's source revision must
-    // carry the same generation as the verdict round (same wave).
-    let pwrProofSameScope = false;
-    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
-      // W-GW-DIAG P-K-d (Decision-086): PWR verdicts auto-proceed — the
-      // gate agent already reviewed the scan findings and judged the risks
-      // acceptable. The chain proceeds; findings remain visible as carried
-      // risks for code-review to verify closure. (Current User 2026-09-02:
-      // "有finding我肯定会要求修正" — rework is for blocking findings,
-      // not for PWR.)
-      pwrProofSameScope = lastVerdict.decisionScopeId !== null;
-    }
-    // Round 2 review H1: the depth choice must be MATERIALIZED on the
-    // verdict event itself — gateResult alone never admits implementation.
-    const decisionMaterialized =
-      lastVerdict.decisionDepth !== null && lastVerdict.decisionScopeId !== null;
-    if (lastVerdict.status === "succeeded" && !boundToCurrentGate) {
-      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
-    } else if (
-      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS" &&
-      decisionMaterialized
-    ) {
-      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
-    } else if (
-      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
-      decisionMaterialized && pwrProofSameScope
-    ) {
+    // G4-R5-H2 (frozen contract §7.3 A1): admission authority is the
+    // verdict's OWN §4.3 ruling — decisionStatus must be CONFIRMED and the
+    // Gate Result must be an admitting one (PASS / PASS_WITH_RISK). An
+    // ESCALATED or BLOCKED_UNKNOWN ruling never satisfies A1, even when the
+    // literal Gate Result reads PASS/PWR, and v4-historical events (no
+    // decisionStatus authority) never gain it post hoc. Decision-086 PWR
+    // auto-proceed survives as the write-time derivation: a CONFIRMED PWR
+    // verdict adjudicated its scan ledger in the same terminal transaction.
+    const decisionAdmits =
+      lastVerdict.status === "succeeded" &&
+      lastVerdict.decisionStatus === "CONFIRMED" &&
+      (lastVerdict.gateResult === "PASS" || lastVerdict.gateResult === "PASS_WITH_RISK") &&
+      lastVerdict.decisionDepth !== null &&
+      lastVerdict.decisionScopeId !== null;
+    if (lastVerdict.status === "succeeded" && boundToCurrentGate && decisionAdmits) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else {
       solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };

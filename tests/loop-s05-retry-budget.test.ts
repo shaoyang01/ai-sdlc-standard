@@ -103,6 +103,7 @@ function event(runId: string, overrides: Partial<LoopCapabilityExecutionEvent>):
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
     decisionDepth: null,
+    decisionStatus: null,
     decisionScopeId: null,
     decisionDeltaRef: null,
     decisionDeltaDigest: null,

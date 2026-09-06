@@ -59,7 +59,10 @@ import {
   validateNodeOutputArtifact,
   type BindingRegistry,
 } from "../core/agent-capability-bindings";
-import type { LoopRunStore } from "../core/loop-run-store";
+import type {
+  CapabilityFindingsRegistration,
+  LoopRunStore,
+} from "../core/loop-run-store";
 import type { LoopArtifactKind, LoopArtifactStore } from "../core/loop-artifact-store";
 import {
   LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
@@ -73,6 +76,23 @@ import { readPlainDataRecord } from "../core/loop-run-state";
 import { types as utilTypes } from "node:util";
 
 export type HermesGatewayRealDispatcher = typeof dispatchHermesGatewayReal;
+
+/**
+ * G4-R5-H5: deterministic executors and legacy findings may not declare a
+ * root-cause category; the registration falls back to the source
+ * capability's canonical problem layer (the category×source matrix's
+ * suffix rule keeps every pairing legal — a finding cannot name a problem
+ * layer upstream of its discovery node).
+ */
+const DEFAULT_FINDING_CATEGORY_BY_CAPABILITY: Record<NodeCapabilityId, string> = {
+  "requirement-intake": "REQUIREMENT",
+  "solution-design": "SOLUTION",
+  "solution-gate": "SOLUTION",
+  "task-planning": "PLANNING",
+  "implementation": "IMPLEMENTATION",
+  "code-review": "REVIEW",
+  "knowledge-sync": "KNOWLEDGE",
+};
 
 class CapabilityExecutionTimeoutError extends Error {
   constructor() {
@@ -535,49 +555,256 @@ export class ExecutionGateway {
       });
     }
     // v4 (Round 2 review H1): a succeeded formal_verdict materializes its
-    // depth decision on the event — STANDARD scope with an immutable delta
-    // artifact recording what the choice changes.
+    // depth decision on the event — with an immutable delta artifact
+    // recording what the choice changes.
     const isVerdictDispatch = capability === "solution-gate" && executionRole === "formal_verdict";
-    // G4-01 (C16) + G4-R3-H1: extract decisionDepth AND decisionStatus from verdict
-    const rawDepth = isVerdictDispatch
-      ? (result.output["decisionDepth"] ?? result.output["decision_depth"])
-      : undefined;
-    const rawStatus = isVerdictDispatch
-      ? (result.output["decisionStatus"] ?? result.output["decision_status"])
-      : undefined;
+    const isScanDispatch = capability === "solution-gate" && executionRole === "adversarial_scan";
+    // G4-R5-H4 (D-087 seam 1): the node's business result is a first-class
+    // journal fact. The real chain always declares nodeStatus in the E3
+    // envelope; the deterministic executors have no business-blocked shape,
+    // so an absent field means SUCCEEDED. An illegal value fails closed, and
+    // BLOCKED/FAILED downgrade the terminal instead of masquerading as
+    // success — body prose is never re-interpreted into an outcome here.
+    const rawNodeStatus = result.output["nodeStatus"];
+    let nodeStatus: "SUCCEEDED" | "BLOCKED" | "FAILED" = "SUCCEEDED";
+    if (rawNodeStatus !== undefined) {
+      if (
+        typeof rawNodeStatus !== "string" ||
+        !(["SUCCEEDED", "BLOCKED", "FAILED"] as readonly string[]).includes(rawNodeStatus)
+      ) {
+        this.appendCapabilityFailure(
+          tracing,
+          base,
+          startedSequence + 1,
+          now(),
+          "OUTPUT_CONTRACT_VIOLATION",
+          binding.failurePolicy === "retry_other_binding",
+          result.processEvidence,
+        );
+        return Object.freeze({
+          ...result,
+          success: false,
+          agent: binding.agent,
+          error: "capability node business status is not canonical",
+        });
+      }
+      nodeStatus = rawNodeStatus as "SUCCEEDED" | "BLOCKED" | "FAILED";
+    }
+    if (isVerdictDispatch && nodeStatus === "BLOCKED") {
+      // The journal forbids a blocked formal_verdict: it renders a decision.
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "OUTPUT_CONTRACT_VIOLATION",
+        binding.failurePolicy === "retry_other_binding",
+        result.processEvidence,
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "formal_verdict cannot end blocked — it renders a decision",
+      });
+    }
+    if (nodeStatus === "FAILED") {
+      // G4-R5-H4: the node's business result is FAILED — the journal records
+      // a failed terminal (no output fields by rule) and the recovery may
+      // re-drive the node on the unchanged claim. The unusable product never
+      // becomes an output blob.
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "NODE_BUSINESS_FAILED",
+        true,
+        result.processEvidence ?? null,
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "capability node business result is FAILED",
+      });
+    }
+    // G4-R5-H3: the verdict's decision fields are read with explicit
+    // three-state semantics — a MISSING field, an explicit null and an
+    // ILLEGAL value are distinct facts and none is coerced into another: a
+    // missing status never defaults to CONFIRMED, and an illegal depth is
+    // never normalized into the legal BLOCKED_UNKNOWN null. The legal
+    // combinations are exactly frozen contract §4.3: CONFIRMED/ESCALATED
+    // with LIGHT/STANDARD/DEEP, BLOCKED_UNKNOWN with an explicit null.
     const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
-    const verdictDepth = isVerdictDispatch && typeof rawDepth === "string" && (DECISION_DEPTHS as readonly string[]).includes(rawDepth)
-      ? (rawDepth as typeof DECISION_DEPTHS[number])
-      : null;
     const DECISION_STATUSES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
-    const verdictStatus = isVerdictDispatch && typeof rawStatus === "string" && (DECISION_STATUSES as readonly string[]).includes(rawStatus)
-      ? (rawStatus as typeof DECISION_STATUSES[number])
-      : null;
-    // G4-R3-H1: validate legal combinations per contract §4.3
-    // BLOCKED_UNKNOWN + null = legal blocked verdict (not an error)
-    // CONFIRMED/ESCALATED require non-null depth
-    // Missing/invalid status or depth -> failed terminal
-    if (isVerdictDispatch && verdictStatus === null) {
+    let verdictDepth: (typeof DECISION_DEPTHS)[number] | null = null;
+    let verdictStatus: (typeof DECISION_STATUSES)[number] | null = null;
+    if (isVerdictDispatch) {
+      const comboFail = (message: string): ExecutionResult => {
+        this.appendCapabilityFailure(
+          tracing,
+          base,
+          startedSequence + 1,
+          now(),
+          "GATE_DEPTH_INVALID",
+          false,
+          result.processEvidence ?? null,
+        );
+        return Object.freeze({ ...result, success: false, agent: binding.agent, error: message });
+      };
+      const hasStatusField = "decisionStatus" in result.output || "decision_status" in result.output;
+      const hasDepthField = "decisionDepth" in result.output || "decision_depth" in result.output;
+      const rawStatus = hasStatusField
+        ? ("decisionStatus" in result.output ? result.output["decisionStatus"] : result.output["decision_status"])
+        : undefined;
+      const rawDepth = hasDepthField
+        ? ("decisionDepth" in result.output ? result.output["decisionDepth"] : result.output["decision_depth"])
+        : undefined;
+      if (!hasStatusField) {
+        return comboFail("formal_verdict dispatch is missing decisionStatus (missing is not BLOCKED_UNKNOWN)");
+      }
+      if (typeof rawStatus !== "string" || !(DECISION_STATUSES as readonly string[]).includes(rawStatus)) {
+        return comboFail("formal_verdict dispatch decisionStatus is not a canonical decision status");
+      }
+      if (rawStatus === "BLOCKED_UNKNOWN") {
+        // Explicit null only: a missing or non-null depth is a different fact.
+        if (!hasDepthField) {
+          return comboFail("formal_verdict BLOCKED_UNKNOWN requires an explicit null decisionDepth (missing is not null)");
+        }
+        if (rawDepth !== null) {
+          return comboFail("formal_verdict BLOCKED_UNKNOWN requires decisionDepth === null");
+        }
+        verdictStatus = "BLOCKED_UNKNOWN";
+      } else {
+        if (!hasDepthField) {
+          return comboFail("formal_verdict CONFIRMED/ESCALATED requires a decisionDepth");
+        }
+        if (typeof rawDepth !== "string" || !(DECISION_DEPTHS as readonly string[]).includes(rawDepth)) {
+          return comboFail("formal_verdict CONFIRMED/ESCALATED requires a canonical non-null decisionDepth");
+        }
+        verdictStatus = rawStatus as (typeof DECISION_STATUSES)[number];
+        verdictDepth = rawDepth as (typeof DECISION_DEPTHS)[number];
+      }
+    }
+    try {
+      const outputEnvelope = JSON.stringify({
+        schema: "loop-capability-output:v1",
+        requirementId: request.requirementId,
+        capability,
+        nodeId: request.node,
+        artifact: expectedArtifact,
+      });
+      if (outputEnvelope === undefined) throw new Error("capability output is not serializable");
+      outputDescriptor = tracing.artifactStore.put(CAPABILITY_ARTIFACT_TYPES[capability] as LoopArtifactKind, outputEnvelope);
+      if (findings.length === 0 && !isScanDispatch) {
+        findingsDescriptor = null;
+      } else {
+        // v3: an empty scan round still writes its immutable empty ledger.
+        const findingEnvelope = JSON.stringify({
+          schema: "loop-capability-findings:v1",
+          requirementId: request.requirementId,
+          capability,
+          findings,
+        });
+        if (findingEnvelope === undefined) throw new Error("capability findings are not serializable");
+        findingsDescriptor = tracing.artifactStore.put("capability_findings", findingEnvelope);
+      }
+    } catch {
       this.appendCapabilityFailure(
-        tracing, base, startedSequence + 1, now(),
-        "GATE_DEPTH_INVALID", false, result.processEvidence ?? null,
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "OUTPUT_RECORDING_FAILED",
+        binding.failurePolicy === "retry_other_binding",
+        result.processEvidence,
       );
       return Object.freeze({
-        ...result, success: false, agent: binding.agent,
-        error: "formal_verdict dispatch missing or invalid decisionStatus in output",
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "capability output could not be recorded safely",
       });
     }
-    if (isVerdictDispatch && verdictStatus !== "BLOCKED_UNKNOWN" && verdictDepth === null) {
-      this.appendCapabilityFailure(
-        tracing, base, startedSequence + 1, now(),
-        "GATE_DEPTH_INVALID", false, result.processEvidence ?? null,
-      );
-      return Object.freeze({
-        ...result, success: false, agent: binding.agent,
-        error: "formal_verdict dispatch CONFIRMED/ESCALATED requires non-null decisionDepth",
-      });
-    }
+    // G4-R5-H5 (D-087 seam 2): the terminal transaction registers every node
+    // finding the trusted envelope/executor output declared — the adapter
+    // never drops them. Severity/category/cause are reduced to machine facts:
+    // a finding that does not declare a category falls back to the source
+    // capability's canonical problem layer, and only an explicit REGRESSION
+    // is ever treated as the stronger causal claim. The directive semantics:
+    //   - scan rounds register WITHOUT invalidation edges (the verdict
+    //     adjudicates the ledger; premature edges would stale the design
+    //     before its adjudication);
+    //   - non-admitting verdicts (FAIL/ESCALATED/BLOCKED_UNKNOWN) register
+    //     WITH edges — §5.4 invalidation is immediate; FAIL/ESCALATED also
+    //     owe the chain the synthetic solution-design reflow fact when the
+    //     agent named none (BLOCKED_UNKNOWN reflows only where a finding
+    //     points — the contract forbids guessing a target);
+    //   - CONFIRMED verdicts and every other succeeded node register their
+    //     own findings with edges (new discovery facts reflow), and the
+    //     CONFIRMED ruling additionally adjudicates the scan ledger in the
+    //     same transaction (PASS resolves it, PWR risk-accepts it);
+    //   - blocked terminals preserve their blocker findings as OPEN
+    //     discovery facts without invalidation — the re-attempt is derived
+    //     from the blocked terminal itself.
+    const verdictAdmits = isVerdictDispatch &&
+      verdictStatus === "CONFIRMED" && gateResult !== "FAIL";
+    // Scan rounds defer to the verdict's adjudication; everything else that
+    // registers findings propagates §5.4 invalidation from each finding's
+    // canonical earliest node (blocked terminals register without edges).
+    const runInvalidation = nodeStatus === "SUCCEEDED" && !isScanDispatch;
+    const registrationDrafts = findings.map((finding) => {
+      const record = (finding && typeof finding === "object" ? finding : {}) as Record<string, unknown>;
+      const severity = typeof record["severity"] === "string" ? record["severity"] : "";
+      const declaredCategory = typeof record["category"] === "string" ? record["category"] : null;
+      const declaredCause = typeof record["cause"] === "string"
+        ? record["cause"]
+        : typeof record["causeKind"] === "string" ? record["causeKind"] : null;
+      return {
+        severity,
+        category: declaredCategory ?? DEFAULT_FINDING_CATEGORY_BY_CAPABILITY[capability],
+        causeKind: declaredCause === "REGRESSION" ? "REGRESSION" : "IMPROVEMENT",
+      };
+    });
     const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
+    const registration: CapabilityFindingsRegistration = {
+      evidenceRef: (findingsDescriptor ?? outputDescriptor).artifactRef,
+      evidenceDigest: (findingsDescriptor ?? outputDescriptor).digest,
+      findings: registrationDrafts,
+      runInvalidation,
+      registerReflowFinding: isVerdictDispatch && !verdictAdmits &&
+        (gateResult === "FAIL" || verdictStatus === "ESCALATED"),
+      adjudicateScanFindings: verdictAdmits &&
+        (gateResult === "PASS" || gateResult === "PASS_WITH_RISK")
+        ? {
+            decisionScopeId: decisionScopeId!,
+            mode: gateResult === "PASS" ? ("PASS_RESOLVE" as const) : ("PWR_ACCEPT" as const),
+          }
+        : null,
+    };
+    // G4-R5-H2: the next-step eligibility is derived from the terminal's own
+    // ruling — a CONFIRMED verdict admits, ESCALATED/BLOCKED_UNKNOWN never do
+    // (§7.3: their Gate Result fails A1 even when literally PASS/PWR), and a
+    // verdict with its own unresolved findings blocks (the journal rule:
+    // unresolved findings must not make the next step eligible — the scan
+    // ledger it consumed was adjudicated in the same terminal transaction,
+    // but the verdict's own new findings are unresolved facts). A blocked
+    // node business result always blocks.
+    const nextStepEligibility: "ELIGIBLE" | "BLOCKED" = nodeStatus === "BLOCKED"
+      ? "BLOCKED"
+      : isVerdictDispatch
+        ? verdictAdmits && findings.length === 0 ? "ELIGIBLE" : "BLOCKED"
+        : isScanDispatch
+          ? "ELIGIBLE"
+          : findings.length === 0 ? "ELIGIBLE" : "BLOCKED";
+    // G4-R5-H5: the PWR risk references persist INSIDE the immutable delta
+    // artifact (A2 admission reads them from there — "PWR 风险 refs 随行").
+    const verdictRiskRefs = isVerdictDispatch && gateResult === "PASS_WITH_RISK" &&
+        Array.isArray(result.output["riskAcceptanceRefs"])
+      ? (result.output["riskAcceptanceRefs"] as unknown[])
+          .filter((ref): ref is string => typeof ref === "string" && ref.length > 0)
+      : [];
     const deltaDescriptor = isVerdictDispatch
       ? tracing.artifactStore.put(
           "solution_review",
@@ -586,16 +813,18 @@ export class ExecutionGateway {
             requirementId: request.requirementId,
             runId,
             attempt,
-            decisionDepth: verdictDepth ?? "STANDARD",
+            decisionDepth: verdictDepth,
             decisionStatus: verdictStatus,
+            riskAcceptanceRefs: verdictRiskRefs,
           }),
         )
       : null;
-    const succeeded: LoopCapabilityExecutionEvent = Object.freeze({
+    const terminalStatus = nodeStatus === "BLOCKED" ? "blocked" as const : "succeeded" as const;
+    const terminal: LoopCapabilityExecutionEvent = Object.freeze({
       ...base,
-      executionEventId: `${runId}:capability:${startedSequence + 1}:succeeded`,
+      executionEventId: `${runId}:capability:${startedSequence + 1}:${terminalStatus}`,
       sequence: startedSequence + 1,
-      status: "succeeded",
+      status: terminalStatus,
       createdAt: now(),
       outputArtifactRef: outputDescriptor.artifactRef,
       outputArtifactVersion,
@@ -608,18 +837,7 @@ export class ExecutionGateway {
       decisionScopeId,
       decisionDeltaRef: deltaDescriptor?.artifactRef ?? null,
       decisionDeltaDigest: deltaDescriptor?.digest ?? null,
-      // W-GW-DIAG P-K-d (Decision-082): a PASS_WITH_RISK verdict records
-      // ELIGIBLE — the gate PASSED and its risks live as findings. The human
-      // acceptance gate is enforced at deriveDispatchCommand (task-planning
-      // dispatch), not by this event field. Findings on any other node (and
-      // FAIL verdicts) keep BLOCKED, driving the Re-Gate machinery.
-      nextStepEligibility:
-        gateResult === "FAIL" ||
-        (findings.length > 0 &&
-          !(capability === "solution-gate" && executionRole === "adversarial_scan") &&
-          !(capability === "solution-gate" && executionRole === "formal_verdict" && gateResult === "PASS_WITH_RISK"))
-          ? "BLOCKED"
-          : "ELIGIBLE",
+      nextStepEligibility,
       errorCode: null,
       retryable: null,
       reasonCode: null,
@@ -630,12 +848,36 @@ export class ExecutionGateway {
       promotionDigest: null,
       humanActionRef: null,
     });
-    tracing.runStore.appendCapabilityExecution(succeeded);
+    try {
+      tracing.runStore.appendCapabilityExecutionWithFindings(terminal, registration);
+    } catch (error) {
+      if (process.env.DEBUG_REG === "1") {
+        console.log("DEBUG registration:", (error as Error).message);
+      }
+      // Fail-closed registration: a finding the journal cannot legally hold
+      // (illegal severity, unresolvable cause binding, …) refuses the whole
+      // terminal — the agent result is never silently trimmed to fit.
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "FINDING_REGISTRATION_INVALID",
+        false,
+        result.processEvidence ?? null,
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: `capability finding registration refused the terminal: ${(error as Error).message}`,
+      });
+    }
     // Round 3 review F2: hand the caller the EXACT terminal event this
     // dispatch committed — downstream binding (artifact revision
     // materialization) must never re-derive the producer from the journal
     // tail, which a concurrent entry could have advanced meanwhile.
-    return Object.freeze({ ...result, capabilityTerminalEventId: succeeded.executionEventId });
+    return Object.freeze({ ...result, capabilityTerminalEventId: terminal.executionEventId });
   }
 
   private appendCapabilityFailure(
@@ -1152,6 +1394,8 @@ export function createDeterministicCapabilityGateway(options: {
         unresolvedFindingsRef: ledger?.artifactRef ?? null,
         unresolvedFindingsDigest: ledger?.digest ?? null,
         decisionDepth: isVerdictRound ? (SHADOW_DEFAULT_DEPTH as import("../core/loop-capability-execution").DecisionDepth) : null,
+        // G4-R5-H1: v5 succeeded verdicts must materialize decisionStatus.
+        decisionStatus: isVerdictRound ? ("CONFIRMED" as const) : null,
         decisionScopeId,
         decisionDeltaRef: delta?.artifactRef ?? null,
         decisionDeltaDigest: delta?.digest ?? null,

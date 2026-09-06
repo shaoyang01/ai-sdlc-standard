@@ -44,7 +44,9 @@ function check(name: string, cond: boolean): void {
 }
 
 function envelope(obj: Record<string, unknown>): string {
-  return `prose before\n${NODE_OUTPUT_ENVELOPE_BEGIN}\n${JSON.stringify(obj)}\n${NODE_OUTPUT_ENVELOPE_END}\nprose after`;
+  // G4-R5-H4: every valid envelope declares its node business status.
+  const withStatus = { nodeStatus: "SUCCEEDED", ...obj };
+  return `prose before\n${NODE_OUTPUT_ENVELOPE_BEGIN}\n${JSON.stringify(withStatus)}\n${NODE_OUTPUT_ENVELOPE_END}\nprose after`;
 }
 
 /** Non-gate envelope: keeps intake/design/scan honest, stops the chain at the

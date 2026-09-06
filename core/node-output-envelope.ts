@@ -20,12 +20,21 @@
 //   - PASS_WITH_RISK risk refs are informational (Decision-086: no separate acceptance proof);
 //     any other verdict must carry none;
 //   - non-gate node: gateResult must be absent/null;
+//   - decisionDepth/decisionStatus ride ONLY on the formal_verdict role and
+//     must satisfy the frozen contract §4.3 combination table:
+//     (CONFIRMED|ESCALATED, LIGHT/STANDARD/DEEP) or (BLOCKED_UNKNOWN, null —
+//     an explicit null; a MISSING depth is a different fact and fails);
+//   - nodeStatus (D-087 node business result) is REQUIRED on every node:
+//     SUCCEEDED | BLOCKED | FAILED. A structured body declaration that
+//     contradicts SUCCEEDED downgrades the node to BLOCKED (D-087 seam 1);
 //   - findings: closed shape {id, severity ∈ CRITICAL/HIGH/MEDIUM/LOW, message,
-//     cause? ∈ REGRESSION/IMPROVEMENT}, unique ids.
+//     cause? ∈ REGRESSION/IMPROVEMENT, category ∈ six-category matrix,
+//     earliestAffectedNodeId? (must equal the category's canonical node)},
+//     unique ids.
 // The revision chain / digest / artifact ref are built by loop-artifact-revision
 // from this validated envelope; this module never invents them.
 
-import { LOOP_FINDING_CAUSE_KINDS, LOOP_FINDING_SEVERITIES, type LoopFindingCauseKind, type LoopFindingSeverity } from "./loop-finding-lifecycle";
+import { LOOP_FINDING_CAUSE_KINDS, LOOP_FINDING_SEVERITIES, LOOP_FINDING_CATEGORIES, LOOP_FINDING_CATEGORY_EARLIEST_NODE, type LoopFindingCauseKind, type LoopFindingSeverity, type LoopFindingCategory } from "./loop-finding-lifecycle";
 import { isLoopArtifactGateCapability } from "./loop-artifact-revision";
 import type { NodeCapabilityId } from "../loop/types";
 
@@ -46,7 +55,9 @@ export type NodeOutputEnvelopeErrorCode =
   | "ENVELOPE_EMPTY"
   | "ENVELOPE_BAD_GATE"
   | "ENVELOPE_RISK_REFS"
-  | "ENVELOPE_BAD_FINDING";
+  | "ENVELOPE_BAD_FINDING"
+  | "ENVELOPE_BAD_DECISION"
+  | "ENVELOPE_BAD_NODE_STATUS";
 
 export class NodeOutputEnvelopeError extends Error {
   readonly code: NodeOutputEnvelopeErrorCode;
@@ -66,6 +77,33 @@ export interface NodeOutputFinding {
   readonly severity: LoopFindingSeverity;
   readonly message: string;
   readonly cause: LoopFindingCauseKind | null;
+  /** Root-cause category (frozen contract §5.1): the problem layer. */
+  readonly category: LoopFindingCategory;
+  /** Must equal the category's canonical earliest-affected node when declared. */
+  readonly earliestAffectedNodeId: NodeCapabilityId | null;
+}
+
+export type NodeBusinessStatus = "SUCCEEDED" | "BLOCKED" | "FAILED";
+
+export const NODE_BUSINESS_STATUSES: readonly NodeBusinessStatus[] = ["SUCCEEDED", "BLOCKED", "FAILED"];
+
+const DECISION_DEPTH_VALUES = ["LIGHT", "STANDARD", "DEEP"] as const;
+export type EnvelopeDecisionDepth = (typeof DECISION_DEPTH_VALUES)[number];
+
+const DECISION_STATUS_VALUES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
+export type EnvelopeDecisionStatus = (typeof DECISION_STATUS_VALUES)[number];
+
+/**
+ * D-087 seam 1: a body-declared business status that contradicts the
+ * structured nodeStatus. This is NOT free-prose guessing — it matches an
+ * explicit structured declaration (`status: BLOCKED` / `nodeStatus=FAILED`
+ * style lines) inside the node product body. A SUCCEEDED declaration paired
+ * with such a line downgrades to BLOCKED per D-087 ("不一致时降级为 BLOCKED").
+ */
+const BODY_STATUS_DECLARATION_RE = /^[ \t>*#-]*(?:node_?status|status)[ \t]*[:=][ \t]*["'`]?(BLOCKED|FAILED)["'`]?[ \t]*$/im;
+
+export function bodyDeclaresBlockage(body: string): boolean {
+  return BODY_STATUS_DECLARATION_RE.test(body);
 }
 
 export interface ParsedNodeOutputEnvelope {
@@ -74,11 +112,13 @@ export interface ParsedNodeOutputEnvelope {
   readonly gateResult: NodeGateVerdict | null;
   readonly riskAcceptanceRefs: readonly string[];
   readonly findings: readonly NodeOutputFinding[];
-  readonly decisionDepth: string | null;
-  readonly decisionStatus: string | null;
+  readonly decisionDepth: EnvelopeDecisionDepth | null;
+  readonly decisionStatus: EnvelopeDecisionStatus | null;
+  /** D-087 node business result (contradiction-downgraded, never raw). */
+  readonly nodeStatus: NodeBusinessStatus;
 }
 
-const ENVELOPE_FIELDS = ["summary", "body", "gateResult", "riskAcceptanceRefs", "findings", "decisionDepth", "decisionStatus"];
+const ENVELOPE_FIELDS = ["summary", "body", "gateResult", "riskAcceptanceRefs", "findings", "decisionDepth", "decisionStatus", "nodeStatus"];
 
 function countOccurrences(haystack: string, needle: string): number {
   let n = 0;
@@ -164,20 +204,74 @@ export function parseNodeOutputEnvelope(
   }
 
   // ── risk acceptance refs ──
-  let decisionDepth: string | null = null;
-  if ("decisionDepth" in record && typeof record.decisionDepth === "string") {
-    const depth = record.decisionDepth;
-    if (depth === "LIGHT" || depth === "STANDARD" || depth === "DEEP") {
-      decisionDepth = depth;
+  // G4-R5-H3: missing vs illegal vs explicit-null are three different facts.
+  // The raw field presence is captured BEFORE any interpretation so the
+  // §4.3 combination table can be enforced exactly.
+  const hasDecisionDepthField = "decisionDepth" in record && record.decisionDepth !== undefined;
+  const hasDecisionStatusField = "decisionStatus" in record && record.decisionStatus !== undefined;
+  let rawDecisionDepth: unknown = null;
+  if (hasDecisionDepthField) {
+    rawDecisionDepth = record.decisionDepth;
+    if (
+      rawDecisionDepth !== null &&
+      (typeof rawDecisionDepth !== "string" ||
+        !(DECISION_DEPTH_VALUES as readonly string[]).includes(rawDecisionDepth))
+    ) {
+      fail("ENVELOPE_BAD_DECISION", "decisionDepth must be LIGHT, STANDARD, DEEP or null");
     }
-    // Unknown depth values are left as null
   }
-  let decisionStatus: string | null = null;
-  if ("decisionStatus" in record && typeof record.decisionStatus === "string") {
-    const st = record.decisionStatus;
-    if (st === "CONFIRMED" || st === "ESCALATED" || st === "BLOCKED_UNKNOWN") {
-      decisionStatus = st;
+  let rawDecisionStatus: unknown = null;
+  if (hasDecisionStatusField) {
+    rawDecisionStatus = record.decisionStatus;
+    if (
+      rawDecisionStatus !== null &&
+      (typeof rawDecisionStatus !== "string" ||
+        !(DECISION_STATUS_VALUES as readonly string[]).includes(rawDecisionStatus))
+    ) {
+      fail("ENVELOPE_BAD_DECISION", "decisionStatus must be CONFIRMED, ESCALATED or BLOCKED_UNKNOWN");
     }
+  }
+  // The decision fields ride ONLY on the formal_verdict role — any other
+  // role declaring them is a contract violation (fail-closed).
+  if (!isVerdict && (hasDecisionDepthField || hasDecisionStatusField)) {
+    fail("ENVELOPE_BAD_DECISION", "only the formal_verdict role may declare decisionDepth/decisionStatus");
+  }
+  let decisionDepth: EnvelopeDecisionDepth | null = null;
+  let decisionStatus: EnvelopeDecisionStatus | null = null;
+  if (isVerdict) {
+    if (!hasDecisionStatusField || typeof rawDecisionStatus !== "string") {
+      fail("ENVELOPE_BAD_DECISION", "formal_verdict must declare decisionStatus");
+    }
+    decisionStatus = rawDecisionStatus as EnvelopeDecisionStatus;
+    // Frozen contract §4.3 combination table, enforced at the parse boundary:
+    // (CONFIRMED|ESCALATED, depth) legal; (BLOCKED_UNKNOWN, explicit null)
+    // legal; everything else — including a MISSING depth with BLOCKED_UNKNOWN
+    // — fails here so no downstream layer can misinterpret it.
+    if (decisionStatus === "BLOCKED_UNKNOWN") {
+      if (!hasDecisionDepthField || rawDecisionDepth !== null) {
+        fail("ENVELOPE_BAD_DECISION", "BLOCKED_UNKNOWN requires an explicit decisionDepth of null");
+      }
+      decisionDepth = null;
+    } else {
+      if (!hasDecisionDepthField || typeof rawDecisionDepth !== "string") {
+        fail("ENVELOPE_BAD_DECISION", `${decisionStatus} requires a non-null decisionDepth`);
+      }
+      decisionDepth = rawDecisionDepth as EnvelopeDecisionDepth;
+    }
+  }
+  // ── node business status (D-087 seam 1) ──
+  const hasNodeStatusField = "nodeStatus" in record && record.nodeStatus !== undefined;
+  if (!hasNodeStatusField || typeof record.nodeStatus !== "string") {
+    fail("ENVELOPE_BAD_NODE_STATUS", "nodeStatus is required and must be a string");
+  }
+  if (!(NODE_BUSINESS_STATUSES as readonly string[]).includes(record.nodeStatus)) {
+    fail("ENVELOPE_BAD_NODE_STATUS", "nodeStatus must be SUCCEEDED, BLOCKED or FAILED");
+  }
+  let nodeStatus = record.nodeStatus as NodeBusinessStatus;
+  // D-087: an explicit structured body declaration that contradicts a
+  // SUCCEEDED claim downgrades to BLOCKED (never the reverse).
+  if (nodeStatus === "SUCCEEDED" && bodyDeclaresBlockage(body)) {
+    nodeStatus = "BLOCKED";
   }
   let riskAcceptanceRefs: string[] = [];
   if ("riskAcceptanceRefs" in record && record.riskAcceptanceRefs !== undefined && record.riskAcceptanceRefs !== null) {
@@ -208,7 +302,7 @@ export function parseNodeOutputEnvelope(
       }
       const f = item as Record<string, unknown>;
       for (const key of Object.keys(f)) {
-        if (!["id", "severity", "message", "cause"].includes(key)) {
+        if (!["id", "severity", "message", "cause", "category", "earliestAffectedNodeId"].includes(key)) {
           fail("ENVELOPE_BAD_FINDING", `unknown finding field "${key}"`);
         }
       }
@@ -233,7 +327,28 @@ export function parseNodeOutputEnvelope(
         }
         cause = f.cause as LoopFindingCauseKind;
       }
-      findings.push(Object.freeze({ id, severity: severity as LoopFindingSeverity, message, cause }));
+      // G4-R5-H5: the lifecycle's category (root-cause layer) is REQUIRED —
+      // the runtime derives the reflow target and the routing matrix from it.
+      if (typeof f.category !== "string" || !(LOOP_FINDING_CATEGORIES as readonly string[]).includes(f.category)) {
+        fail("ENVELOPE_BAD_FINDING", `finding ${id} category must be one of ${LOOP_FINDING_CATEGORIES.join("/")}`);
+      }
+      const category = f.category as LoopFindingCategory;
+      // The reflow target is machine-derived from the category; a declared
+      // value may only confirm it, never diverge from it. It is ALWAYS set —
+      // the runtime's routing matrix consumes it verbatim.
+      let earliestAffectedNodeId = LOOP_FINDING_CATEGORY_EARLIEST_NODE[category];
+      if ("earliestAffectedNodeId" in f && f.earliestAffectedNodeId !== null && f.earliestAffectedNodeId !== undefined) {
+        if (typeof f.earliestAffectedNodeId !== "string") {
+          fail("ENVELOPE_BAD_FINDING", `finding ${id} earliestAffectedNodeId must be a string`);
+        }
+        if (f.earliestAffectedNodeId !== LOOP_FINDING_CATEGORY_EARLIEST_NODE[category]) {
+          fail(
+            "ENVELOPE_BAD_FINDING",
+            `finding ${id} earliestAffectedNodeId must equal the canonical earliest node of category ${category}`,
+          );
+        }
+      }
+      findings.push(Object.freeze({ id, severity: severity as LoopFindingSeverity, message, cause, category, earliestAffectedNodeId }));
     }
   }
 
@@ -242,6 +357,7 @@ export function parseNodeOutputEnvelope(
     body,
     decisionDepth,
     decisionStatus,
+    nodeStatus,
     gateResult,
     riskAcceptanceRefs: Object.freeze(riskAcceptanceRefs),
     findings: Object.freeze(findings),

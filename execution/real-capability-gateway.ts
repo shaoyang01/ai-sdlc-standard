@@ -118,9 +118,11 @@ export function isScanRole(capability: NodeCapabilityId, role: CapabilityExecuti
 
 /**
  * Map a parsed E3 envelope to exactly what the base readCapabilityOutcome
- * expects, by ROLE: verdict carries gateResult; verdict/scan/code-review carry
- * a findings ledger; everyone else carries neither. Pure — unit-testable
- * without the recovery/node-order machinery.
+ * expects, by ROLE: verdict carries gateResult; EVERY canonical role may carry
+ * findings (G4-R5-H5: discovery is a whole-chain duty per frozen contract
+ * §5.1 — intake/implementation/knowledge-sync findings ride the same channel
+ * as scan/verdict/code-review ones). Pure — unit-testable without the
+ * recovery/node-order machinery.
  */
 export function buildCapabilityOutcome(
   envelope: ParsedNodeOutputEnvelope,
@@ -128,10 +130,9 @@ export function buildCapabilityOutcome(
   role: CapabilityExecutionRole,
 ): CapabilityOutcome {
   const verdict = isVerdictRole(capability, role);
-  const findings = verdict || isScanRole(capability, role) || capability === "code-review";
   return {
     gateResult: verdict ? envelope.gateResult : null,
-    unresolvedFindings: findings ? envelope.findings : null,
+    unresolvedFindings: envelope.findings,
   };
 }
 
@@ -302,11 +303,25 @@ export class RealCapabilityGateway extends ExecutionGateway {
     const output: Record<string, unknown> = {
       summary: envelope.summary,
       text: envelope.body,
+      // G4-R5-H4: the node business result rides the output verbatim — the
+      // tracing gateway owns the SUCCEEDED/BLOCKED/FAILED terminal mapping.
+      nodeStatus: envelope.nodeStatus,
     };
     if (outcome.gateResult !== null) output.gateResult = outcome.gateResult;
     if (outcome.unresolvedFindings !== null) output.unresolvedFindings = outcome.unresolvedFindings;
-    if (envelope.decisionDepth !== null) output.decisionDepth = envelope.decisionDepth;
-    if (envelope.decisionStatus !== null) output.decisionStatus = envelope.decisionStatus;
+    if (verdictRole) {
+      // G4-R5-H3: the decision fields are ALWAYS present on a verdict
+      // dispatch — including the explicit null of a BLOCKED_UNKNOWN ruling —
+      // so the tracing gateway can distinguish "explicit null" (legal
+      // business block) from "missing" (contract violation).
+      output.decisionDepth = envelope.decisionDepth;
+      output.decisionStatus = envelope.decisionStatus;
+      if (outcome.gateResult === "PASS_WITH_RISK" && envelope.riskAcceptanceRefs.length > 0) {
+        // G4-R5-H5: risk references persist with the decision delta — see the
+        // tracing gateway's delta artifact.
+        output.riskAcceptanceRefs = envelope.riskAcceptanceRefs;
+      }
+    }
 
     return Object.freeze({
       success: true,

@@ -62,7 +62,7 @@ function identity(o: Partial<LoopRunIdentity> = {}): LoopRunIdentity {
   });
 }
 
-type CapOverrides = Partial<LoopCapabilityExecutionEvent> & { sequence: number; status: "started" | "succeeded" | "failed" };
+type CapOverrides = Partial<LoopCapabilityExecutionEvent> & { sequence: number; status: "started" | "succeeded" | "failed" | "blocked" };
 function capEvent(o: CapOverrides): LoopCapabilityExecutionEvent {
   const sequence = o.sequence;
   const status = o.status;
@@ -98,6 +98,7 @@ function capEvent(o: CapOverrides): LoopCapabilityExecutionEvent {
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
     decisionDepth: null,
+    decisionStatus: null,
     decisionScopeId: null,
     decisionDeltaRef: null,
     decisionDeltaDigest: null,

@@ -24,6 +24,7 @@ import type { NodeCapabilityId } from "../loop/types";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_EXECUTION_ROLES,
+  NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
 } from "../loop/types";
 import {
@@ -388,6 +389,33 @@ export class LoopCapabilityEntry {
         "ILLEGAL_TRANSITION",
         "request does not match the dispatch command derived from the recovery context",
       );
+    }
+    // G4-R5-H2 (frozen contract §7.3 A1): dispatching task-planning is an
+    // ADMITTED transition — the verdict's §4.3 ruling must be CONFIRMED with
+    // an admitting Gate Result (recovery projects it as DECIDED) and no OPEN
+    // finding whose §5.2 blocking scope covers task-planning (problem layers
+    // at or upstream of planning: REQUIREMENT / SOLUTION / PLANNING).
+    // ESCALATED and BLOCKED_UNKNOWN verdicts never satisfy A1, even when the
+    // literal Gate Result reads PASS/PWR.
+    if (request.capability === "task-planning") {
+      if (recovery.solutionGateDecision?.status !== "DECIDED") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "task-planning admission (A1) requires a CONFIRMED admitting verdict ruling",
+        );
+      }
+      const planningNodeIdx = NODE_CAPABILITY_IDS.indexOf("task-planning");
+      const blocking = recovery.openFindings.filter(
+        (finding) =>
+          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <=
+          planningNodeIdx,
+      );
+      if (blocking.length > 0) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          `task-planning admission (A1) is blocked by OPEN findings: ${blocking.map((item) => item.findingId).join(", ")}`,
+        );
+      }
     }
     // v2 dispatch-time role firewall (A2/G1): before dispatching the
     // formal_verdict role, the enabled binding's agent must differ from the

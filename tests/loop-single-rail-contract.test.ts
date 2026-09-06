@@ -95,8 +95,8 @@ function main(): void {
   );
 
   console.log("single rail: schema versions advanced, no silent compatibility");
-  ok(LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION === 4, "capability execution schema is v4");
-  ok(LOOP_FINDING_SCHEMA_VERSION === 4, "finding schema is v4 (causal evidence + decision-scope binding)");
+  ok(LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION === 5, "capability execution schema is v5 (G4-R5-H1: decisionStatus authority)");
+  ok(LOOP_FINDING_SCHEMA_VERSION === 5, "finding schema is v5 (G4-R5: verifier identity + gate-round discovery binding)");
   ok(LOOP_ARTIFACT_REVISION_SCHEMA_VERSION === 2, "artifact revision schema is v2");
 
   console.log("single rail: six finding categories pin their earliest affected node");
@@ -131,7 +131,7 @@ function main(): void {
     ok((LOOP_ARTIFACT_CANONICAL_KINDS as readonly string[]).includes(kind), `artifact kind ${kind} exists`);
   }
 
-  console.log("single rail: the journal supports exactly format v7");
+  console.log("single rail: the journal supports exactly format v8");
   {
     const dir = mkdtempSync(join(tmpdir(), "loop-single-rail-"));
     try {
@@ -140,7 +140,7 @@ function main(): void {
       store.init();
       store.close();
       const db = new Database(path, { readonly: true });
-      ok(db.pragma("user_version", { simple: true }) === 7, "fresh journals are v7");
+      ok(db.pragma("user_version", { simple: true }) === 8, "fresh journals are v8 (G4-R5-H1)");
       db.close();
 
       // Known history is refused outright.
@@ -161,7 +161,7 @@ function main(): void {
       // Future formats are refused too.
       const futurePath = join(dir, "future.db");
       const futureSeed = new Database(futurePath);
-      futureSeed.pragma("user_version = 8");
+      futureSeed.pragma("user_version = 9");
       futureSeed.close();
       let futureRejected = false;
       try {
@@ -170,7 +170,7 @@ function main(): void {
         futureRejected = error instanceof LoopRunJournalError &&
           error.code === "UNSUPPORTED_FUTURE_FORMAT";
       }
-      ok(futureRejected, "format above v7 rejected as future");
+      ok(futureRejected, "format above v8 rejected as future");
 
       // An unversioned database carrying LOOP tables is never mistaken for
       // fresh storage.

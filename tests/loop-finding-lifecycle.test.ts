@@ -141,6 +141,8 @@ function makeCapabilityDriver(
 ) {
   // Round 2 re-review F1: when a store is bound, the verdict's decision
   // delta must be a REAL blob so append-time physical verification passes.
+  // G4-R5-H6: the same holds for the scan round's Finding Ledger — a bound
+  // acceptance binds the finding's evidence to exactly this ledger ref.
   const putDelta = (): { artifactRef: string; digest: string } =>
     artifactStore === undefined
       ? {
@@ -150,6 +152,16 @@ function makeCapabilityDriver(
       : (() => {
           const d = artifactStore.put("solution_review", `decision delta ${nextTs()}`);
           return { artifactRef: d.artifactRef, digest: d.digest };
+        })();
+  const putLedger = (): { ref: string; digest: string } =>
+    artifactStore === undefined
+      ? {
+          ref: `loop-artifact:v1:capability_findings:sha256:${sha256Hex("scan-ledger")}`,
+          digest: sha256Hex("scan-ledger"),
+        }
+      : (() => {
+          const d = artifactStore.put("capability_findings", `scan ledger ${nextTs()}`);
+          return { ref: d.artifactRef, digest: d.digest };
         })();
   // Continue the persisted event sequence so multiple drivers can share a run.
   let sequence = store.listCapabilityExecutions(runId).length;
@@ -178,7 +190,7 @@ function makeCapabilityDriver(
       status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict";
     const deltaBinding = isSucceededVerdict ? putDelta() : null;
     return Object.freeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -206,6 +218,7 @@ function makeCapabilityDriver(
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
       decisionDepth: isSucceededVerdict ? ("STANDARD" as const) : null,
+      decisionStatus: isSucceededVerdict ? ("CONFIRMED" as const) : null,
       decisionScopeId: isSucceededVerdict ? `${runId}:decision:1` : null,
       decisionDeltaRef: deltaBinding?.artifactRef ?? null,
       decisionDeltaDigest: deltaBinding?.digest ?? null,
@@ -259,6 +272,7 @@ function makeCapabilityDriver(
         const scanAttempt = nextAttempt(capability, "adversarial_scan");
         const scanRef = `loop-artifact:v1:solution_review:sha256:${dg("a")}`;
         scanInput = { ref: scanRef, version: "1.0.0", digest: dg("a") };
+        scanLedger = putLedger();
         const scanStarted = event(capability, "started", {
           attempt: scanAttempt,
           executionRole: "adversarial_scan",
@@ -279,10 +293,9 @@ function makeCapabilityDriver(
           gateResult: "NOT_APPLICABLE",
           nextStepEligibility: "ELIGIBLE",
           // v3 (Round 1): the scan round always persists its Finding Ledger.
-          unresolvedFindingsRef: `loop-artifact:v1:capability_findings:sha256:${dg("f")}`,
-          unresolvedFindingsDigest: dg("f"),
+          unresolvedFindingsRef: scanLedger.ref,
+          unresolvedFindingsDigest: scanLedger.digest,
         }));
-        scanLedger = { ref: `loop-artifact:v1:capability_findings:sha256:${dg("f")}`, digest: dg("f") };
       }
       const executionRole = isGate ? "formal_verdict" : "primary";
       const attempt = nextAttempt(capability, executionRole);
@@ -298,8 +311,8 @@ function makeCapabilityDriver(
           inputArtifactRef: scanInput.ref,
           inputArtifactVersion: scanInput.version,
           inputDigest: scanInput.digest,
-          consumedFindingsRef: scanLedger?.ref ?? null,
-          consumedFindingsDigest: scanLedger?.digest ?? null,
+          consumedFindingsRef: executionRole === "formal_verdict" ? (scanLedger?.ref ?? null) : null,
+          consumedFindingsDigest: executionRole === "formal_verdict" ? (scanLedger?.digest ?? null) : null,
         } : {}),
       });
       store.appendCapabilityExecution(started);
@@ -311,8 +324,8 @@ function makeCapabilityDriver(
           inputArtifactRef: scanInput.ref,
           inputArtifactVersion: scanInput.version,
           inputDigest: scanInput.digest,
-          consumedFindingsRef: scanLedger?.ref ?? null,
-          consumedFindingsDigest: scanLedger?.digest ?? null,
+          consumedFindingsRef: executionRole === "formal_verdict" ? (scanLedger?.ref ?? null) : null,
+          consumedFindingsDigest: executionRole === "formal_verdict" ? (scanLedger?.digest ?? null) : null,
         } : {}),
         outputArtifactRef: outputRef,
         outputArtifactVersion: outputVersion,
@@ -356,6 +369,7 @@ function revisionDraft(o: {
   upstreamRevisionIds?: string[];
   sequence?: number;
   semver?: string;
+  gateResult?: "PASS" | "FAIL" | "PASS_WITH_RISK";
 }): LoopArtifactRevisionDraft {
   const isGate = (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(o.nodeId);
   const output = NODE_OUT[o.nodeId];
@@ -374,7 +388,7 @@ function revisionDraft(o: {
     artifactRef: `loop-artifact:v1:${LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[o.nodeId].artifactKind}:sha256:${output.digest}`,
     digest: output.digest,
     producerExecutionId: o.producerExecutionId,
-    gateResult: isGate ? "PASS" : "NOT_APPLICABLE",
+    gateResult: isGate ? (o.gateResult ?? "PASS") : "NOT_APPLICABLE",
     upstreamRevisionIds: o.upstreamRevisionIds ?? [],
     createdAt: nextTs(),
   };
@@ -385,6 +399,7 @@ function driveNodes(
   store: LoopRunStore,
   driver: CapabilityDriver,
   nodes: readonly NodeCapabilityId[],
+  gate?: "PASS" | "FAIL" | "PASS_WITH_RISK",
 ): Map<NodeCapabilityId, LoopArtifactRevision> {
   const revisions = new Map<NodeCapabilityId, LoopArtifactRevision>();
   let upstream: string[] = [];
@@ -397,7 +412,7 @@ function driveNodes(
       upstream = [existing.revisionId];
       continue;
     }
-    const execution = driver.succeed(nodeId, NODE_OUT[nodeId]);
+    const execution = gate === undefined ? driver.succeed(nodeId, NODE_OUT[nodeId]) : driver.succeed(nodeId, NODE_OUT[nodeId], gate);
     const existingForNode = store.listArtifactRevisions("run-001")
       .filter((item) => item.nodeId === nodeId).length;
     const revision = store.appendArtifactRevision(createLoopArtifactRevision(
@@ -407,6 +422,7 @@ function driveNodes(
         upstreamRevisionIds: upstream,
         sequence: existingForNode + 1,
         semver: `${existingForNode + 1}.0.0`,
+        gateResult: gate,
       }),
     )).record;
     revisions.set(nodeId, revision);
@@ -435,6 +451,8 @@ function findingDraft(o: {
   introducedByRevisionId?: string | null;
   requirementId?: string;
   createdAt?: string;
+  evidenceRef?: string;
+  evidenceDigest?: string;
 }): LoopFindingDraft {
   const causeKind = o.causeKind ?? "REGRESSION";
   return {
@@ -455,14 +473,17 @@ function findingDraft(o: {
         : null),
     severity: o.severity ?? "HIGH",
     category: o.category,
-    evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
-    evidenceDigest: dg("a"),
+    evidenceRef: o.evidenceRef ?? `loop-artifact:v1:capability_findings:sha256:${dg("a")}`,
+    evidenceDigest: o.evidenceDigest ?? dg("a"),
     earliestAffectedNodeId: o.earliestAffectedNodeId,
     createdAt: o.createdAt ?? nextTs(),
   };
 }
 
 const RESOLUTION_EVIDENCE = Object.freeze({
+  // G4-R5-H6: the closure payload carries the verifying node (§5.2 — the
+  // discovering node); these fixtures all verify code-review findings.
+  resolvedByNodeId: "code-review",
   resolutionEvidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("3")}`,
   resolutionEvidenceDigest: dg("3"),
 });
@@ -473,6 +494,40 @@ const RISK_EVIDENCE = Object.freeze({
   riskAcceptanceEvidenceDigest: dg("4"),
   decisionScopeId: "run-001:decision:1",
 });
+
+// G4-R5-H6: the only legal store-layer acceptance payload — the CONFIRMED
+// PASS_WITH_RISK verdict's own ruling (subject formal_verdict, evidence the
+// ruling's Gate Result output, scope its decision scope). Requires the
+// fixture chain driven with the PWR gate (driveNodes(..., "PASS_WITH_RISK")).
+function pwrRuling(store: LoopRunStore): {
+  riskAcceptedBy: "formal_verdict";
+  riskAcceptanceEvidenceRef: string;
+  riskAcceptanceEvidenceDigest: string;
+  decisionScopeId: string;
+} {
+  const verdict = store.listCapabilityExecutions("run-001").find(
+    (item) =>
+      item.status === "succeeded" && item.executionRole === "formal_verdict" &&
+      item.gateResult === "PASS_WITH_RISK",
+  );
+  if (verdict === undefined) throw new Error("fixture: no PASS_WITH_RISK ruling driven");
+  return {
+    riskAcceptedBy: "formal_verdict",
+    riskAcceptanceEvidenceRef: verdict.outputArtifactRef!,
+    riskAcceptanceEvidenceDigest: verdict.outputDigest!,
+    decisionScopeId: verdict.decisionScopeId!,
+  };
+}
+
+// The scan round's persisted Finding Ledger binding — a finding whose
+// evidence carries it is scan-source and the only risk-acceptable kind.
+// Matches the driver's unbound synthetic ledger (sha256Hex("scan-ledger")).
+function ledgerRef(): string {
+  return `loop-artifact:v1:capability_findings:sha256:${sha256Hex("scan-ledger")}`;
+}
+function ledgerDigest(): string {
+  return sha256Hex("scan-ledger");
+}
 
 /**
  * Fixed-order canonical form without validation: tampering targets states the
@@ -580,7 +635,7 @@ function withRunningStore(fn: (store: LoopRunStore, dir: string) => void): void 
 
 console.log("finding lifecycle: schema constants and canonical tokens");
 {
-  assert(LOOP_FINDING_SCHEMA_VERSION === 4, "finding schema version is 4");
+  assert(LOOP_FINDING_SCHEMA_VERSION === 5, "finding schema version is 5 (G4-R5-H5/H6: verifier identity + gate-round binding)");
   assert(LOOP_FINDING_SEVERITIES.join(",") === "CRITICAL,HIGH,MEDIUM,LOW", "four canonical severities");
   assert(LOOP_FINDING_CATEGORIES.join(",") === "REQUIREMENT,SOLUTION,PLANNING,IMPLEMENTATION,REVIEW,KNOWLEDGE",
     "six canonical categories");
@@ -1221,30 +1276,55 @@ withRunningStore((store) => {
   // therefore requires a REBUILT current (WP4 re-gate orchestration) and is
   // unreachable at this layer; the reachable transitions here are
   // OPEN -> ACCEPTED_RISK and the resolve fail-closed guards.
+  //
+  // G4-R5-H6: the ONLY legal acceptance is the formal_verdict PWR ruling
+  // over a SCAN-source finding — the finding's evidence must be the scan
+  // round's Finding Ledger, the subject formal_verdict, and the evidence the
+  // ruling's own Gate Result output.
   const driver = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  // G4-R5-H6: the chain's gate round is the PASS_WITH_RISK ruling itself —
+  // no second round is needed and no backward jump is opened.
+  driveNodes(store, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
+  const pwrVerdict = store.listCapabilityExecutions("run-001").find(
+    (item) => item.status === "succeeded" && item.executionRole === "formal_verdict",
+  )!;
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
-    earliestAffectedNodeId: "knowledge-sync",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:solution-design:1",
+    evidenceRef: ledgerRef(),
+    evidenceDigest: ledgerDigest(),
   }))).record;
   const boundRevision = store.listArtifactRevisions("run-001")
-    .find((item) => item.nodeId === "knowledge-sync")!;
+    .find((item) => item.nodeId === "solution-design")!;
   assert(boundRevision.validity === "STALE", "the bound current goes stale with the open finding");
   expectThrow("ILLEGAL_TRANSITION", () => store.resolveFinding("run-001", finding.findingId, {
+    resolvedByNodeId: "solution-gate",
     resolvedByRevisionId: boundRevision.revisionId, ...RESOLUTION_EVIDENCE,
   }), "resolving against a non-current revision requires a rebuilt current");
-  const accepted = store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+  // Subject rule: a human subject is refused even over a scan-source finding.
+  expectThrow("ILLEGAL_TRANSITION", () => store.acceptFindingRisk("run-001", finding.findingId, {
+    ...RISK_EVIDENCE,
+    decisionScopeId: pwrVerdict.decisionScopeId!,
+  }), "human 'current-user' acceptance is refused (subject rule)");
+  const accepted = store.acceptFindingRisk("run-001", finding.findingId, pwrRuling(store));
   assert(accepted.record.status === "ACCEPTED_RISK" &&
-    accepted.record.riskAcceptanceEvidenceDigest === RISK_EVIDENCE.riskAcceptanceEvidenceDigest,
-    "risk acceptance persisted with its evidence");
+    accepted.record.riskAcceptedBy === "formal_verdict" &&
+    accepted.record.riskAcceptanceEvidenceDigest === pwrVerdict.outputDigest,
+    "risk acceptance persisted with the ruling as its subject and evidence");
   const listed = store.listFindings("run-001");
   assert(listed.length === 1 && listed[0]!.status === "ACCEPTED_RISK",
     "accepted-risk state persists through read-back");
   expectThrow("ILLEGAL_TRANSITION", () => store.resolveFinding("run-001", finding.findingId, {
+    resolvedByNodeId: "solution-gate",
     resolvedByRevisionId: boundRevision.revisionId, ...RESOLUTION_EVIDENCE,
   }), "resolving an accepted-risk finding rejected");
-  expectThrow("ILLEGAL_TRANSITION", () => store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
-    "risk-accepting an accepted-risk finding rejected");
+  expectThrow("ILLEGAL_TRANSITION", () => store.acceptFindingRisk("run-001", finding.findingId, {
+    riskAcceptedBy: "formal_verdict",
+    riskAcceptanceEvidenceRef: pwrVerdict.outputArtifactRef!,
+    riskAcceptanceEvidenceDigest: pwrVerdict.outputDigest!,
+    decisionScopeId: pwrVerdict.decisionScopeId!,
+  }), "risk-accepting an accepted-risk finding rejected");
 });
 withRunningStore((store) => {
   const driver = makeCapabilityDriver(store, "run-001");
@@ -1329,15 +1409,19 @@ withRunningStore((store) => {
   // closure fields are cleared so the superseded status keeps one canonical
   // field shape. (RESOLVED requires a rebuilt current and is covered by WP4.)
   const driver = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  driveNodes(store, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
   const first = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
-    earliestAffectedNodeId: "knowledge-sync",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:solution-design:1",
+    evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
   }))).record;
-  store.acceptFindingRisk("run-001", first.findingId, RISK_EVIDENCE);
+  store.acceptFindingRisk("run-001", first.findingId, pwrRuling(store));
+  // The first finding staled everything from solution-design downstream, so
+  // the replacement binds the only surviving current — requirement-intake's.
   const second = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "code-review", category: "REVIEW",
-    earliestAffectedNodeId: "code-review",
+    sequence: 2, sourceCapability: "requirement-intake", category: "REQUIREMENT",
+    earliestAffectedNodeId: "requirement-intake",
   })));
   void second;
   const superseded = store.supersedeFinding("run-001", first.findingId, "run-001:finding:2");
@@ -1370,21 +1454,27 @@ withRunningStore((store) => {
 withRunningStore((store) => {
   // Round 1 (H1-4): an accepted-risk finding whose bound current stays STALE
   // keeps the gate blocked with FINDING_DOWNSTREAM_STALE.
+  // G4-R5-H6: the acceptance rides a legal PWR ruling over scan-source
+  // evidence (the consumed Finding Ledger).
   const driver = makeCapabilityDriver(store, "run-001");
-  const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6));
+  const revisions = driveNodes(store, driver, NODE_CAPABILITY_IDS.slice(0, 6), "PASS_WITH_RISK");
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
-    earliestAffectedNodeId: "code-review",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:implementation:1",
+    evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
   }))).record;
   // The append marked code-review stale; knowledge-sync has not run yet.
   const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
     nodeId: "knowledge-sync", producerExecutionId: validation.executionEventId,
-    upstreamRevisionIds: [revisions.get("implementation")!.revisionId],
+    // The finding staled everything from solution-design downstream, so the
+    // only surviving ACTIVE upstream is the intake current.
+    upstreamRevisionIds: [revisions.get("requirement-intake")!.revisionId],
     sequence: 1,
   }))).record;
   void validationRevision;
-  store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+  store.acceptFindingRisk("run-001", finding.findingId, pwrRuling(store));
   const gate = store.computeFindingGate("run-001");
   assert(gate.status === "BLOCKED" && gate.reasonCodes.join(",") === "FINDING_DOWNSTREAM_STALE",
     "accepted-risk finding with a stale downstream current blocks the gate");
@@ -1440,18 +1530,22 @@ withRunningStore((store) => {
   // Round 1 (H1-4): with every bound current invalidated by its own finding,
   // a risk acceptance does not resurrect eligibility — rebuild is WP4 work.
   const driver = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  // G4-R5-H6: the PWR ruling must exist for the legal acceptance below.
+  driveNodes(store, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
   void driver;
   const first = store.appendFinding(createLoopFinding(findingDraft({
     sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
     earliestAffectedNodeId: "knowledge-sync",
   }))).record;
   const second = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 2, sourceCapability: "requirement-intake", category: "REQUIREMENT",
-    earliestAffectedNodeId: "requirement-intake", severity: "MEDIUM",
+    sequence: 2, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:requirement-intake:1",
+    evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
+    severity: "MEDIUM",
   }))).record;
   store.supersedeFinding("run-001", first.findingId, second.findingId);
-  store.acceptFindingRisk("run-001", second.findingId, RISK_EVIDENCE);
+  store.acceptFindingRisk("run-001", second.findingId, pwrRuling(store));
   const blocked = store.computeFindingGate("run-001");
   assert(blocked.status === "BLOCKED" &&
     blocked.reasonCodes.includes("FINDING_DOWNSTREAM_STALE"),
@@ -1651,6 +1745,7 @@ function appendAndResolveFinding(
     revisionNodeId: "knowledge-sync" as LoopFindingProof["revisionNodeId"],
     revisionArtifactRef: validationRevision.artifactRef,
     revisionArtifactDigest: validationRevision.digest,
+    resolvedByNodeId: finding.sourceCapability,
     evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
     evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
     riskAcceptedBy: null,
@@ -1672,11 +1767,13 @@ function appendAndResolveFinding(
       `INSERT INTO loop_finding_proofs (
          finding_id, proof_kind, revision_id, revision_node_id,
          revision_artifact_ref, revision_artifact_digest,
+         resolved_by_node_id,
          evidence_ref, evidence_digest, risk_accepted_by, canonical_sha256
-       ) VALUES (?, 'RESOLUTION', ?, ?, ?, ?, ?, ?, NULL, ?)`,
+       ) VALUES (?, 'RESOLUTION', ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
     ).run(
       finding.findingId, validationRevision.revisionId, "knowledge-sync",
       validationRevision.artifactRef, validationRevision.digest,
+      proof.resolvedByNodeId,
       RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
       createHash("sha256").update(canonicalizeLoopFindingProof(proof, "run-001"), "utf8").digest("hex"),
     );
@@ -1797,6 +1894,7 @@ function appendAndResolveFinding(
         revisionNodeId: row.revision_node_id as LoopFindingProof["revisionNodeId"],
         revisionArtifactRef: row.revision_artifact_ref as string,
         revisionArtifactDigest: row.revision_artifact_digest as string,
+        resolvedByNodeId: row.resolved_by_node_id as LoopFindingProof["resolvedByNodeId"],
         evidenceRef: `loop-artifact:v1:capability_findings:sha256:${dg("7")}`,
         evidenceDigest: dg("7"),
         riskAcceptedBy: null,
@@ -1866,12 +1964,14 @@ function appendAndResolveFinding(
         `INSERT INTO loop_finding_proofs (
           finding_id, proof_kind, revision_id, revision_node_id,
           revision_artifact_ref, revision_artifact_digest,
+          resolved_by_node_id,
           evidence_ref, evidence_digest, risk_accepted_by,
           risk_accepted_scope_id, canonical_sha256
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         finding.findingId, "RESOLUTION", validationRevision.revisionId, "knowledge-sync",
         validationRevision.artifactRef, validationRevision.digest,
+        "solution-gate",
         RESOLUTION_EVIDENCE.resolutionEvidenceRef, RESOLUTION_EVIDENCE.resolutionEvidenceDigest, null, null,
         createHash("sha256").update(canonicalizeProofUnchecked(Object.freeze({
           findingId: finding.findingId,
@@ -1880,6 +1980,7 @@ function appendAndResolveFinding(
           revisionNodeId: "knowledge-sync" as NodeCapabilityId,
           revisionArtifactRef: validationRevision.artifactRef,
           revisionArtifactDigest: validationRevision.digest,
+          resolvedByNodeId: "solution-gate" as NodeCapabilityId,
           evidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
           evidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
           riskAcceptedBy: null,
@@ -2034,10 +2135,14 @@ function setupResolvableFinding(
   store: LoopRunStore,
 ): { finding: LoopFinding; validationRevision: LoopArtifactRevision } {
   const driver = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, driver, NODE_CAPABILITY_IDS);
+  // G4-R5-H6: the acceptance edges exercised below require a legal PWR
+  // ruling and scan-source evidence.
+  driveNodes(store, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
-    earliestAffectedNodeId: "knowledge-sync",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:knowledge-sync:1",
+    evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
   }))).record;
   // Round 1 (H1-4): the bound current is invalidated by its own finding;
   // RESOLVED closure needs a rebuilt current (WP4). Concurrency/rollback
@@ -2100,7 +2205,7 @@ withRunningStore((store, dir) => {
   );
   raw.close();
   // Round 1 (H1-4): closure coverage rides the ACCEPTED_RISK edge here.
-  expectThrow("STORE_FAILURE", () => store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
+  expectThrow("STORE_FAILURE", () => store.acceptFindingRisk("run-001", finding.findingId, pwrRuling(store)),
     "forced proof-insert failure rejects the risk acceptance");
   const listed = store.listFindings("run-001");
   assert(listed.length === 1 && listed[0]!.status === "OPEN", "acceptance status update rolled back");
@@ -2108,17 +2213,21 @@ withRunningStore((store, dir) => {
   const fix = new Database(join(dir, "journal.db"));
   fix.exec("DROP TRIGGER abort_finding_proof");
   fix.close();
-  const retried = store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+  const retried = store.acceptFindingRisk("run-001", finding.findingId, pwrRuling(store));
   assert(retried.record.status === "ACCEPTED_RISK", "risk acceptance retries cleanly after the failure clears");
   assert(countFindingProofs(dir, finding.findingId) === 1, "retry persists exactly one proof");
 });
 withRunningStore((store, dir) => {
   // Same insert-point failure for risk acceptance.
   const r1driver2 = makeCapabilityDriver(store, "run-001");
-  driveNodes(store, r1driver2, NODE_CAPABILITY_IDS);
+  // G4-R5-H6: the acceptance rides a legal PWR ruling over scan-source
+  // evidence, so the chain is driven with the PWR gate round.
+  driveNodes(store, r1driver2, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
   const finding = store.appendFinding(createLoopFinding(findingDraft({
-    sequence: 1, sourceCapability: "code-review", category: "REVIEW",
-    earliestAffectedNodeId: "code-review",
+    sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+    earliestAffectedNodeId: "solution-design",
+    sourceRevisionId: "run-001:revision:implementation:1",
+    evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
   }))).record;
   const raw = new Database(join(dir, "journal.db"));
   raw.exec(
@@ -2126,7 +2235,7 @@ withRunningStore((store, dir) => {
     "BEGIN SELECT RAISE(ABORT, 'forced'); END",
   );
   raw.close();
-  expectThrow("STORE_FAILURE", () => store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
+  expectThrow("STORE_FAILURE", () => store.acceptFindingRisk("run-001", finding.findingId, pwrRuling(store)),
     "forced proof-insert failure rejects the risk acceptance");
   assert(store.listFindings("run-001")[0]!.status === "OPEN", "risk-acceptance status update rolled back");
   assert(countFindingProofs(dir, finding.findingId) === 0, "no risk proof persisted");
@@ -2156,7 +2265,7 @@ function withTwoRunningStores(
 {
   withTwoRunningStores((storeA, storeB, dir) => {
     const { finding } = setupResolvableFinding(storeA);
-    storeA.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+    storeA.acceptFindingRisk("run-001", finding.findingId, pwrRuling(storeA));
     expectThrow("ILLEGAL_TRANSITION", () => storeB.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
       "concurrent risk acceptance loses to a committed risk acceptance (second store)");
     const listed = storeB.listFindings("run-001");
@@ -2166,7 +2275,7 @@ function withTwoRunningStores(
   });
   withTwoRunningStores((storeA, storeB, dir) => {
     const { finding } = setupResolvableFinding(storeA);
-    storeA.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+    storeA.acceptFindingRisk("run-001", finding.findingId, pwrRuling(storeA));
     expectThrow("ILLEGAL_TRANSITION", () => storeB.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
       "concurrent risk acceptance loses to a committed risk acceptance");
     const listed = storeB.listFindings("run-001");
@@ -2191,7 +2300,7 @@ function withTwoRunningStores(
   });
   withTwoRunningStores((storeA, storeB, dir) => {
     const { finding } = setupResolvableFinding(storeA);
-    storeA.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE);
+    storeA.acceptFindingRisk("run-001", finding.findingId, pwrRuling(storeA));
     expectThrow("ILLEGAL_TRANSITION", () => storeB.supersedeFinding("run-001", finding.findingId, "run-001:finding:2"),
       "concurrent supersede loses to a committed risk acceptance");
     assert(storeB.listFindings("run-001")[0]!.status === "ACCEPTED_RISK",
@@ -2361,8 +2470,12 @@ console.log("finding lifecycle: closed store behavior");
   expectThrow("STORE_CLOSED", () => store.resolveFinding("run-001", finding.findingId, {
     resolvedByRevisionId: "run-001:revision:code-review:1", ...RESOLUTION_EVIDENCE,
   }), "closed store resolution raises STORE_CLOSED");
-  expectThrow("STORE_CLOSED", () => store.acceptFindingRisk("run-001", finding.findingId, RISK_EVIDENCE),
-    "closed store risk acceptance raises STORE_CLOSED");
+  expectThrow("STORE_CLOSED", () => store.acceptFindingRisk("run-001", finding.findingId, {
+    riskAcceptedBy: "formal_verdict",
+    riskAcceptanceEvidenceRef: RESOLUTION_EVIDENCE.resolutionEvidenceRef,
+    riskAcceptanceEvidenceDigest: RESOLUTION_EVIDENCE.resolutionEvidenceDigest,
+    decisionScopeId: "run-001:decision:1",
+  }), "closed store risk acceptance raises STORE_CLOSED");
   expectThrow("STORE_CLOSED", () => store.supersedeFinding("run-001", finding.findingId, "run-001:finding:2"),
     "closed store supersede raises STORE_CLOSED");
   rmSync(dir, { recursive: true, force: true });
@@ -2471,6 +2584,7 @@ function driveBoundNodes(
   artifactStore: LoopArtifactStore,
   driver: CapabilityDriver,
   nodes: readonly NodeCapabilityId[],
+  gate?: "PASS" | "FAIL" | "PASS_WITH_RISK",
 ): Map<NodeCapabilityId, LoopArtifactRevision> {
   const revisions = new Map<NodeCapabilityId, LoopArtifactRevision>();
   let upstream: string[] = [];
@@ -2485,10 +2599,9 @@ function driveBoundNodes(
     const stored = artifactStore.put(LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION[nodeId].artifactKind, `${nodeId} output v1`);
     const existingForNode = store.listArtifactRevisions("run-001")
       .filter((item) => item.nodeId === nodeId).length;
-    const execution = driver.succeed(nodeId, {
-      version: `${existingForNode + 1}.0.0`,
-      digest: stored.digest,
-    });
+    const execution = gate === undefined
+      ? driver.succeed(nodeId, { version: `${existingForNode + 1}.0.0`, digest: stored.digest })
+      : driver.succeed(nodeId, { version: `${existingForNode + 1}.0.0`, digest: stored.digest }, gate);
     const revision = store.appendArtifactRevision(createLoopArtifactRevision({
       runId: "run-001",
       requirementId: "req-001",
@@ -2505,7 +2618,7 @@ function driveBoundNodes(
         ? "formal_verdict"
         : "primary",
       gateResult: (LOOP_ARTIFACT_GATE_CAPABILITIES as readonly string[]).includes(nodeId)
-        ? "PASS"
+        ? (gate ?? "PASS")
         : "NOT_APPLICABLE",
       upstreamRevisionIds: upstream,
       createdAt: nextTs(),
@@ -2549,18 +2662,31 @@ function driveBoundNodes(
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
     const driver = makeCapabilityDriver(store, "run-001", artifactStore);
-    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
+    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
+    // G4-R5-H6: scan-source finding — its evidence IS the ruling's consumed
+    // Finding Ledger (a REAL blob the driver wrote; append verification
+    // passes and read-back re-verifies it).
+    const verdict = store.listCapabilityExecutions("run-001").find(
+      (item) => item.status === "succeeded" && item.executionRole === "formal_verdict" &&
+        item.gateResult === "PASS_WITH_RISK",
+    )!;
     const finding = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
-      earliestAffectedNodeId: "knowledge-sync",
+      sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+      earliestAffectedNodeId: "solution-design",
+      sourceRevisionId: "run-001:revision:solution-design:1",
+      evidenceRef: verdict.consumedFindingsRef!,
+      evidenceDigest: verdict.consumedFindingsDigest!,
     }))).record;
     // Round 1 (H1-4): closure coverage rides the ACCEPTED_RISK edge here.
-    const evidence = artifactStore.put("capability_findings", "risk acceptance gate evidence v1");
+    const evidence = {
+      artifactRef: verdict.consumedFindingsRef!,
+      digest: verdict.consumedFindingsDigest!,
+    };
     const accepted = store.acceptFindingRisk("run-001", finding.findingId, {
-      riskAcceptedBy: "user:shaoyang01",
+      riskAcceptedBy: "formal_verdict",
       riskAcceptanceEvidenceRef: evidence.artifactRef,
       riskAcceptanceEvidenceDigest: evidence.digest,
-      decisionScopeId: "run-001:decision:1",
+      decisionScopeId: verdict.decisionScopeId!,
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");
@@ -2573,17 +2699,25 @@ function driveBoundNodes(
     store.createRun(makeIdentity());
     store.appendEvent(makeEvent({ sequence: 2, kind: "run_started" }));
     const driver = makeCapabilityDriver(store, "run-001", artifactStore);
-    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS);
+    const revisions = driveBoundNodes(store, artifactStore, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
+    // G4-R5-H6: the legal acceptance — PWR ruling subject, scan-source
+    // finding bound to the ruling's consumed Finding Ledger.
+    const verdict = store.listCapabilityExecutions("run-001").find(
+      (item) => item.status === "succeeded" && item.executionRole === "formal_verdict" &&
+        item.gateResult === "PASS_WITH_RISK",
+    )!;
     const finding = store.appendFinding(createLoopFinding(findingDraft({
-      sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
-      earliestAffectedNodeId: "knowledge-sync",
+      sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
+      earliestAffectedNodeId: "solution-design",
+      sourceRevisionId: "run-001:revision:solution-design:1",
+      evidenceRef: verdict.consumedFindingsRef!,
+      evidenceDigest: verdict.consumedFindingsDigest!,
     }))).record;
-    const evidence = artifactStore.put("capability_findings", "user risk acceptance v1");
     const accepted = store.acceptFindingRisk("run-001", finding.findingId, {
-      riskAcceptedBy: "user:shaoyang01",
-      riskAcceptanceEvidenceRef: evidence.artifactRef,
-      riskAcceptanceEvidenceDigest: evidence.digest,
-      decisionScopeId: "run-001:decision:1",
+      riskAcceptedBy: "formal_verdict",
+      riskAcceptanceEvidenceRef: verdict.outputArtifactRef!,
+      riskAcceptanceEvidenceDigest: verdict.outputDigest!,
+      decisionScopeId: verdict.decisionScopeId!,
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
       "risk acceptance with an existing evidence blob succeeds");

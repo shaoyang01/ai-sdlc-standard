@@ -151,7 +151,8 @@ async function main(): Promise<void> {
   // ── A3. valid envelope still succeeds unchanged (no behavior drift) ──
   {
     const h = harness();
-    const good = `prose\n<!--@loop-output-begin-->\n${JSON.stringify({ summary: "s", body: "b", findings: [] })}\n<!--@loop-output-end-->\n`;
+    // G4-R5-H4: a valid envelope declares its node business status.
+    const good = `prose\n<!--@loop-output-begin-->\n${JSON.stringify({ summary: "s", body: "b", nodeStatus: "SUCCEEDED", findings: [] })}\n<!--@loop-output-end-->\n`;
     const gw = gatewayWith(h, { text: good });
     const result = await gw.execute(refOnlyRequest(h));
     check("valid envelope still succeeds", result.success === true);

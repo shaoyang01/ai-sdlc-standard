@@ -128,13 +128,16 @@ export function nodeNeedsRebuild(
 }
 
 /**
- * G1 causal classification (Round 2 review H2): a finding re-drives the wave
- * only when its DIRECT declared cause kind is REGRESSION. The kind is a
- * mandatory persisted fact on every finding — there is no inference from
- * revision sequence numbers and no unknown default.
+ * G4-R5-H8 (frozen contract §7.3 回流映射): the causal rework driver is the
+ * OPEN finding itself, not its cause label — REGRESSION (re-drives the scope
+ * its invalidation edges marked stale) and IMPROVEMENT (direct rework: a
+ * code-review implementation finding re-drives implementation without
+ * re-walking the Gate, I-D) both authorize a rebuild wave. The kind remains
+ * a mandatory persisted fact on every finding; neither kind is inferred,
+ * defaulted or merged.
  */
-function isCausalRegression(finding: RegateFindingFacts): boolean {
-  return finding.causeKind === "REGRESSION";
+function isCausalRework(finding: RegateFindingFacts): boolean {
+  return finding.causeKind === "REGRESSION" || finding.causeKind === "IMPROVEMENT";
 }
 
 /**
@@ -147,6 +150,7 @@ export function planRegateFromFacts(
   currentByNode: ReadonlyMap<NodeCapabilityId, CurrentRevisionFacts>,
   pointLastAttempts?: PointLastAttempts,
   feedbackChange?: FeedbackChangeFact | null,
+  blockedPoints?: readonly number[],
 ): RegatePlan {
   // WP4 Round 1 H3 fix: external feedback re-enters ONLY through a verified
   // WP1 FEEDBACK_DRIVEN_CHANGE record, which opens the next generation. The
@@ -181,16 +185,20 @@ export function planRegateFromFacts(
     });
   }
   // Frozen v2 contract: ANY open finding blocks its scope's validity and
-  // completion (computeFindingGate blocks on every OPEN). Round 2 review H2:
-  // only CAUSAL regressions — findings whose declared causeKind is REGRESSION,
-  // bound to the fix-wave revision that introduced them — RE-DRIVE a backward
-  // wave. IMPROVEMENT findings keep completion blocked until resolved but
-  // never re-route the chain, regardless of their source revision's sequence.
+  // completion (computeFindingGate blocks on every OPEN). G4-R5-H8: both
+  // declared cause kinds RE-DRIVE the rebuild wave (REGRESSION and
+  // IMPROVEMENT alike) — an OPEN finding whose scope is still incomplete
+  // always names a pending rebuild, whatever its causal label.
+  // G4-R5 closure sequencing: a finding RESOLVED/ACCEPTED while its scope's
+  // downstream currents are still STALE (closure re-verification is a
+  // lifecycle action that does not depend on §7.3 admission) keeps naming
+  // the pending rebuild until the rebuilt currents land — otherwise the
+  // closure would deadlock against the very wave it must precede.
   const pending = findings.filter(
     (finding) =>
-      finding.status === "OPEN" &&
+      finding.status !== "SUPERSEDED" &&
       scopeIncomplete(finding, currentByNode) &&
-      isCausalRegression(finding),
+      isCausalRework(finding),
   );
   if (pending.length === 0) {
     return Object.freeze({
@@ -233,8 +241,48 @@ export function planRegateFromFacts(
       nodesToRebuild: Object.freeze([]),
     });
   }
-  const restartNode = NODE_CAPABILITY_IDS[targetIdx]!;
+  let restartNode = NODE_CAPABILITY_IDS[targetIdx]!;
   let restartPointIndex = firstExecutionPointIndexForNode(restartNode);
+  // G4-R5 (frozen contract §7.3: solution-design 变更即重走 Gate): a design
+  // reflow re-adjudicates — when the design was rebuilt AFTER the last gate
+  // round, the wave may not skip the scan/verdict re-run and jump straight
+  // to downstream nodes: the gate round must examine the rebuilt design
+  // (§5.4 scannedDesignVersion == designVersion).
+  if (
+    governing.earliestAffectedNodeId === "solution-design" && pointLastAttempts !== undefined
+  ) {
+    const designAttempts = pointLastAttempts.get("solution-design:primary") ?? 0;
+    const scanAttempts = pointLastAttempts.get("solution-gate:adversarial_scan") ?? 0;
+    const verdictAttempts = pointLastAttempts.get("solution-gate:formal_verdict") ?? 0;
+    const gateNodeIdx = nodeIndexOf("solution-gate");
+    const scanPointIdx = firstExecutionPointIndexForNode("solution-gate");
+    // Even when the gate node's REVISION is still current, the ROUND is
+    // stale relative to the rebuilt design — the wave re-runs scan/verdict
+    // before (or instead of) continuing downstream. Only applies once the
+    // design current is ACTIVE again (a still-stale design rebuilds first).
+    const designCurrentActive = currentByNode.get("solution-design")?.validity === "ACTIVE";
+    if (designCurrentActive && designAttempts > scanAttempts && targetIdx !== gateNodeIdx) {
+      targetIdx = gateNodeIdx;
+      restartNode = NODE_CAPABILITY_IDS[targetIdx]!;
+      restartPointIndex = scanPointIdx;
+    }
+    if (designCurrentActive && scanAttempts > verdictAttempts) {
+      restartPointIndex = scanPointIdx + 1;
+    }
+  }
+  // G4-R5: the wave may not skip a succeeded-but-BLOCKED point that sits
+  // inside the governing finding's downstream scope — the wave's next
+  // re-drive is that point (e.g. the discovering node re-reviews the fix).
+  if (blockedPoints !== undefined && blockedPoints.length > 0 && restartPointIndex !== null) {
+    const scopeStart = nodeIndexOf(governing.earliestAffectedNodeId);
+    const inScopeBlocked = blockedPoints
+      .filter((idx) => idx >= scopeStart && idx <= restartPointIndex)
+      .sort((a, b) => a - b)[0];
+    if (inScopeBlocked !== undefined) {
+      restartPointIndex = inScopeBlocked;
+      restartNode = LOOP_CAPABILITY_EXECUTION_POINTS[inScopeBlocked]!.capability;
+    }
+  }
   if (restartNode === "solution-gate" && pointLastAttempts !== undefined) {
     // Mid-wave refinement: if the scan role already ran a newer attempt than
     // the verdict role, this gate round continues at formal_verdict.
@@ -263,8 +311,9 @@ export function planRegateFromFacts(
  * Historical restart authorization (read-path counterpart of the live
  * pending-plan check): a recorded backward jump to `targetPointIndex` is
  * accepted during full-chain re-validation iff some non-superseded causal
- * finding whose rebuild scope covers the target node exists anywhere in the
- * run. Finding source revisions are immutable journal facts, so replay can
+ * finding (REGRESSION or IMPROVEMENT — G4-R5-H8 keeps both wave-driving)
+ * whose rebuild scope covers the target node exists anywhere in the run.
+ * Finding source revisions are immutable journal facts, so replay can
  * distinguish a fix-wave regression from an original-product improvement.
  * A journal with no covering causal finding fails closed. Creation-time
  * comparisons are deliberately NOT used here: findings may carry
@@ -279,22 +328,15 @@ export function historicalRestartAuthorized(
   const targetIdx = NODE_CAPABILITY_IDS.indexOf(targetNode);
   return findings.some((finding) =>
     finding.status !== "SUPERSEDED" &&
-    isCausalRegression(finding) &&
+    isCausalRework(finding) &&
     NODE_CAPABILITY_IDS.indexOf(finding.earliestAffectedNodeId) <= targetIdx,
   );
 }
 
 /**
  * Design-depth decision surface (§C02-WP4): the depth verdict binds to the
- * current solution-gate formal_verdict round. PASS adjudicates the depth
- * decision; anything else leaves it BLOCKED_UNKNOWN and implementation must
- * not be entered.
+ * current solution-gate formal_verdict round. RETIRED with G4-R5-H2: a
+ * Gate Result alone never decides admission — decisionStatus on the verdict
+ * event is the authority (see recovery's solutionGateDecision projection).
  */
 export type SolutionGateDecisionStatus = "DECIDED" | "BLOCKED_UNKNOWN";
-
-export function solutionGateDecisionFromGateResult(
-  formalGateResult: string | null,
-): SolutionGateDecisionStatus | null {
-  if (formalGateResult === null) return null;
-  return formalGateResult === "PASS" ? "DECIDED" : "BLOCKED_UNKNOWN";
-}

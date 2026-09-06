@@ -180,14 +180,22 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     "Use ONLY these JSON fields:",
     '- "summary": string, one-line conclusion (non-empty).',
     '- "body": string, the full node product in markdown (non-empty).',
+    // G4-R5-H4 (D-087): the node business result is a declared fact — a body
+    // that reads as blocked is downgraded to a BLOCKED terminal, never a
+    // silent success.
+    '- "nodeStatus": one of "SUCCEEDED", "BLOCKED", "FAILED". "SUCCEEDED": you produced the node product in "body". "BLOCKED": you cannot proceed because upstream facts are missing or contradictory — describe the exact blocker and what is missing in "body". "FAILED": the attempt produced no usable product — say why in "body".',
   ];
 
   if (isVerdict) {
     lines.push(
       '- "gateResult": one of "PASS", "FAIL", "PASS_WITH_RISK" (you may NOT use NOT_APPLICABLE).',
-      '- "decisionDepth": one of "LIGHT", "STANDARD", "DEEP", or null (when decisionStatus is BLOCKED_UNKNOWN). Required for formal_verdict.',
-      '- "decisionStatus": one of "CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN". Required for formal_verdict. CONFIRMED: verdict satisfies requiredDepth. ESCALATED: verdict reveals risk requiring higher depth (reflow to design). BLOCKED_UNKNOWN: key facts missing (reflow to intake/design).',
-      '- "riskAcceptanceRefs": string array; optional — include relevant risk finding refs when gateResult is PASS_WITH_RISK, otherwise omit or [].',
+      '- "decisionStatus": one of "CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN". Required for formal_verdict. CONFIRMED: the verdict satisfies the required depth. ESCALATED: the verdict reveals risk requiring higher depth (reflow to solution-design). BLOCKED_UNKNOWN: key facts are missing so no depth can be judged (reflow follows your findings — name the problem layer in findings).',
+      // G4-R5-H3: the legal combinations are exactly frozen contract §4.3.
+      '- "decisionDepth": one of "LIGHT", "STANDARD", "DEEP", or null. REQUIRED non-null with CONFIRMED/ESCALATED; REQUIRED to be exactly null with BLOCKED_UNKNOWN.',
+      // Decision-086 (G4-02): a PWR ruling without specific refs stays legal
+      // — the scope-level judgment IS the acceptance; refs are evidence
+      // pointers when named risks exist.
+      '- "riskAcceptanceRefs": string array; optional — include the finding refs of the risks you are accepting when gateResult is "PASS_WITH_RISK", otherwise omit or [].',
     );
   } else if (isScan) {
     lines.push(
@@ -199,7 +207,11 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
 
   if (wantsFindings) {
     lines.push(
-      '- "findings": array of {"id": non-empty unique string, "severity": one of "CRITICAL"|"HIGH"|"MEDIUM"|"LOW", "message": non-empty string, "cause"?: "REGRESSION"|"IMPROVEMENT"}; use [] when none.',
+      // G4-R5-H5: the category is the problem layer (root cause), and it
+      // names the reflow target — the runtime derives the affected node from
+      // it. REGRESSION means this round's fix directly introduced the issue;
+      // IMPROVEMENT is any other gap.
+      '- "findings": array of {"id": non-empty unique string, "severity": one of "CRITICAL"|"HIGH"|"MEDIUM"|"LOW", "message": non-empty string, "category": one of "REQUIREMENT"|"SOLUTION"|"PLANNING"|"IMPLEMENTATION"|"REVIEW"|"KNOWLEDGE" (the problem layer — it names the node that must rework), "cause"?: "REGRESSION"|"IMPROVEMENT"}; use [] when none.',
     );
   }
 

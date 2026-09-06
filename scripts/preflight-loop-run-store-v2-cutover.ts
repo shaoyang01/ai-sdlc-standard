@@ -26,9 +26,11 @@ import Database from "better-sqlite3";
 // Round 1 (H2): owner detection shares the store's COMPLETE physical table
 // catalogue — main tables and every self-owned child table — so a v0
 // database carrying e.g. only loop_artifact_current classifies as history.
-import { LOOP_PHYSICAL_TABLES } from "../core/loop-run-store";
+import { LOOP_PHYSICAL_TABLES, LOOP_RUN_STORE_FORMAT_VERSION } from "../core/loop-run-store";
 
-const SUPPORTED_FORMAT_VERSION = 7;
+// G4-R5-H1: the supported version is the STORE's own constant, not a
+// second hardcoded copy (the drift this preflight exists to catch).
+const SUPPORTED_FORMAT_VERSION = LOOP_RUN_STORE_FORMAT_VERSION;
 const SQLITE_MAGIC = "SQLite format 3\x00";
 const CANDIDATE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 

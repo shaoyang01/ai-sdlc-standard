@@ -620,6 +620,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,

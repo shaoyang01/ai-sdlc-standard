@@ -171,7 +171,13 @@ export const LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES: Readonly<Record<string, Node
     "06 知识同步": "knowledge-sync",
   });
 
-export const LOOP_ARTIFACT_INDEX_STATUSES = ["draft", "active", "stale", "replaced"] as const;
+// G4-R5-M2 (frozen contract §6.2.4, mapping table frozen there): the manifest
+// entry's lifecycle status is projected FROM the revision validity —
+// ACTIVE→"current", STALE/SUPERSEDED→"stale" — and the manual face may
+// additionally annotate a reflow-pending node as "actionable" (§5.4). The
+// pre-freeze draft/active/replaced vocabulary is retired: an index row
+// carrying it is not a canonical manifest row.
+export const LOOP_ARTIFACT_INDEX_STATUSES = ["current", "stale", "actionable"] as const;
 export type LoopArtifactIndexStatus = (typeof LOOP_ARTIFACT_INDEX_STATUSES)[number];
 
 export type LoopArtifactIndexRow = Readonly<{
@@ -742,12 +748,15 @@ export function crossBindArtifactIndexRow(
   if (record.version !== currentRevision.semver) {
     return stop("VERSION_DRIFT", "manifest version does not match the journal current revision");
   }
+  // G4-R5-M2: the frozen §6.2.4 status mapping — ACTIVE↔"current";
+  // STALE/SUPERSEDED↔"stale" ("actionable" is the manual face's
+  // reflow-pending annotation over a non-current revision, legal wherever
+  // "stale" is). Any other pairing is drift, not a silent re-selection.
   const statusMatches =
-    (currentRevision.validity === "ACTIVE" && (status === "draft" || status === "active")) ||
-    (currentRevision.validity === "STALE" && status === "stale") ||
-    (currentRevision.validity === "SUPERSEDED" && status === "replaced");
+    (currentRevision.validity === "ACTIVE" && status === "current") ||
+    (currentRevision.validity !== "ACTIVE" && (status === "stale" || status === "actionable"));
   if (!statusMatches) {
-    return stop("STATUS_DRIFT", "manifest status does not match the runtime validity mapping");
+    return stop("STATUS_DRIFT", "manifest status does not match the frozen revision-validity mapping");
   }
   if (isLoopArtifactGateCapability(capability) && result !== currentRevision.gateResult) {
     return stop("RESULT_DRIFT", "Gate row result does not match the journal Gate result");

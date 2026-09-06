@@ -148,7 +148,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       ? (overrides.executionRole ?? "formal_verdict")
       : "primary";
     return Object.freeze({
-      schemaVersion: 4,
+      schemaVersion: 5,
       executionEventId: `${runId}:capability:${sequence}:${status}`,
       runId,
       sequence,
@@ -176,6 +176,7 @@ function makeCapabilityDriver(store: LoopRunStore, runId: string) {
       consumedFindingsRef: null,
       consumedFindingsDigest: null,
       decisionDepth: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? "STANDARD" as const : null,
+      decisionStatus: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? "CONFIRMED" as const : null,
       decisionScopeId: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `runId:decision:1` : null,
       decisionDeltaRef: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${sha256Hex("decision-delta")}` : null,
       decisionDeltaDigest: (status === "succeeded" && capability === "solution-gate" && executionRole === "formal_verdict") ? sha256Hex("decision-delta") : null,
@@ -447,9 +448,11 @@ console.log("artifact revision: schema constants and canonical tokens");
   );
   // C03-E W6b2 (E4-T4): +1 for human_action_required.
   assert(LOOP_ARTIFACT_REVISION_KINDS.length === 18, "eighteen canonical artifact kinds");
+  // G4-R5-M2 (frozen contract §6.2.4): the manifest status vocabulary is the
+  // frozen revision-validity projection — current / stale / actionable.
   assert(
-    LOOP_ARTIFACT_INDEX_STATUSES.join(",") === "draft,active,stale,replaced",
-    "four canonical manifest artifact statuses",
+    LOOP_ARTIFACT_INDEX_STATUSES.join(",") === "current,stale,actionable",
+    "three canonical manifest artifact statuses (frozen §6.2.4 mapping)",
   );
   assert(
     LOOP_ARTIFACT_INDEX_CROSS_BIND_STOP_REASONS.length === 7,
@@ -1404,14 +1407,14 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
     node: "01 技术方案",
     stablePath: "library/req-001/01-技术方案/req-001_技术方案.md",
     version: "1.0.0",
-    status: "active",
+    status: "current",
     result: "",
     ...o,
   });
   const ok = crossBindArtifactIndexRow(row(), designRevision);
   assert(ok.status === "OK", "consistent Index row binds to the current revision");
-  const draftRow = crossBindArtifactIndexRow(row({ status: "draft" }), designRevision);
-  assert(draftRow.status === "OK", "current revision maps to draft or active manifest status");
+  const currentRow = crossBindArtifactIndexRow(row({ status: "current" }), designRevision);
+  assert(currentRow.status === "OK", "current revision maps to the current manifest status");
   const stop = (result: ReturnType<typeof crossBindArtifactIndexRow>) =>
     result.status === "STOP" ? result.reasonCode : "NO_STOP";
   assert(stop(crossBindArtifactIndexRow(row({ node: "04 交付总结" }), null)) === "NODE_NOT_MAPPED",
@@ -1444,8 +1447,10 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
   const staleRevision = Object.freeze({ ...designRevision, validity: "STALE" }) as LoopArtifactRevision;
   assert(crossBindArtifactIndexRow(row({ status: "stale" }), staleRevision).status === "OK",
     "stale runtime validity maps to the stale manifest status");
-  assert(stop(crossBindArtifactIndexRow(row({ status: "active" }), staleRevision)) === "STATUS_DRIFT",
-    "stale revision against an active manifest status is a STOP diagnosis");
+  assert(stop(crossBindArtifactIndexRow(row({ status: "current" }), staleRevision)) === "STATUS_DRIFT",
+    "stale revision against a current manifest status is a STOP diagnosis");
+  const actionableRow = crossBindArtifactIndexRow(row({ status: "actionable" }), staleRevision);
+  assert(actionableRow.status === "OK", "a stale revision binds with the actionable reflow annotation");
   const reviewRevision = createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: "run-001:capability:8:succeeded", gateResult: "PASS",
@@ -1455,7 +1460,7 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
     node: "02 方案审核",
     stablePath: "library/req-001/02-方案审核/req-001_方案审核.md",
     version: "1.0.0",
-    status: "active",
+    status: "current",
     result: "PASS",
     ...o,
   });

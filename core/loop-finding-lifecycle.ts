@@ -35,7 +35,13 @@ import { NODE_CAPABILITY_IDS, type NodeCapabilityId } from "../loop/types";
 // v4 (C02-WP4 Round 2 review H2): a risk acceptance binds to the EXACT
 // decision scope it closes under (`riskAcceptedScopeId`), so an arbitrary
 // stale ACCEPTED_RISK finding can never authorize an unrelated new verdict.
-export const LOOP_FINDING_SCHEMA_VERSION = 4 as const;
+// v5 (G4-R5-H5/H6): gate-round findings bind the revision the round EXAMINED
+// (the design current) instead of a revision of the gate node itself — a scan
+// or FAIL/ESCALATED verdict never authors the "successful Gate revision" the
+// old binding demanded (frozen contract §5.1: sourceRevision is the discovery
+// anchor, bound by trusted context). The closure verifier identity is now a
+// validated field of the resolution payload (§5.2: 关闭验证者 = 发现节点).
+export const LOOP_FINDING_SCHEMA_VERSION = 5 as const;
 
 export const LOOP_FINDING_CAUSE_KINDS = ["REGRESSION", "IMPROVEMENT"] as const;
 export type LoopFindingCauseKind = (typeof LOOP_FINDING_CAUSE_KINDS)[number];
@@ -181,6 +187,8 @@ export type LoopFindingProof = Readonly<{
   riskAcceptedBy: string | null;
   /** v4: RISK_ACCEPTANCE proofs bind the exact decision scope accepted under. */
   riskAcceptedScopeId: string | null;
+  /** v5 (G4-R5-H6): RESOLUTION proofs carry the closure verifier (= discovering node). */
+  resolvedByNodeId: NodeCapabilityId | null;
 }>;
 
 /**
@@ -198,11 +206,13 @@ export type LoopFindingInvalidationScope = Readonly<{
   scopeDigest: string;
 }>;
 
-/** resolveFinding closure payload: the current revision and the Gate evidence. */
+/** resolveFinding closure payload: the current revision, the Gate evidence and the closure verifier. */
 export type LoopFindingResolution = Readonly<{
   resolvedByRevisionId: string;
   resolutionEvidenceRef: string;
   resolutionEvidenceDigest: string;
+  /** v5 (G4-R5-H6, frozen contract §5.2): the closure verifier — must be the discovering node. */
+  resolvedByNodeId: NodeCapabilityId;
 }>;
 
 /** acceptFindingRisk closure payload: the acceptor, evidence and decision scope. */
@@ -244,11 +254,12 @@ const PROOF_FIELDS = [
   "findingId", "proofKind", "revisionId", "revisionNodeId",
   "revisionArtifactRef", "revisionArtifactDigest",
   "evidenceRef", "evidenceDigest", "riskAcceptedBy", "riskAcceptedScopeId",
+  "resolvedByNodeId",
 ] as const;
 
 const SCOPE_FIELDS = ["findingId", "edgeCount", "scopeDigest"] as const;
 
-const RESOLUTION_FIELDS = ["resolvedByRevisionId", "resolutionEvidenceRef", "resolutionEvidenceDigest"] as const;
+const RESOLUTION_FIELDS = ["resolvedByRevisionId", "resolutionEvidenceRef", "resolutionEvidenceDigest", "resolvedByNodeId"] as const;
 
 const RISK_ACCEPTANCE_FIELDS = [
   "riskAcceptedBy", "riskAcceptanceEvidenceRef", "riskAcceptanceEvidenceDigest",
@@ -416,16 +427,24 @@ export function validateLoopFinding(value: unknown): void {
   const sequence = positiveInteger(record.sequence, "sequence");
   const sourceCapability = nodeCapabilityId(record.sourceCapability, "sourceCapability");
   // v2 (A3): the source revision is mandatory and must reference a revision
-  // of the same run. Round 1 (H1-4): the referenced revision's embedded node
-  // must equal the source capability — a finding binds to the current
-  // revision of the capability that produced it, never to another node's.
-  const sourceRevisionId = text(record.sourceRevisionId, "sourceRevisionId");
-  const parsedSource = parseRevisionReference(sourceRevisionId, runId);
-  if (parsedSource === null) {
+  // of the same run. G4-R5-H5 (frozen contract §5.1): sourceRevision is the
+  // DISCOVERY ANCHOR — the revision the discovering node EXAMINED, which is
+  // regularly another node's product (code-review examines the
+  // implementation product; gate rounds examine the design current; a scan
+  // or a FAIL verdict never authors a Gate revision). Whole-chain discovery
+  // is a declared duty, so the anchor is trusted-context bound (same run,
+  // existing revision) and never own-node restricted. An intake finding
+  // registers in the SAME transaction as its terminal (D-087 atomic
+  // registration), before the intake revision is materialized — its
+  // discovery anchor is the bootstrap requirement artifact, which is not a
+  // revision, so requirement-intake alone may carry a null sourceRevisionId.
+  const intakeUnbound = sourceCapability === "requirement-intake" && record.sourceRevisionId === null;
+  const sourceRevisionId = intakeUnbound ? null : text(record.sourceRevisionId, "sourceRevisionId");
+  const parsedSource = intakeUnbound || typeof sourceRevisionId !== "string"
+    ? null
+    : parseRevisionReference(sourceRevisionId, runId);
+  if (!intakeUnbound && parsedSource === null) {
     invalid("sourceRevisionId must reference a revision of the same run");
-  }
-  if (parsedSource !== null && parsedSource.nodeId !== sourceCapability) {
-    invalid("sourceRevisionId must be a revision of the sourceCapability node");
   }
   // v3 (Round 2 review H2): DIRECT causal evidence. The cause kind is a
   // mandatory declared fact, never inferred from revision sequence numbers;
@@ -625,6 +644,10 @@ export function validateLoopFindingProof(value: unknown, expectedRunId: string):
     if (record.riskAcceptedScopeId !== null) {
       invalid("resolution proofs must not carry a decision scope");
     }
+    // v5 (G4-R5-H6): the closure verifier identity is mandatory and must be
+    // the discovering node — enforced against the finding row by
+    // validateLoopFindingProofs (the proof row alone cannot see it).
+    nodeCapabilityId(record.resolvedByNodeId, "finding proof resolvedByNodeId");
     return;
   }
   if (
@@ -634,6 +657,9 @@ export function validateLoopFindingProof(value: unknown, expectedRunId: string):
     record.revisionArtifactDigest !== null
   ) {
     invalid("risk acceptance proofs must not carry revision binding fields");
+  }
+  if (record.resolvedByNodeId !== null) {
+    invalid("risk acceptance proofs must not carry a closure verifier");
   }
   text(record.riskAcceptedBy, "finding proof riskAcceptedBy");
   // v4 (Round 2 review H2): the RISK_ACCEPTANCE proof binds the exact
@@ -655,6 +681,7 @@ export function canonicalizeLoopFindingProof(proof: LoopFindingProof, expectedRu
     evidenceDigest: proof.evidenceDigest,
     riskAcceptedBy: proof.riskAcceptedBy,
     riskAcceptedScopeId: proof.riskAcceptedScopeId,
+    resolvedByNodeId: proof.resolvedByNodeId,
   });
 }
 
@@ -674,6 +701,9 @@ export function createLoopFindingResolutionProof(
   if (valid.resolvedByRevisionId !== revision.revisionId) {
     invalid("resolution revision binding must match the resolution payload");
   }
+  if (valid.resolvedByNodeId !== finding.sourceCapability) {
+    invalid("closure verifier must be the discovering node (frozen contract §5.2)");
+  }
   const proof: LoopFindingProof = Object.freeze({
     findingId: finding.findingId,
     proofKind: "RESOLUTION",
@@ -685,6 +715,7 @@ export function createLoopFindingResolutionProof(
     evidenceDigest: valid.resolutionEvidenceDigest,
     riskAcceptedBy: null,
     riskAcceptedScopeId: null,
+    resolvedByNodeId: valid.resolvedByNodeId,
   });
   validateLoopFindingProof(proof, finding.runId);
   return proof;
@@ -708,6 +739,7 @@ export function createLoopFindingRiskAcceptanceProof(
     evidenceDigest: valid.riskAcceptanceEvidenceDigest,
     riskAcceptedBy: valid.riskAcceptedBy,
     riskAcceptedScopeId: valid.decisionScopeId,
+    resolvedByNodeId: null,
   });
   validateLoopFindingProof(proof, finding.runId);
   return proof;
@@ -750,6 +782,12 @@ export function validateLoopFindingProofs(
         finding.resolutionEvidenceDigest !== proof.evidenceDigest
       ) {
         invalid("resolution proof must match the finding closure fields");
+      }
+      // v5 (G4-R5-H6): the recorded closure verifier must be the discovering
+      // node (frozen contract §5.2) — a proof naming any other verifier is
+      // tampered history.
+      if (proof.resolvedByNodeId !== finding.sourceCapability) {
+        invalid("resolution proof verifier must be the discovering node");
       }
       const parsed = parseRevisionReference(proof.revisionId!, expectedRunId)!;
       if (nodeIndex(parsed.nodeId) < nodeIndex(finding.earliestAffectedNodeId)) {
@@ -833,10 +871,14 @@ export function validateLoopFindingResolution(value: unknown): LoopFindingResolu
   exactFields(record, RESOLUTION_FIELDS, "finding resolution");
   text(record.resolvedByRevisionId, "resolvedByRevisionId");
   evidenceReference(record.resolutionEvidenceRef, record.resolutionEvidenceDigest, "resolution evidence");
+  // v5 (G4-R5-H6, frozen contract §5.2): the closure verifier must be the
+  // discovering node — checked against the target finding by the store.
+  const resolvedByNodeId = nodeCapabilityId(record.resolvedByNodeId, "resolvedByNodeId");
   return Object.freeze({
     resolvedByRevisionId: record.resolvedByRevisionId as string,
     resolutionEvidenceRef: record.resolutionEvidenceRef as string,
     resolutionEvidenceDigest: record.resolutionEvidenceDigest as string,
+    resolvedByNodeId,
   });
 }
 

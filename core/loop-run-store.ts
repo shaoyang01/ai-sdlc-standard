@@ -72,9 +72,16 @@ import {
   canonicalizeLoopFindingInvalidationScope,
   canonicalizeLoopFindingProof,
   computeFindingGate as computeFindingGateFromFacts,
+  createLoopFinding,
   createLoopFindingResolutionProof,
   createLoopFindingRiskAcceptanceProof,
   downstreamNodeIds,
+  LOOP_FINDING_CATEGORIES,
+  LOOP_FINDING_CAUSE_KINDS,
+  LOOP_FINDING_CATEGORY_EARLIEST_NODE,
+  LOOP_FINDING_SCHEMA_VERSION,
+  LOOP_FINDING_SEVERITIES,
+  loopFindingId,
   resolveLoopFinding,
   supersedeLoopFinding,
   validateLoopFinding,
@@ -118,12 +125,18 @@ export function isLoopRunStoreBoundToArtifactStore(
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
-// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v7. Known
-// historical formats 1..6 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
-// they are never semantically migrated. A declared version above 7 is
-// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v7, schema or canonical
+// v2 journal format (C02-WP3.5-B, D3): the store supports exactly v8. Known
+// historical formats 1..7 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
+// they are never semantically migrated. A declared version above 8 is
+// rejected with UNSUPPORTED_FUTURE_FORMAT. Inside v8, schema or canonical
 // hash drift is STORE_CORRUPT.
-const LOOP_RUN_STORE_FORMAT_VERSION = 7;
+//
+// v8 (G4-R5-H1): loop_capability_executions gains the persisted
+// decision_status column, and event schema v5 puts decisionStatus inside the
+// canonical hash. v7 journals carry neither fact and are rejected wholesale
+// (the established no-migration doctrine) — their events could never gain
+// admission authority under the v5 rules anyway.
+export const LOOP_RUN_STORE_FORMAT_VERSION = 8;
 
 /**
  * The COMPLETE LOOP physical table catalogue (Round 1 corrections, H2): every
@@ -156,6 +169,59 @@ const LOOP_BUSINESS_TABLES = LOOP_PHYSICAL_TABLES;
 export type CapabilityExecutionAppendResult = Readonly<{
   event: LoopCapabilityExecutionEvent;
   appended: boolean;
+}>;
+
+/**
+ * G4-R5-H5 (D-087 seam 2): one trusted machine fact per agent finding — the
+ * gateway reduces the envelope's finding pointers to severity/category/cause;
+ * message text stays only in the evidence blob.
+ */
+export type CapabilityFindingRegistrationDraft = Readonly<{
+  severity: string;
+  category: string;
+  causeKind: string;
+}>;
+
+/**
+ * Directive for the atomic registration executed in the SAME transaction as
+ * a terminal capability event (D-087 seam 2). The gateway derives it from
+ * trusted journal facts; the store never trusts agent prose:
+ *   - evidence: the node output blob binding every registered finding;
+ *   - runInvalidation: whether append-time invalidation edges propagate
+ *     (non-admitting terminals only — scan rounds defer to the verdict's
+ *     adjudication and an admitting PWR verdict must not invalidate the
+ *     design it just accepted);
+ *   - registerReflowFinding: a FAIL/ESCALATED verdict whose agent emitted no
+ *     SOLUTION-category finding still owes the chain the §5.4 reflow fact;
+ *   - registerReflowFinding: a FAIL/ESCALATED verdict whose agent emitted no
+ *     SOLUTION-category finding still owes the chain the §5.4 reflow fact;
+ *   - adjudicateScanFindings: the verdict round's ledger adjudication — with
+ *     mode PASS_RESOLVE every OPEN scan-source finding (evidence = any scan
+ *     Finding Ledger of this run) is RESOLVED by the design current the
+ *     verdict examined (verifier = the discovering node per §5.2); with mode
+ *     PWR_ACCEPT the OPEN, non-CRITICAL scan-source findings consumed by the
+ *     ruling's ledger are ACCEPTED_RISK under THIS decision scope with the
+ *     Gate Result as evidence, riskAcceptedBy formal_verdict (§5.2/§7.1).
+ *     CRITICAL findings are never acceptable and stay OPEN — fail-closed.
+ */
+export interface CapabilityFindingsRegistration {
+  readonly evidenceRef: string;
+  readonly evidenceDigest: string;
+  readonly findings: readonly CapabilityFindingRegistrationDraft[];
+  readonly runInvalidation: boolean;
+  readonly registerReflowFinding?: boolean;
+  readonly adjudicateScanFindings?: Readonly<{
+    decisionScopeId: string;
+    mode: "PASS_RESOLVE" | "PWR_ACCEPT";
+  }> | null;
+}
+
+export type CapabilityFindingsAppendResult = Readonly<{
+  event: LoopCapabilityExecutionEvent;
+  appended: boolean;
+  registeredFindingIds: readonly string[];
+  acceptedFindingIds: readonly string[];
+  resolvedFindingIds: readonly string[];
 }>;
 
 export type RequirementChangeAppendResult = Readonly<{
@@ -376,6 +442,7 @@ type CapabilityExecutionRow = {
   consumed_findings_ref: string | null;
   consumed_findings_digest: string | null;
   decision_depth: string | null;
+  decision_status: string | null;
   decision_scope_id: string | null;
   decision_delta_ref: string | null;
   decision_delta_digest: string | null;
@@ -511,6 +578,7 @@ type FindingProofRow = {
   revision_node_id: string | null;
   revision_artifact_ref: string | null;
   revision_artifact_digest: string | null;
+  resolved_by_node_id: string | null;
   evidence_ref: string;
   evidence_digest: string;
   risk_accepted_by: string | null;
@@ -571,7 +639,7 @@ function eventToRow(event: LoopRunEvent): EventRow {
 
 function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityExecutionEvent {
   return Object.freeze({
-    schemaVersion: asPersistedSafeInteger(row.schema_version) as 4,
+    schemaVersion: asPersistedSafeInteger(row.schema_version) as LoopCapabilityExecutionEvent["schemaVersion"],
     executionEventId: row.execution_event_id,
     runId: row.run_id,
     sequence: asPersistedSafeInteger(row.sequence),
@@ -599,7 +667,7 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     consumedFindingsRef: row.consumed_findings_ref,
     consumedFindingsDigest: row.consumed_findings_digest,
     decisionDepth: row.decision_depth as LoopCapabilityExecutionEvent["decisionDepth"],
-    decisionStatus: (row as Record<string, unknown>).decision_status as LoopCapabilityExecutionEvent["decisionStatus"] ?? null,
+    decisionStatus: (row.decision_status ?? null) as LoopCapabilityExecutionEvent["decisionStatus"],
     decisionScopeId: row.decision_scope_id,
     decisionDeltaRef: row.decision_delta_ref,
     decisionDeltaDigest: row.decision_delta_digest,
@@ -650,6 +718,7 @@ function capabilityExecutionToRow(event: LoopCapabilityExecutionEvent): Capabili
     consumed_findings_ref: event.consumedFindingsRef,
     consumed_findings_digest: event.consumedFindingsDigest,
     decision_depth: event.decisionDepth,
+    decision_status: event.decisionStatus,
     decision_scope_id: event.decisionScopeId,
     decision_delta_ref: event.decisionDeltaRef,
     decision_delta_digest: event.decisionDeltaDigest,
@@ -907,7 +976,7 @@ function insertArtifactRevisionRows(db: Database.Database, record: LoopArtifactR
 function rowToFinding(row: FindingRow): LoopFinding {
   return Object.freeze({
     // The schema version is a fixed model constant, not a persisted column.
-    schemaVersion: 4,
+    schemaVersion: LOOP_FINDING_SCHEMA_VERSION,
     findingId: row.finding_id,
     runId: row.run_id,
     requirementId: row.requirement_id,
@@ -968,6 +1037,7 @@ function rowToFindingProof(row: FindingProofRow): LoopFindingProof {
     revisionNodeId: row.revision_node_id as LoopFindingProof["revisionNodeId"],
     revisionArtifactRef: row.revision_artifact_ref,
     revisionArtifactDigest: row.revision_artifact_digest,
+    resolvedByNodeId: row.resolved_by_node_id as LoopFindingProof["resolvedByNodeId"],
     evidenceRef: row.evidence_ref,
     evidenceDigest: row.evidence_digest,
     riskAcceptedBy: row.risk_accepted_by,
@@ -980,12 +1050,14 @@ function insertFindingProofRow(db: Database.Database, proof: LoopFindingProof, r
     `INSERT INTO loop_finding_proofs (
       finding_id, proof_kind, revision_id, revision_node_id,
       revision_artifact_ref, revision_artifact_digest,
+      resolved_by_node_id,
       evidence_ref, evidence_digest, risk_accepted_by,
       risk_accepted_scope_id, canonical_sha256
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     proof.findingId, proof.proofKind, proof.revisionId, proof.revisionNodeId,
     proof.revisionArtifactRef, proof.revisionArtifactDigest,
+    proof.resolvedByNodeId,
     proof.evidenceRef, proof.evidenceDigest, proof.riskAcceptedBy,
     proof.riskAcceptedScopeId,
     sha256Hex(canonicalizeLoopFindingProof(proof, runId)),
@@ -1297,6 +1369,7 @@ export class LoopRunStore {
               consumed_findings_ref TEXT,
               consumed_findings_digest TEXT,
               decision_depth TEXT,
+              decision_status TEXT,
               decision_scope_id TEXT,
               decision_delta_ref TEXT,
               decision_delta_digest TEXT,
@@ -1482,6 +1555,7 @@ export class LoopRunStore {
                 revision_node_id TEXT,
                 revision_artifact_ref TEXT,
                 revision_artifact_digest TEXT,
+                resolved_by_node_id TEXT,
                 evidence_ref TEXT NOT NULL,
                 evidence_digest TEXT NOT NULL,
                 risk_accepted_by TEXT,
@@ -1937,6 +2011,367 @@ export class LoopRunStore {
   }
 
   /**
+   * G4-R5-H5 (D-087 seam 2): append a TERMINAL capability event and register
+   * its node findings in the SAME immediate transaction — either the terminal
+   * lands with every finding registered (and any PWR acceptance applied), or
+   * nothing lands. Registration derives each finding from trusted journal
+   * facts only: id/sequence from the per-run finding chain, the source anchor
+   * from the revision the round examined (the event's input artifact triple;
+   * requirement-intake alone is unbound — its bootstrap anchor is not a
+   * revision), evidence = the caller-bound output blob, invalidation origin =
+   * the fixed per-category earliest node, and a REGRESSION cause binds the
+   * examined revision as the introducing fix-wave revision. Invalidation
+   * edges propagate only when the directive says so (non-admitting
+   * terminals); the append-time scope row is always persisted. A non-replay
+   * terminal whose registration is illegal fails the whole transaction
+   * (fail-closed): an agent finding is never silently dropped and never
+   * retyped to fit a legal shape.
+   */
+  appendCapabilityExecutionWithFindings(
+    event: LoopCapabilityExecutionEvent,
+    registration: CapabilityFindingsRegistration,
+  ): CapabilityFindingsAppendResult {
+    const db = this.connection();
+    validateLoopCapabilityExecutionEvent(event);
+    const row = capabilityExecutionToRow(event);
+    try {
+      return db.transaction((): CapabilityFindingsAppendResult => {
+        const appendResult = this.appendCapabilityExecutionInTransaction(db, event, row);
+        if (!appendResult.appended) {
+          // Idempotent exact replay: the original transaction already
+          // registered these findings — repeating would double-register.
+          return Object.freeze({
+            event: appendResult.event,
+            appended: false,
+            registeredFindingIds: Object.freeze([] as string[]),
+            acceptedFindingIds: Object.freeze([] as string[]),
+            resolvedFindingIds: Object.freeze([] as string[]),
+          });
+        }
+        const outcome = this.registerTerminalFindingsInTransaction(db, event, registration);
+        return Object.freeze({
+          event: appendResult.event,
+          appended: true,
+          registeredFindingIds: Object.freeze(outcome.registeredFindingIds),
+          acceptedFindingIds: Object.freeze(outcome.acceptedFindingIds),
+          resolvedFindingIds: Object.freeze(outcome.resolvedFindingIds),
+        });
+      }).immediate() as CapabilityFindingsAppendResult;
+    } catch (error) {
+      const result = this.reclassifyCapabilityAppendError(db, event, error);
+      // A replayed terminal means the original transaction already
+      // registered its findings — the replay result stays a no-op.
+      return Object.freeze({
+        ...result,
+        registeredFindingIds: Object.freeze([] as string[]),
+        acceptedFindingIds: Object.freeze([] as string[]),
+        resolvedFindingIds: Object.freeze([] as string[]),
+      });
+    }
+  }
+
+  private registerTerminalFindingsInTransaction(
+    db: Database.Database,
+    event: LoopCapabilityExecutionEvent,
+    registration: CapabilityFindingsRegistration,
+  ): { registeredFindingIds: string[]; acceptedFindingIds: string[]; resolvedFindingIds: string[] } {
+    if (event.status === "started") {
+      throw new LoopRunJournalError("INVALID_INPUT", "findings register with terminal events only");
+    }
+    const snapshot = this.readRunSnapshotInTransaction(db, event.runId);
+    if (snapshot === undefined) {
+      throw new LoopRunJournalError("STORE_CORRUPT", "run row missing after terminal append");
+    }
+    const requirementId = snapshot.state.identity.requirementId;
+    const revisions = this.readArtifactRevisionsInTransaction(db, event.runId, requirementId);
+    const findingChain = this.readFindingChainInTransaction(db, event.runId, requirementId);
+    const current = [...findingChain.findings];
+    let sequence = current.length === 0 ? 1 : current[current.length - 1]!.sequence + 1;
+    // The discovery anchor: the revision the round examined, resolved from
+    // the event's input artifact triple (ref + semver — artifactRef alone
+    // is ambiguous across superseded revisions). Intake is unbound. A
+    // verdict round consumes the SCAN round's Finding Ledger — not a
+    // revision — so the anchor walks one producer hop up the journal to the
+    // design revision the scan examined (frozen contract §5.4:
+    // scannedDesignVersion == designVersion).
+    let examined = event.inputArtifactRef === null || event.inputArtifactVersion === null
+      ? null
+      : revisions.find((item) =>
+          item.artifactRef === event.inputArtifactRef &&
+          item.semver === event.inputArtifactVersion
+        ) ?? null;
+    if (examined === null && event.capability !== "requirement-intake") {
+      const producer = this.readCapabilityExecutionsInTransaction(db, event.runId)
+        .find((item) =>
+          item.status === "succeeded" &&
+          item.outputArtifactRef === event.inputArtifactRef &&
+          item.outputDigest === event.inputDigest
+        );
+      if (producer !== undefined && producer.inputArtifactRef !== null) {
+        examined = revisions.find((item) =>
+          item.artifactRef === producer.inputArtifactRef &&
+          item.semver === producer.inputArtifactVersion
+        ) ?? null;
+      }
+    }
+    if (examined === null && event.capability !== "requirement-intake") {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "finding registration requires the examined input revision to exist in the run",
+      );
+    }
+    // Directive drafts + the G4-R5-H5 synthetic reflow fact: a FAIL or
+    // ESCALATED verdict ruling that reflows to solution-design registers the
+    // §5.4 reflow finding itself when the agent emitted none (category
+    // SOLUTION ⇒ earliest affected node solution-design), so the reflow is
+    // auditable even against a silent agent.
+    const drafts = [...registration.findings];
+    if (
+      registration.registerReflowFinding === true &&
+      !drafts.some((draft) => draft.category === "SOLUTION")
+    ) {
+      drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
+    }
+    const invalidationInsert = db.prepare(
+      `INSERT INTO loop_finding_invalidations (
+        finding_id, invalidation_index, revision_id, node_id
+      ) VALUES (?, ?, ?, ?)`,
+    );
+    const registeredFindingIds: string[] = [];
+    for (const draft of drafts) {
+      if (
+        typeof draft !== "object" || draft === null ||
+        typeof draft.severity !== "string" || typeof draft.category !== "string" ||
+        typeof draft.causeKind !== "string"
+      ) {
+        throw new LoopRunJournalError("INVALID_INPUT", "finding registration draft shape is invalid");
+      }
+      if (!(LOOP_FINDING_SEVERITIES as readonly string[]).includes(draft.severity)) {
+        throw new LoopRunJournalError("INVALID_INPUT", "finding registration severity is not canonical");
+      }
+      if (!(LOOP_FINDING_CATEGORIES as readonly string[]).includes(draft.category)) {
+        throw new LoopRunJournalError("INVALID_INPUT", "finding registration category is not canonical");
+      }
+      if (!(LOOP_FINDING_CAUSE_KINDS as readonly string[]).includes(draft.causeKind)) {
+        throw new LoopRunJournalError("INVALID_INPUT", "finding registration causeKind is not canonical");
+      }
+      const record = createLoopFinding({
+        runId: event.runId,
+        requirementId,
+        sequence,
+        sourceCapability: event.capability,
+        sourceRevisionId: examined === null ? null : examined.revisionId,
+        causeKind: draft.causeKind,
+        introducedByRevisionId:
+          draft.causeKind === "REGRESSION" && examined !== null ? examined.revisionId : null,
+        severity: draft.severity,
+        category: draft.category,
+        evidenceRef: registration.evidenceRef,
+        evidenceDigest: registration.evidenceDigest,
+        earliestAffectedNodeId: LOOP_FINDING_CATEGORY_EARLIEST_NODE[
+          draft.category as keyof typeof LOOP_FINDING_CATEGORY_EARLIEST_NODE
+        ],
+        createdAt: event.createdAt,
+      });
+      try {
+        validateLoopFindingChain([...current, record], findingChain.invalidations, event.runId);
+      } catch (error) {
+        if (error instanceof LoopRunJournalError) {
+          throw new LoopRunJournalError("ILLEGAL_TRANSITION", "finding registration transition is invalid");
+        }
+        throw error;
+      }
+      this.verifyFindingEvidenceBlob(record.evidenceRef, record.evidenceDigest, "append");
+      insertFindingRow(db, record);
+      current.push(record);
+      sequence += 1;
+      registeredFindingIds.push(record.findingId);
+      // Append-time invalidation along the canonical linear node order —
+      // identical mechanics to appendFinding, gated by the directive so
+      // scan rounds defer to the verdict's adjudication.
+      const edges: LoopFindingInvalidation[] = [];
+      if (registration.runInvalidation === true) {
+        for (const nodeId of downstreamNodeIds(record.earliestAffectedNodeId)) {
+          const pointer = db.prepare(
+            "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
+          ).get(event.runId, nodeId) as { revision_id?: unknown } | undefined;
+          if (pointer === undefined) continue;
+          const revision = revisions.find((item) => item.revisionId === pointer.revision_id);
+          if (revision === undefined) {
+            corrupt("current artifact pointer target is missing");
+          }
+          if (revision.validity !== "ACTIVE") continue;
+          markRevisionStaleRowInTransaction(db, revision);
+          edges.push(Object.freeze({
+            findingId: record.findingId,
+            invalidationIndex: edges.length,
+            revisionId: revision.revisionId,
+            nodeId,
+          }));
+        }
+      }
+      for (const edge of edges) {
+        invalidationInsert.run(edge.findingId, edge.invalidationIndex, edge.revisionId, edge.nodeId);
+      }
+      insertFindingScopeRow(
+        db,
+        Object.freeze({
+          findingId: record.findingId,
+          edgeCount: edges.length,
+          scopeDigest: sha256Hex(canonicalizeLoopFindingInvalidationEdges(edges)),
+        }),
+        event.runId,
+      );
+    }
+    // G4-R5-H5/H6: the verdict round's ledger adjudication — the ruling IS
+    // the event being appended. Scan-source findings are the OPEN findings
+    // whose evidence is a scan Finding Ledger blob of this run; the PASS
+    // ruling resolves ALL of them (old ledger included — the reflowed scope
+    // closes as a whole), the PWR ruling risk-accepts the consumed ledger's
+    // non-CRITICAL findings under THIS decision scope. CRITICAL findings are
+    // never acceptable and stay OPEN, blocking A1 admission — fail-closed.
+    const acceptedFindingIds: string[] = [];
+    const resolvedFindingIds: string[] = [];
+    const adjudication = registration.adjudicateScanFindings ?? null;
+    if (adjudication !== null) {
+      const scopeId = adjudication.decisionScopeId;
+      if (typeof scopeId !== "string" || scopeId.length === 0) {
+        throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings requires a decisionScopeId");
+      }
+      if (adjudication.mode !== "PASS_RESOLVE" && adjudication.mode !== "PWR_ACCEPT") {
+        throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings mode is not canonical");
+      }
+      if (event.capability !== "solution-gate" || event.executionRole !== "formal_verdict") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "scan-ledger adjudication is a formal_verdict ruling action",
+        );
+      }
+      if (event.decisionStatus !== "CONFIRMED") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "scan-ledger adjudication requires a CONFIRMED ruling",
+        );
+      }
+      if (
+        event.outputArtifactRef === null || event.outputDigest === null ||
+        event.inputArtifactRef === null || event.inputArtifactVersion === null
+      ) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "scan-ledger adjudication requires the Gate Result blob binding and the examined design revision",
+        );
+      }
+      if (adjudication.mode === "PWR_ACCEPT" && event.gateResult !== "PASS_WITH_RISK") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "PWR_ACCEPT adjudication requires a PASS_WITH_RISK ruling",
+        );
+      }
+      if (adjudication.mode === "PASS_RESOLVE" && event.gateResult !== "PASS") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "PASS_RESOLVE adjudication requires a PASS ruling",
+        );
+      }
+      this.verifyFindingEvidenceBlob(event.outputArtifactRef, event.outputDigest, "append");
+      // Gate-round discovery facts: every OPEN finding whose evidence blob is
+      // a gate round's persisted Finding Ledger. Scan rounds own the baseline
+      // ledger; a FAIL/ESCALATED verdict round registers its own reflow
+      // findings in a verdict ledger — a CONFIRMED PASS re-adjudication
+      // closes BOTH kinds (the discovering node solution-gate re-verifies its
+      // own reflow findings in the closure round, §5.2). The ledger refs are
+      // recovered from the journal itself — no caller-supplied lists.
+      const gateExecutions = this.readCapabilityExecutionsInTransaction(db, event.runId)
+        .filter((item) =>
+          item.capability === "solution-gate" &&
+          item.status === "succeeded" &&
+          item.executionEventId !== event.executionEventId
+        );
+      const scanLedgerRefs = new Set(
+        gateExecutions
+          .filter((item) =>
+            (item.executionRole === "adversarial_scan" ||
+              (adjudication.mode === "PASS_RESOLVE" && item.executionRole === "formal_verdict")) &&
+            item.unresolvedFindingsRef !== null
+          )
+          .map((item) => item.unresolvedFindingsRef as string)
+          .concat(
+            // G4-R5: the synthetic §5.4 reflow finding binds the verdict
+            // round's OUTPUT product as its evidence — a PASS_RESOLVE
+            // re-adjudication closes it by that binding.
+            adjudication.mode === "PASS_RESOLVE"
+              ? gateExecutions
+                .filter((item) => item.executionRole === "formal_verdict" && item.outputArtifactRef !== null)
+                .map((item) => item.outputArtifactRef as string)
+              : [],
+          ),
+      );
+      for (const target of current) {
+        if (target.status !== "OPEN") continue;
+        if (target.sourceCapability !== "solution-gate") continue;
+        if (!scanLedgerRefs.has(target.evidenceRef)) continue;
+        if (adjudication.mode === "PWR_ACCEPT") {
+          if (target.severity === "CRITICAL") continue;
+          if (target.evidenceRef !== event.consumedFindingsRef) continue;
+          const acceptance = validateLoopFindingRiskAcceptance({
+            riskAcceptedBy: "formal_verdict",
+            riskAcceptanceEvidenceRef: event.outputArtifactRef,
+            riskAcceptanceEvidenceDigest: event.outputDigest,
+            decisionScopeId: scopeId,
+          });
+          const accepted = acceptLoopFindingRisk(target, acceptance);
+          const updateResult = db.prepare(
+            `UPDATE loop_findings SET
+              status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
+              risk_acceptance_evidence_digest = ?, risk_accepted_scope_id = ?,
+              canonical_sha256 = ?
+            WHERE finding_id = ? AND status = ?`,
+          ).run(
+            "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
+            accepted.riskAcceptanceEvidenceDigest, accepted.riskAcceptedScopeId,
+            sha256Hex(canonicalizeLoopFinding(accepted)),
+            target.findingId, "OPEN",
+          );
+          if (updateResult.changes !== 1) {
+            corrupt("finding drifted during scan-finding risk acceptance");
+          }
+          insertFindingProofRow(db, createLoopFindingRiskAcceptanceProof(accepted, acceptance), event.runId);
+          acceptedFindingIds.push(target.findingId);
+        } else {
+          const resolution = validateLoopFindingResolution({
+            resolvedByNodeId: event.capability,
+            resolvedByRevisionId: examined!.revisionId,
+            resolutionEvidenceRef: event.outputArtifactRef,
+            resolutionEvidenceDigest: event.outputDigest,
+          });
+          const resolved = resolveLoopFinding(target, resolution);
+          const updateResult = db.prepare(
+            `UPDATE loop_findings SET
+              status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
+              resolution_evidence_digest = ?, canonical_sha256 = ?
+            WHERE finding_id = ? AND status = ?`,
+          ).run(
+            "RESOLVED", resolved.resolvedByRevisionId, resolved.resolutionEvidenceRef,
+            resolved.resolutionEvidenceDigest, sha256Hex(canonicalizeLoopFinding(resolved)),
+            target.findingId, "OPEN",
+          );
+          if (updateResult.changes !== 1) {
+            corrupt("finding drifted during scan-finding resolution");
+          }
+          insertFindingProofRow(
+            db,
+            createLoopFindingResolutionProof(resolved, resolution, examined!),
+            event.runId,
+          );
+          resolvedFindingIds.push(target.findingId);
+        }
+      }
+    }
+    return { registeredFindingIds, acceptedFindingIds, resolvedFindingIds };
+  }
+
+  /**
    * C02-WP5 F1: atomic dispatch claim for STARTED events only. Inside ONE
    * immediate transaction this method assembles the full recovery authority
    * (snapshot, executions, findings, revisions, current pointers, change
@@ -2155,7 +2590,6 @@ export class LoopRunStore {
       // WP4 Round 2 H1: append-time authorization is EXCLUSIVELY the
       // live pending target derived above in this transaction.
       validateLoopCapabilityExecutionChain([...current, event], event.runId, {
-        acceptedRiskScopes: regateContext.acceptedRiskScopes,
         allowedRestartTargetIndex: regateContext.allowedRestartTargetIndex,
         historicalFindings: regateContext.historicalFindings,
         feedbackChange: regateContext.feedbackChange,
@@ -3459,15 +3893,17 @@ export class LoopRunStore {
         }
         // Round 1 (H1-4): a finding binds to the CURRENT revision of its own
         // source capability — verified inside this transaction BEFORE any
-        // invalidation action runs.
+        // invalidation action runs. G4-R5-H5 exception: a gate-round finding
+        // (source solution-gate) binds the revision the round EXAMINED (the
+        // design current), because a scan or a FAIL/ESCALATED verdict never
+        // authors a Gate node revision (frozen contract §5.1).
         if (record.sourceRevisionId !== null) {
           const source = revisions.find((item) => item.revisionId === record.sourceRevisionId);
           if (source === undefined) {
             throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision does not exist in the run");
           }
-          if (source.nodeId !== record.sourceCapability) {
-            throw new LoopRunJournalError("ILLEGAL_TRANSITION", "source artifact revision belongs to another node");
-          }
+          // G4-R5-H5: the anchor is the EXAMINED revision — any node's
+          // product is a legal discovery anchor (frozen contract §5.1).
           if (source.validity !== "ACTIVE") {
             throw new LoopRunJournalError(
               "ILLEGAL_TRANSITION",
@@ -3476,7 +3912,13 @@ export class LoopRunStore {
           }
           const pointer = db.prepare(
             "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
-          ).get(record.runId, record.sourceCapability) as { revision_id?: unknown } | undefined;
+          ).get(
+            record.runId,
+            // G4-R5-H5: a gate-round finding is anchored to the node whose
+            // revision it EXAMINED, so the currency check runs against that
+            // node's pointer, not the gate's own.
+            source.nodeId,
+          ) as { revision_id?: unknown } | undefined;
           if (pointer === undefined || pointer.revision_id !== record.sourceRevisionId) {
             throw new LoopRunJournalError(
               "ILLEGAL_TRANSITION",
@@ -3690,6 +4132,15 @@ export class LoopRunStore {
         if (target.status !== "OPEN") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "only an open finding can be resolved");
         }
+        // G4-R5-H6 (frozen contract §5.2): the closure verifier must be the
+        // discovering node. The payload declares the verifier; the store
+        // enforces it against the immutable discovery fact.
+        if (valid.resolvedByNodeId !== target.sourceCapability) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "closure verifier must be the discovering node of the finding",
+          );
+        }
         const verifiedRequirementId = target.requirementId;
         const revisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
         const resolvedBy = revisions.find((item) => item.revisionId === valid.resolvedByRevisionId);
@@ -3742,10 +4193,17 @@ export class LoopRunStore {
   }
 
   /**
-   * OPEN → ACCEPTED_RISK: the target must be OPEN and must not be CRITICAL
-   * (critical findings are never risk-acceptable); riskAcceptedBy and the
-   * risk acceptance evidence ref/digest are required. Same guarded-UPDATE
-   * discipline as resolveFinding.
+   * OPEN → ACCEPTED_RISK (G4-R5-H6, frozen contract §5.2/§7.1): the ONLY
+   * legal acceptance is the formal_verdict's PWR ruling over a SCAN-source
+   * finding. Enforced from trusted journal facts inside the transaction:
+   *   - the acceptance subject must be formal_verdict (no human ritual);
+   *   - a succeeded formal_verdict event with THIS decisionScopeId must
+   *     exist, gateResult PASS_WITH_RISK and decisionStatus CONFIRMED (a
+   *     legal admitting PWR ruling);
+   *   - the finding's evidence must be exactly that verdict round's consumed
+   *     Finding Ledger — scan-source discovery facts only; verdict-source or
+   *     any other origin is refused;
+   *   - CRITICAL findings stay unacceptable (existing rule).
    */
   acceptFindingRisk(
     runId: string,
@@ -3755,6 +4213,12 @@ export class LoopRunStore {
     safeIdInput(runId, "runId");
     safeIdInput(findingId, "findingId");
     const valid = validateLoopFindingRiskAcceptance(acceptance);
+    if (valid.riskAcceptedBy !== "formal_verdict") {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "risk acceptance is the formal_verdict PWR ruling; no other subject may accept",
+      );
+    }
     const db = this.connection();
     try {
       return db.transaction((): FindingTransitionResult => {
@@ -3768,6 +4232,35 @@ export class LoopRunStore {
         }
         if (target.severity === "CRITICAL") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "critical findings are not risk-acceptable");
+        }
+        // The legal PWR basis: a succeeded formal_verdict event adjudicating
+        // THIS scope with a PASS_WITH_RISK + CONFIRMED ruling (v5 events
+        // carry decisionStatus; historical events never gain this authority).
+        const executions = this.readCapabilityExecutionsInTransaction(db, runId);
+        const ruling = executions.find((event) =>
+          event.status === "succeeded" &&
+          event.capability === "solution-gate" &&
+          event.executionRole === "formal_verdict" &&
+          event.decisionScopeId === valid.decisionScopeId &&
+          event.gateResult === "PASS_WITH_RISK" &&
+          event.decisionStatus === "CONFIRMED",
+        );
+        if (ruling === undefined) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "no legal PASS_WITH_RISK+CONFIRMED formal_verdict ruling exists for this decision scope",
+          );
+        }
+        // Scan-source binding: the finding's evidence must be exactly the
+        // Finding Ledger the ruling adjudicated.
+        if (
+          ruling.consumedFindingsRef === null ||
+          target.evidenceRef !== ruling.consumedFindingsRef
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "only scan-source findings adjudicated by the ruling's Finding Ledger may be risk-accepted",
+          );
         }
         this.verifyFindingEvidenceBlob(
           valid.riskAcceptanceEvidenceRef,
@@ -3799,32 +4292,10 @@ export class LoopRunStore {
         );
         return Object.freeze({ record: accepted });
       }).immediate() as FindingTransitionResult;
-      // W-GW-DIAG P-K-d (Decision-083): mark the decision in the run event
-      // stream — the first-class fact the chain validator admits canonical
-      // forward on (reasonCode = the verdict decisionScopeId; scope binding
-      // and hash-verified acceptance evidence live in the finding proof rows
-      // persisted above).
-      const snapshot = this.getSnapshot(runId);
-      if (snapshot !== undefined) {
-        this.appendEvent(Object.freeze({
-          eventId: `${runId}:${snapshot.state.lastSequence + 1}:risk_accepted`,
-          runId,
-          sequence: snapshot.state.lastSequence + 1,
-          kind: "risk_accepted",
-          stage: null,
-          attempt: 0,
-          createdAt: new Date().toISOString(),
-          inputDigest: null,
-          outputArtifactRef: null,
-          outputDigest: null,
-          errorCode: null,
-          retryable: null,
-          reasonCode: valid.decisionScopeId,
-          bindingId: null,
-          bindingVersion: null,
-          inputArtifactRef: null,
-        }));
-      }
+      // G4-R5-H2 (Decision-087 rollback): the Decision-083 risk_accepted run
+      // event is retired with the acceptance-ritual admission branches it
+      // fed. The durable RISK_ACCEPTANCE proof above is the lifecycle
+      // record; admission derives from the verdict's own §4.3 ruling.
     } catch (error) {
       if (error instanceof LoopRunJournalError) throw error;
       if (isBusyCode(sqliteErrorCode(error))) busy();
@@ -4019,7 +4490,7 @@ export class LoopRunStore {
         output_artifact_version, output_digest, gate_result,
         unresolved_findings_ref, unresolved_findings_digest,
         consumed_findings_ref, consumed_findings_digest,
-        decision_depth, decision_scope_id, decision_delta_ref,
+        decision_depth, decision_status, decision_scope_id, decision_delta_ref,
         decision_delta_digest,
         next_step_eligibility, error_code, retryable, reason_code,
         process_invocation_digest, process_exit_code, process_signal,
@@ -4029,7 +4500,7 @@ export class LoopRunStore {
       ) VALUES (
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
+        ?, ?, ?, ?, ?, ?, ?
       )`,
     ).run(
       row.execution_event_id, row.run_id, row.sequence, row.schema_version,
@@ -4041,6 +4512,7 @@ export class LoopRunStore {
       row.output_digest, row.gate_result, row.unresolved_findings_ref,
       row.unresolved_findings_digest, row.consumed_findings_ref,
       row.consumed_findings_digest, row.decision_depth,
+      row.decision_status,
       row.decision_scope_id, row.decision_delta_ref,
       row.decision_delta_digest, row.next_step_eligibility, row.error_code,
       row.retryable, row.reason_code, row.process_invocation_digest,
@@ -4086,27 +4558,20 @@ export class LoopRunStore {
     allowedRestartTargetIndex: number | null;
     historicalFindings: RegateFindingFacts[];
     feedbackChange: { previousGeneration: number } | null;
-    acceptedRiskScopes?: readonly string[];
   } {
-    // W-GW-DIAG P-K-d (Decision-083): decision scopes carrying a human
-    // ACCEPTED_RISK decision, derived from the finding rows (raw, in the
-    // same recursion-safe reduced-facts discipline as above).
-    const acceptedScopeRows = db.prepare(
-      `SELECT DISTINCT risk_accepted_scope_id AS scope FROM loop_findings
-       WHERE run_id = ? AND status = 'ACCEPTED_RISK' AND risk_accepted_scope_id IS NOT NULL`,
-    ).all(runId) as ReadonlyArray<{ scope: string }>;
-    const acceptedRiskScopes = acceptedScopeRows.map((row) => row.scope);
     // NOTE: deliberately avoids the validating readers (readFindings… /
     // readRunSnapshot… / readArtifactRevisions…) — findings reading pulls
     // artifact revisions, revisions reading validates the capability chain,
     // and the capability chain now validates against this helper's facts:
     // using them here would close an infinite reader recursion. The reduced
     // facts below are raw rows; full validation stays with the callers.
+    // G4-R5-H2: the Decision-083 acceptedRiskScopes derivation is retired
+    // with the admission branches it fed.
     const runRow = db.prepare(
       "SELECT requirement_id FROM loop_runs WHERE run_id = ?",
-    ).get(runId) as { requirement_id?: string } | undefined;
+    ).get(runId) as { requirement_id?: unknown } | undefined;
     if (runRow === undefined) {
-      return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null, acceptedRiskScopes: [] };
+      return { allowedRestartTargetIndex: null, historicalFindings: [], feedbackChange: null };
     }
     const findingRows = db.prepare(
       `SELECT f.finding_id AS finding_id, f.severity AS severity, f.status AS status,
@@ -4155,14 +4620,31 @@ export class LoopRunStore {
       feedbackRow === undefined || feedbackRow.previous_generation === null
         ? null
         : { previousGeneration: Number(feedbackRow.previous_generation) };
+    // G4-R5: succeeded-but-blocked points are mandatory wave re-drives —
+    // derived from the same journal facts the chain validator consumes.
+    // Raw reader: readCapabilityExecutionsInTransaction re-enters THIS
+    // context for read-path chain validation (mutual recursion).
+    const events = this.readCapabilityExecutionRowsValidatedInTransaction(db, runId);
+    const blockedPoints: number[] = [];
+    for (const item of events) {
+      if (
+        item.status === "succeeded" && item.nextStepEligibility === "BLOCKED" &&
+        item.capability !== "solution-gate"
+      ) {
+        const idx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+          (point) => point.capability === item.capability && point.executionRole === item.executionRole,
+        );
+        if (idx >= 0 && !blockedPoints.includes(idx)) blockedPoints.push(idx);
+      }
+    }
     const plan = planRegateFromFacts(
       historicalFindings,
       currentByNode,
       this.regatePointLastAttempts(db, runId),
       feedbackChange,
+      blockedPoints,
     );
     return {
-      acceptedRiskScopes,
       allowedRestartTargetIndex: plan.kind === "regate" ? plan.restartPointIndex : null,
       historicalFindings,
       feedbackChange,
@@ -4170,6 +4652,28 @@ export class LoopRunStore {
   }
 
   private readCapabilityExecutionsInTransaction(
+    db: Database.Database,
+    runId: string,
+  ): readonly LoopCapabilityExecutionEvent[] {
+    const events = this.readCapabilityExecutionRowsValidatedInTransaction(db, runId);
+    try {
+      const regateContext = this.regateChainContextInTransaction(db, runId);
+      validateLoopCapabilityExecutionChain(events, runId, {
+        historicalFindings: regateContext.historicalFindings,
+        historicalReplayMode: true,
+        feedbackChange: regateContext.feedbackChange,
+      });
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) {
+        corrupt("persisted capability execution chain is invalid");
+      }
+      throw error;
+    }
+    return Object.freeze(events);
+  }
+
+  /** Row-level validation only — no chain-context validation (no re-entry). */
+  private readCapabilityExecutionRowsValidatedInTransaction(
     db: Database.Database,
     runId: string,
   ): readonly LoopCapabilityExecutionEvent[] {
@@ -4203,21 +4707,6 @@ export class LoopRunStore {
       }
       return event;
     });
-    try {
-      const regateContext = this.regateChainContextInTransaction(db, runId);
-      validateLoopCapabilityExecutionChain(events, runId, {
-        acceptedRiskScopes: regateContext.acceptedRiskScopes,
-        historicalFindings: regateContext.historicalFindings,
-        historicalReplayMode: true,
-        feedbackChange: regateContext.feedbackChange,
-      });
-    } catch (error) {
-      if (error instanceof LoopRunJournalError) {
-        corrupt("persisted capability execution chain is invalid");
-      }
-      throw error;
-      throw error;
-    }
     return Object.freeze(events);
   }
 
@@ -4455,6 +4944,7 @@ export class LoopRunStore {
       ["revision_id", "TEXT", 0, 0], ["revision_node_id", "TEXT", 0, 0],
       ["revision_artifact_ref", "TEXT", 0, 0],
       ["revision_artifact_digest", "TEXT", 0, 0],
+      ["resolved_by_node_id", "TEXT", 0, 0],
       ["evidence_ref", "TEXT", 1, 0], ["evidence_digest", "TEXT", 1, 0],
       ["risk_accepted_by", "TEXT", 0, 0],
       ["risk_accepted_scope_id", "TEXT", 0, 0],
@@ -4651,8 +5141,19 @@ export class LoopRunStore {
     // later; the node binding never can).
     const readRevisions = this.readArtifactRevisionsInTransaction(db, runId, verifiedRequirementId);
     for (const record of findings) {
+      if (record.sourceRevisionId === null) {
+        // G4-R5-H5: only requirement-intake may be unbound (bootstrap
+        // discovery anchor, no revision exists at terminal-registration
+        // time); anything else is corruption.
+        if (record.sourceCapability !== "requirement-intake") {
+          corrupt("finding source revision does not match the source capability");
+        }
+        continue;
+      }
+      // G4-R5-H5: the anchor is the EXAMINED revision — existence and
+      // same-run binding are the invariants; the authoring node is free.
       const source = readRevisions.find((item) => item.revisionId === record.sourceRevisionId);
-      if (source === undefined || source.nodeId !== record.sourceCapability) {
+      if (source === undefined) {
         corrupt("finding source revision does not match the source capability");
       }
     }
@@ -4838,8 +5339,9 @@ export class LoopRunStore {
       ["output_digest", "TEXT", 0, 0], ["gate_result", "TEXT", 0, 0],
       ["unresolved_findings_ref", "TEXT", 0, 0], ["unresolved_findings_digest", "TEXT", 0, 0],
       ["consumed_findings_ref", "TEXT", 0, 0], ["consumed_findings_digest", "TEXT", 0, 0],
-      ["decision_depth", "TEXT", 0, 0], ["decision_scope_id", "TEXT", 0, 0],
-      ["decision_delta_ref", "TEXT", 0, 0], ["decision_delta_digest", "TEXT", 0, 0],
+      ["decision_depth", "TEXT", 0, 0], ["decision_status", "TEXT", 0, 0],
+      ["decision_scope_id", "TEXT", 0, 0], ["decision_delta_ref", "TEXT", 0, 0],
+      ["decision_delta_digest", "TEXT", 0, 0],
       ["next_step_eligibility", "TEXT", 0, 0], ["error_code", "TEXT", 0, 0],
       ["retryable", "INTEGER", 0, 0], ["reason_code", "TEXT", 0, 0],
       ["process_invocation_digest", "TEXT", 0, 0], ["process_exit_code", "INTEGER", 0, 0],

@@ -375,7 +375,12 @@ async function main(): Promise<void> {
     const ss = scan.recoveryContext.capabilityStates[2]!;
     // formal_verdict returns PASS but the finding ledger still carries a CRITICAL issue.
     const verdict = await makeEntry(h, {
-      hermesRunnerOverride: { run: async (req: ExecutionRequest) => qualified(req, { gateResult: "PASS", unresolvedFindings: unclosed }) } as never,
+      hermesRunnerOverride: { run: async (req: ExecutionRequest) => qualified(req, {
+        gateResult: "PASS",
+        decisionStatus: "CONFIRMED",
+        decisionDepth: "STANDARD",
+        unresolvedFindings: unclosed,
+      }) } as never,
     }).execute({
       requirementId: h.id.requirementId, identity: h.id, capability: "solution-gate",
       executionRole: "formal_verdict" as const,

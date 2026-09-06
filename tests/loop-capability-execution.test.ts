@@ -111,6 +111,7 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
     decisionDepth: null,
+    decisionStatus: null,
     decisionScopeId: null,
     decisionDeltaRef: null,
     decisionDeltaDigest: null,
@@ -323,15 +324,16 @@ async function main(): Promise<void> {
     v6Store.createRun(identity(migrationRoot));
     v6Store.close();
     const v6db = new Database(v6Path);
-    ok(v6db.pragma("user_version", { simple: true }) === 7, "fresh store declares format v7");
+    ok(v6db.pragma("user_version", { simple: true }) === 8, "fresh store declares format v8 (G4-R5-H1: decision_status column)");
     v6db.close();
     const reopened = new LoopRunStore(v6Path);
     reopened.init();
     ok(reopened.getSnapshot("run-wp4b-001") !== undefined, "v6 run remains readable");
     reopened.close();
 
-    // Known historical formats 1..5 are rejected — never migrated.
-    for (const historical of [1, 2, 3, 4, 5, 6]) {
+    // Known historical formats 1..7 are rejected — never migrated (G4-R5-H1:
+    // v7 journals cannot gain decisionStatus authority, so no migration).
+    for (const historical of [1, 2, 3, 4, 5, 6, 7]) {
       const historicalPath = join(migrationRoot, `historical-${historical}.db`);
       const seed = new Database(historicalPath);
       seed.pragma(`user_version = ${historical}`);
@@ -343,10 +345,10 @@ async function main(): Promise<void> {
     // A declared version above the supported one is a future format.
     const futurePath = join(migrationRoot, "future.db");
     const futureSeed = new Database(futurePath);
-    futureSeed.pragma("user_version = 8");
+    futureSeed.pragma("user_version = 9");
     futureSeed.close();
     const futureRejected = new LoopRunStore(futurePath);
-    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 8 is rejected as a future format");
+    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 9 is rejected as a future format");
 
     // An unversioned database that already carries LOOP business tables is
     // history, never a fresh store; an empty v0 database initializes fresh.
@@ -361,7 +363,7 @@ async function main(): Promise<void> {
     new Database(freshPath).close();
     const freshStore = new LoopRunStore(freshPath);
     freshStore.init();
-    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 7, "empty unversioned database initializes fresh to v7");
+    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 8, "empty unversioned database initializes fresh to v8");
     freshStore.close();
 
     // Inside the declared v6 format, drift is STORE_CORRUPT — not a format
@@ -502,6 +504,7 @@ async function main(): Promise<void> {
         outputDigest: reviewDigest,
         gateResult: "NOT_APPLICABLE",
         decisionDepth: "STANDARD" as const,
+        decisionStatus: "CONFIRMED" as const,
         decisionScopeId: "run-wp4b-001:decision:1",
         decisionDeltaRef: reviewRef,
         decisionDeltaDigest: reviewDigest,
@@ -520,6 +523,7 @@ async function main(): Promise<void> {
         outputDigest: reviewDigest,
         gateResult: "PASS_WITH_RISK",
         decisionDepth: "STANDARD" as const,
+        decisionStatus: "CONFIRMED" as const,
         decisionScopeId: "run-wp4b-001:decision:1",
         decisionDeltaRef: reviewRef,
         decisionDeltaDigest: reviewDigest,
@@ -756,6 +760,7 @@ async function main(): Promise<void> {
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
           decisionDepth: null,
+          decisionStatus: null,
           decisionScopeId: null,
           decisionDeltaRef: null,
           decisionDeltaDigest: null,
@@ -799,6 +804,7 @@ async function main(): Promise<void> {
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
           decisionDepth: isVerdictPoint ? ("STANDARD" as const) : null,
+          decisionStatus: isVerdictPoint ? ("CONFIRMED" as const) : null,
           decisionScopeId,
           decisionDeltaRef: decisionDelta?.artifactRef ?? null,
           decisionDeltaDigest: decisionDelta?.digest ?? null,
