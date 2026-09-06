@@ -226,6 +226,7 @@ case "${ACTION}" in
         },
         "entries" => nodes.map { |n| { "node" => n, "status" => "pending", "artifact_path" => nil, "version" => nil, "digest" => nil, "updated_at" => nil, "source_event_ref" => nil } },
         "finding_index" => [],
+        "declaration_log" => [],
         "repair_records" => []
       }
       File.write(ENV["STATE_FILE"], JSON.generate(state))
@@ -249,19 +250,36 @@ case "${ACTION}" in
     if [[ "${DSTATUS}" == "ESCALATED" ]]; then
       [[ "${DDEPTH}" != "" ]] || { echo "ESCALATED requires --decision-depth (new requiredDepth)" >&2; exit 2; }
     fi
-    RESULT_FILE="$(mktemp "${TMPDIR:-/tmp}/req-manifest-result.json.XXXXXX")"
-    NODE="${NODE}" APATH="${APATH}" VER="${VER}" DG="${DG}" NOW="${NOW}" GATE="${GATE}" DDEPTH="${DDEPTH}" DSTATUS="${DSTATUS}" STALE="${STALE}" SREF="${SREF}" DSEQ="${DSEQ}" STATE_FILE="${STATE_FILE}" RESULT_FILE="${RESULT_FILE}" ruby -rjson -e '
+    # G3-R2-H2: declaration_log — full-input replay discrimination (identity by input digest)
+    INPUT_DIGEST="$(printf '%s' "entry|${NODE}|${APATH}|${VER}|${DG}|${GATE}|${DDEPTH}|${DSTATUS}|${STALE}|${SREF}" | ruby -rdigest -e 'puts Digest::SHA256.hexdigest(STDIN.read)')"
+    REPLAY_MARKER="$(mktemp "${TMPDIR:-/tmp}/req-manifest-replay.XXXXXX")"
+    DSEQ="${DSEQ}" INPUT_DIGEST="${INPUT_DIGEST}" REPLAY_MARKER="${REPLAY_MARKER}" STATE_FILE="${STATE_FILE}" ruby -rjson -e '
       state = JSON.parse(File.read(ENV["STATE_FILE"]))
-      node = ENV["NODE"]; now = ENV["NOW"]; seq = ENV["DSEQ"].to_i
+      seq = ENV["DSEQ"].to_i
       if seq <= state["publish_seq"]
-        warn "NO-OP REPLAY: declaration seq #{seq} already covered (publish_seq=#{state["publish_seq"]}); identical replay succeeds without state change"
-        File.write(ENV["RESULT_FILE"], JSON.generate(state))
-        exit 0
+        entry_in_log = (state["declaration_log"] || []).find { |d| d["seq"] == seq }
+        if entry_in_log && entry_in_log["input_digest"] == ENV["INPUT_DIGEST"]
+          warn "NO-OP REPLAY: declaration seq #{seq} with identical input digest; nothing changed"
+          File.write(ENV["REPLAY_MARKER"], "replay")
+          exit 0
+        end
+        warn "ADMISSION_DENIED: declaration seq #{seq} replay with DIFFERENT input (conflicting replay is rejected)"
+        exit 1
       end
       if seq > state["publish_seq"] + 1
         warn "ADMISSION_DENIED: declaration gap (seq #{seq} > publish_seq+1=#{state["publish_seq"] + 1})"
         exit 1
       end
+    ' || exit 1
+    if [[ -s "${REPLAY_MARKER}" ]]; then
+      rm -f "${REPLAY_MARKER}" "${STATE_FILE}"
+      echo "ENTRY-UPDATE NO-OP REPLAY: seq ${DSEQ} identical; nothing changed"
+      exit 0
+    fi
+    rm -f "${REPLAY_MARKER}"
+    NODE="${NODE}" APATH="${APATH}" VER="${VER}" DG="${DG}" NOW="${NOW}" GATE="${GATE}" DDEPTH="${DDEPTH}" DSTATUS="${DSTATUS}" STALE="${STALE}" SREF="${SREF}" DSEQ="${DSEQ}" INPUT_DIGEST="${INPUT_DIGEST}" STATE_FILE="${STATE_FILE}" ruby -rjson -e '
+      state = JSON.parse(File.read(ENV["STATE_FILE"]))
+      node = ENV["NODE"]; now = ENV["NOW"]; seq = ENV["DSEQ"].to_i
       entry = state["entries"].find { |e| e["node"] == node }
       if entry.nil?
         warn "BLOCKED: unknown node #{node}"
@@ -293,15 +311,10 @@ case "${ACTION}" in
       end
       state["publish_seq"] = seq
       state["updated_at"] = now
-      File.write(ENV["RESULT_FILE"], JSON.generate(state))
+      state["declaration_log"] = (state["declaration_log"] || [])
+      state["declaration_log"] << { "seq" => seq, "kind" => "entry-update", "input_digest" => ENV["INPUT_DIGEST"] }
+      File.write(ENV["STATE_FILE"], JSON.generate(state))
     ' || exit 1
-    # identical replay: resulting state equals current state -> no-op success (G3-R1-H2)
-    if cmp -s "${STATE_FILE}" "${RESULT_FILE}"; then
-      rm -f "${STATE_FILE}" "${RESULT_FILE}"
-      echo "NO-OP REPLAY: declaration seq ${DSEQ} identical to published state; nothing changed"
-      exit 0
-    fi
-    mv "${RESULT_FILE}" "${STATE_FILE}"
     seal_and_publish "${STATE_FILE}"
     rm -f "${STATE_FILE}"
     echo "ENTRY-UPDATE OK: node=${NODE} current seq=${DSEQ}"
@@ -339,8 +352,30 @@ case "${ACTION}" in
         errors << "register discovered unknown: #{r["discovered_at"]}" unless known.include?(r["discovered_at"])
       end
       actions = decl["finding_actions"] || []
+      # batch-internal duplicate register detection (G3-R2-H1)
+      reg_ids = registers.map { |r| r["finding_id"] }
+      if reg_ids.uniq.size != reg_ids.size
+        errors << "batch-internal duplicate finding_id in registers"
+      end
+      # candidate state: apply gate fields to a copy BEFORE validating accept actions
+      candidate = JSON.parse(JSON.generate(state))
+      if node && entry && decl["gate_result"]
+        entry_c = candidate["entries"].find { |e| e["node"] == node }
+        entry_c["gate_result"] = decl["gate_result"]
+        entry_c["decision_depth"] = decl["decision_depth"]
+        entry_c["decision_status"] = decl["decision_status"]
+      end
       actions.each do |a|
-        row = (state["finding_index"] || []).find { |f| f["finding_id"] == a["finding_id"] }
+        row = (candidate["finding_index"] || []).find { |f| f["finding_id"] == a["finding_id"] }
+        if row.nil?
+          # may be registered in the same batch
+          row = registers.find { |r| r["finding_id"] == a["finding_id"] }
+          if row
+            row = { "finding_id" => row["finding_id"], "discovered_at" => row["discovered_at"],
+                    "status" => "OPEN", "closed_by" => nil, "closure_evidence_ref" => nil,
+                    "closure_evidence_digest" => nil, "closure_bound_revision_id" => nil }
+          end
+        end
         if row.nil?
           errors << "finding not registered: #{a["finding_id"]}"
           next
@@ -352,14 +387,29 @@ case "${ACTION}" in
           errors << "finding #{a["finding_id"]}: conflicting replay" unless same
           next
         end
-        if a["action"] == "accept"
-          errors << "ACCEPTED only for scan source (discoveredAt=solution-gate)" unless row["discovered_at"] == "solution-gate"
-          ge = state["entries"].find { |e| e["node"] == "solution-gate" }
-          errors << "accept requires a published PASS_WITH_RISK verdict" if ge.nil? || ge["gate_result"] != "PASS_WITH_RISK"
+        # per-action role rules (G3-R2-H1)
+        if a["action"] == "resolve"
+          errors << "closed_by (#{a["closed_by"]}) must be the discovering node (#{row["discovered_at"]})" unless a["closed_by"] == row["discovered_at"]
+          errors << "resolve requires bound_revision_id" if a["bound_revision_id"].to_s.empty?
+        else
+          errors << "ACCEPTED only for scan source" unless row["discovered_at"] == "solution-gate"
+          errors << "closed_by (#{a["closed_by"]}) must be formal_verdict — the PWR adjudicator" unless a["closed_by"] == "formal_verdict"
+          # validate against CANDIDATE gate state (G3-R2-H1: FAIL→PWR in same publish is legal)
+          ge_c = candidate["entries"].find { |e| e["node"] == "solution-gate" }
+          if ge_c.nil? || ge_c["gate_result"].nil?
+            errors << "accept requires a published solution-gate verdict"
+          elsif ge_c["gate_result"] == "FAIL"
+            errors << "accept rejected: candidate verdict is FAIL"
+          elsif ge_c["gate_result"] != "PASS_WITH_RISK"
+            errors << "accept requires candidate gate_result=PASS_WITH_RISK (got #{ge_c["gate_result"]})"
+          end
+          errors << "accept requires bound_revision_id (PWR ruling revision)" if a["bound_revision_id"].to_s.empty?
+          # real ruling-revision verification
+          if a["bound_revision_id"] && ge_c && ge_c["version"] && a["bound_revision_id"] != ge_c["version"]
+            errors << "bound_revision_id (#{a["bound_revision_id"]}) must match verdict artifact version (#{ge_c["version"]})"
+          end
         end
-        errors << "closed_by must be the discovering node (#{row["discovered_at"]})" unless a["closed_by"] == row["discovered_at"]
         errors << "evidence_digest missing" if a["evidence_digest"].to_s.empty?
-        errors << "bound_revision_id required for resolve" if a["action"] == "resolve" && a["bound_revision_id"].to_s.empty?
       end
       unless errors.empty?
         warn "ADMISSION_DENIED: merged declaration validation failed:"
@@ -399,10 +449,12 @@ case "${ACTION}" in
         row["closed_by"] = a["closed_by"]
         row["closure_evidence_ref"] = a["evidence_ref"]
         row["closure_evidence_digest"] = a["evidence_digest"]
-        row["closure_bound_revision_id"] = a["bound_revision_id"]
+        row["closure_bound_revision_id"] = a["bound_revision_id"]  # resolve=fix revision; accept=PWR ruling revision
       end
       state["publish_seq"] = seq
       state["updated_at"] = now
+      state["declaration_log"] = (state["declaration_log"] || [])
+      state["declaration_log"] << { "seq" => seq, "kind" => "merged-publish", "input_digest" => Digest::SHA256.hexdigest(JSON.generate(decl)) }
       File.write(ENV["STATE_FILE"], JSON.generate(state))
     ' || exit 1
     check_self_consistency "${STATE_FILE}"
@@ -456,8 +508,12 @@ case "${ACTION}" in
     case "${ACT}" in resolve|accept) ;; *) echo "Invalid --action: ${ACT}" >&2; exit 2 ;; esac
     load_state
     check_self_consistency "${STATE_FILE}"
-    # pre-seal validation (G3-R1-H1): legal responsibility + evidence + replay idempotency
-    FID="${FID}" ACT="${ACT}" CBY="${CBY}" EREF="${EREF}" EDG="${EDG}" BOUND="${BOUND}" STATE_FILE="${STATE_FILE}" ruby -rjson -e '
+    # G3-R2-H1/H2: per-action role rules + full-binding replay discrimination +
+    # declaration_log. Single ruby block: validate -> replay-check -> apply.
+    INPUT_DIGEST="$(printf '%s' "action|${FID}|${ACT}|${CBY}|${EREF}|${EDG}|${BOUND}" | ruby -rdigest -e 'puts Digest::SHA256.hexdigest(STDIN.read)')"
+    REPLAY_MARKER="$(mktemp "${TMPDIR:-/tmp}/req-manifest-replay.XXXXXX")"
+    FID="${FID}" ACT="${ACT}" CBY="${CBY}" EREF="${EREF}" EDG="${EDG}" BOUND="${BOUND}" \
+      INPUT_DIGEST="${INPUT_DIGEST}" REPLAY_MARKER="${REPLAY_MARKER}" STATE_FILE="${STATE_FILE}" ruby -rjson -rdigest -e '
       state = JSON.parse(File.read(ENV["STATE_FILE"]))
       fid = ENV["FID"]
       row = (state["finding_index"] || []).find { |f| f["finding_id"] == fid }
@@ -465,20 +521,14 @@ case "${ACTION}" in
         warn "ADMISSION_DENIED: finding not registered: #{fid}"
         exit 1
       end
-      if row["status"] != "OPEN"
-        target = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
-        if row["status"] == target && row["closed_by"] == ENV["CBY"] &&
-           row["closure_evidence_ref"] == ENV["EREF"] && row["closure_evidence_digest"] == ENV["EDG"]
-          warn "NO-OP REPLAY: finding #{fid} already #{row["status"]} with identical closure binding"
-          exit 0
-        end
-        warn "ADMISSION_DENIED: finding #{fid} is #{row["status"]}, not OPEN; identical effective replays are no-op, conflicting replays are rejected"
-        exit 1
-      end
       errors = []
-      errors << "closed_by (#{ENV["CBY"]}) must be the discovering node (#{row["discovered_at"]}) — independent closure verification (contract §5.2)" unless ENV["CBY"] == row["discovered_at"]
-      if ENV["ACT"] == "accept"
+      # per-action responsibility (G3-R2-H1): resolve -> discovering node; accept -> formal_verdict
+      if ENV["ACT"] == "resolve"
+        errors << "closed_by (#{ENV["CBY"]}) must be the discovering node (#{row["discovered_at"]}) — independent closure verification (contract §5.2)" unless ENV["CBY"] == row["discovered_at"]
+        errors << "resolve requires --bound-revision-id (current ACTIVE revision)" if ENV["BOUND"].to_s.empty?
+      else
         errors << "ACCEPTED only applies to scan source (discoveredAt=solution-gate)" unless row["discovered_at"] == "solution-gate"
+        errors << "closed_by (#{ENV["CBY"]}) must be formal_verdict — the PWR adjudicator (contract §7.1)" unless ENV["CBY"] == "formal_verdict"
         ge = (state["entries"] || []).find { |e| e["node"] == "solution-gate" }
         if ge.nil? || ge["gate_result"].nil?
           errors << "accept requires a published solution-gate verdict"
@@ -487,39 +537,45 @@ case "${ACTION}" in
         elsif ge["gate_result"] != "PASS_WITH_RISK"
           errors << "accept requires gate_result=PASS_WITH_RISK (got #{ge["gate_result"]})"
         end
-        errors << "accept requires --bound-revision-id (formal_verdict PWR ruling evidence revision)" if ENV["BOUND"].to_s.empty?
-      else
-        errors << "resolve requires --bound-revision-id (current ACTIVE revision of the earliest-affected or downstream node)" if ENV["BOUND"].to_s.empty?
+        errors << "accept requires --bound-revision-id (PWR ruling evidence revision)" if ENV["BOUND"].to_s.empty?
+        # real ruling-revision verification: bound revision must be the verdict artifact version
+        if ENV["BOUND"] && ge && ge["version"] && ENV["BOUND"] != ge["version"]
+          errors << "bound_revision_id (#{ENV["BOUND"]}) must match the verdict artifact version (#{ge["version"]})"
+        end
       end
       errors << "evidence_digest missing" if ENV["EDG"].to_s.empty?
+      # idempotent replay: full closure binding equality -> no-op (G3-R2-H2)
+      if errors.empty? && row["status"] != "OPEN"
+        target = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
+        if row["status"] == target && row["closed_by"] == ENV["CBY"] &&
+           row["closure_evidence_ref"] == ENV["EREF"] && row["closure_evidence_digest"] == ENV["EDG"] &&
+           (row["closure_bound_revision_id"] == ENV["BOUND"] || (ENV["ACT"] == "accept" && row["closure_bound_revision_id"].nil? && ENV["BOUND"].to_s.empty?))
+          warn "NO-OP REPLAY: finding #{fid} already #{row["status"]} with identical closure binding"
+          File.write(ENV["REPLAY_MARKER"], "replay")
+          exit 0
+        end
+        errors << "finding #{fid} is #{row["status"]}, not OPEN; identical effective replays are no-op, conflicting replays are rejected"
+      end
       unless errors.empty?
         warn "ADMISSION_DENIED: lifecycle action validation failed:"
         errors.each { |x| warn "  - #{x}" }
         exit 1
       end
-    ' || exit 1
-    # idempotent replay check: identical effective action -> no-op
-    FID="${FID}" ACT="${ACT}" CBY="${CBY}" EREF="${EREF}" EDG="${EDG}" BOUND="${BOUND}" STATE_FILE="${STATE_FILE}" ruby -rjson -e '
-      state = JSON.parse(File.read(ENV["STATE_FILE"]))
-      row = state["finding_index"].find { |f| f["finding_id"] == ENV["FID"] }
-      target = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
-      if row["status"] == target && row["closed_by"] == ENV["CBY"] &&
-         row["closure_evidence_ref"] == ENV["EREF"] && row["closure_evidence_digest"] == ENV["EDG"] &&
-         (ENV["ACT"] == "accept" || row["closure_bound_revision_id"] == ENV["BOUND"])
-        warn "NO-OP REPLAY: finding #{ENV["FID"]} already #{target} with identical binding"
-        exit 0
-      end
-    ' || exit 1
-    FID="${FID}" ACT="${ACT}" CBY="${CBY}" EREF="${EREF}" EDG="${EDG}" BOUND="${BOUND}" STATE_FILE="${STATE_FILE}" ruby -rjson -e '
-      state = JSON.parse(File.read(ENV["STATE_FILE"]))
-      row = state["finding_index"].find { |f| f["finding_id"] == ENV["FID"] }
+      # apply
       row["status"] = ENV["ACT"] == "accept" ? "ACCEPTED" : "RESOLVED"
       row["closed_by"] = ENV["CBY"]
       row["closure_evidence_ref"] = ENV["EREF"]
       row["closure_evidence_digest"] = ENV["EDG"]
       row["closure_bound_revision_id"] = ENV["BOUND"]
+      state["updated_at"] = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
       File.write(ENV["STATE_FILE"], JSON.generate(state))
     ' || exit 1
+    if [[ -s "${REPLAY_MARKER}" ]]; then
+      rm -f "${REPLAY_MARKER}" "${STATE_FILE}"
+      echo "FINDING-ACTION NO-OP REPLAY: ${FID} already migrated with identical binding"
+      exit 0
+    fi
+    rm -f "${REPLAY_MARKER}"
     seal_and_publish "${STATE_FILE}"
     rm -f "${STATE_FILE}"
     echo "FINDING-ACTION OK: ${FID} -> ${ACT}"
@@ -537,8 +593,23 @@ case "${ACTION}" in
       tp = state["entries"].find { |e| e["node"] == "task-planning" }
       impl = state["entries"].find { |e| e["node"] == "implementation" }
       cr = state["entries"].find { |e| e["node"] == "code-review" }
-      open_findings = (state["finding_index"] || []).select { |f| f["status"] == "OPEN" }
+      all_findings = (state["finding_index"] || [])
+      open_findings = all_findings.select { |f| f["status"] == "OPEN" }
       reasons = []
+      # G3-R2-M1: proper blocking scope — a finding blocks node X only if X is
+      # earliestAffectedNodeId or downstream in canonical order (contract §5.2)
+      order = %w[requirement-intake solution-design solution-gate task-planning implementation code-review knowledge-sync]
+      blocked_by = lambda do |target|
+        open_findings.select do |f|
+          ei = order.index(f["earliest_affected_node_id"])
+          ti = order.index(target)
+          ei && ti && ti >= ei
+        end
+      end
+      binding_complete = lambda do |f|
+        f["closed_by"] && f["closure_evidence_ref"] && f["closure_evidence_digest"] &&
+          (f["status"] == "ACCEPTED" || f["closure_bound_revision_id"])
+      end
       intact = lambda do |e|
         if e.nil? || e["status"] != "current"
           false
@@ -559,29 +630,57 @@ case "${ACTION}" in
         end
       end
       gate_ok = gate && gate["status"] == "current" && intact.call(gate)
+      blocking_for = ->(target) {
+        bf = blocked_by.call(target)
+        bf.empty? ? nil : "OPEN blocking findings (scoped): #{bf.map { |f| f["finding_id"] }.join(",")}"
+      }
       case node
       when "task-planning"
         reasons << "Gate Result not current/intact" unless gate_ok
         reasons << "decisionStatus=#{gate["decision_status"].inspect} not CONFIRMED" if gate_ok && gate["decision_status"] != "CONFIRMED"
         reasons << "gateResult=#{gate["gate_result"].inspect} not in PASS/PASS_WITH_RISK" if gate_ok && !%w[PASS PASS_WITH_RISK].include?(gate["gate_result"])
-        reasons << "OPEN blocking findings: #{open_findings.map { |f| f["finding_id"] }.join(",")}" unless open_findings.empty?
+        if (r = blocking_for.call(node))
+          reasons << r
+        end
         reasons << "solution-design not current/intact" unless design && design["status"] == "current" && intact.call(design)
       when "implementation"
         reasons << "task plan not current/intact" unless tp && tp["status"] == "current" && intact.call(tp)
+        if (r = blocking_for.call(node))
+          reasons << r
+        end
       when "code-review"
         reasons << "implementation record not current/intact" unless impl && impl["status"] == "current" && intact.call(impl)
+        if (r = blocking_for.call(node))
+          reasons << r
+        end
         if impl && impl["artifact_path"]
           rec = File.join(ENV["LIB_DIR"], impl["artifact_path"])
           if File.file?(rec)
             content = File.read(rec)
-            unless content.include?("baseRevision=") && content.include?("reviewedRevision=") && content.include?("changeDigest=")
-              reasons << "implementation record missing evidence binding (baseRevision/reviewedRevision/changeDigest)"
+            # G3-R2-M1: field VALUES must be non-empty, not just field names present
+            missing = []
+            %w[baseRevision reviewedRevision changeDigest].each do |k|
+              m = content.match(/#{k}=([^\s\n]+)/)
+              missing << k if m.nil? || m[1].strip.empty? || m[1] == "PENDING"
             end
+            reasons << "implementation record evidence binding incomplete/empty: #{missing.join(",")}" unless missing.empty?
           end
         end
       when "knowledge-sync"
         reasons << "code-review report not current/intact" unless cr && cr["status"] == "current" && intact.call(cr)
-        reasons << "OPEN blocking findings: #{open_findings.map { |f| f["finding_id"] }.join(",")}" unless open_findings.empty?
+        if (r = blocking_for.call(node))
+          reasons << r
+        end
+        # A4: routed declaration check (G3-R2-M1)
+        kt = File.join(ENV["LIB_DIR"], "..", ".sdlc", "business_domain", "knowledge-target.yaml")
+        if File.file?(kt)
+          kt_content = File.read(kt)
+          unless kt_content.match?(/status:\s*"routed"/) || kt_content.match?(/status:\s*routed/)
+            reasons << "knowledge-target not routed (PROPOSAL_ONLY mode)"
+          end
+        else
+          reasons << "knowledge-target declaration missing (BLOCKED: run initializer first)"
+        end
       when "solution-gate"
         reasons << "solution-design not current/intact" unless design && design["status"] == "current" && intact.call(design)
       end
@@ -612,11 +711,13 @@ case "${ACTION}" in
       end
       state.delete("manifest_digest")
       corrected = []
+      unresolvable = []
+      # G3-R2-H3: verify ALL entries with artifact bindings (current AND stale)
       (state["entries"] || []).each do |e|
-        next unless e["status"] == "current" && e["artifact_path"]
+        next if e["artifact_path"].nil? || e["digest"].nil?
         path = File.join(ENV["LIB_DIR"], e["artifact_path"])
         unless File.file?(path)
-          corrected << { "node" => e["node"], "issue" => "artifact file missing", "recorded_digest" => e["digest"] }
+          unresolvable << { "node" => e["node"], "issue" => "artifact file missing", "recorded_digest" => e["digest"] }
           next
         end
         actual = Digest::SHA256.file(path).hexdigest
@@ -624,6 +725,12 @@ case "${ACTION}" in
           corrected << { "node" => e["node"], "issue" => "digest drift corrected from actual artifact", "recorded_digest" => e["digest"], "corrected_digest" => actual }
           e["digest"] = actual
         end
+      end
+      unless unresolvable.empty?
+        warn "ADMISSION_DENIED: repair cannot rebuild trusted baseline — unresolvable artifact bindings:"
+        unresolvable.each { |c| warn "  - #{c["node"]}: #{c["issue"]}" }
+        warn "MANIFEST_CORRUPT_STOP: repair aborted; manual artifact recovery required before baseline rebuild"
+        exit 1
       end
       state["corrections"] = corrected
       state["repair_records"] = (state["repair_records"] || [])

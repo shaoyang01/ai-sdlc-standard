@@ -946,12 +946,17 @@ else
     "Depth: LIGHT / STANDARD / DEEP", "decisionStatus: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN",
     "requiredDepth:", "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
     "Scanned Design Version:", "Ledger Digest:", "## Depth Coverage Ledger",
+    "## Risk Refs",
     "adversarial_scan", "formal_verdict", "Earliest Affected Node",
     "Current / Stale:", "Finding Ledger Artifact:", "Scan Executor Binding",
-    "Verdict Executor Binding", "## Re-Gate Check", "## Risk Acceptance",
+    "Verdict Executor Binding", "## Re-Gate Check", "## Risk Refs",
     "PASS_WITH_RISK", "Reviewed Artifact:", "Reviewed Artifact Version:",
     "Gate Artifact Version:"
   ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
+  # G3-R2-M3: prevent proof-ritual restoration (Decision-086)
+  if gate_template.include?("ACCEPTED_RISK proof") || gate_template.include?("Accepted By:")
+    errors << "gate-result-template: proof-ritual language must not be restored (Decision-086)"
+  end
   {
     /^## Design Depth Decision/ => 1,
     /^## Finding Ledger Reference/ => 1

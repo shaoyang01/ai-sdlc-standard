@@ -196,11 +196,27 @@ assert_contains "${LIB}/manifest.md" "status: RESOLVED"
 assert_contains "${LIB}/manifest.md" "closed_by: code-review"
 assert_contains "${LIB}/manifest.md" "closure_bound_revision_id: REV2"
 
-# non-scan source must NOT take ACCEPTED (V4)
-bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F01 \
-  --action accept --closed-by x --evidence-ref y --evidence-digest z > /dev/null 2>&1
+# V4: non-scan source with OPEN row must NOT take ACCEPTED (proper counterexample)
+bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
+  --discovered-at code-review --category implementation-defect --earliest implementation \
+  --source-revision REV1 --evidence-ref "05-代码审核/x.md#L7" > /dev/null 2>&1
+assert_exit 0 $?
+bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
+  --action accept --closed-by formal_verdict --evidence-ref y --evidence-digest z \
+  --bound-revision-id REV1 > /dev/null 2>&1
 RC=$?
-if [[ "${RC}" == "1" ]]; then pass "V4/conflicting replay: ACCEPTED on RESOLVED row rejected"; else fail "V4: expected rejection, got ${RC}"; fi
+if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule)"; else fail "V4: expected rejection, got ${RC}"; fi
+# V4b: scan finding accept via code-review closed_by also rejected (role rule)
+bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
+  --action resolve --closed-by implementation --evidence-ref x --evidence-digest y \
+  --bound-revision-id REV1 > /dev/null 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "resolve closed_by != discovering node rejected"; else fail "expected rejection, got ${RC}"; fi
+# then resolve properly by the discovering node (code-review)
+bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
+  --action resolve --closed-by code-review --evidence-ref "05-代码审核/x.md#rework-verified" \
+  --evidence-digest def456 --bound-revision-id REV2 > /dev/null 2>&1
+assert_exit 0 $?
 
 # ---------------------------------------------------------------------------
 CASE_NAME="G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current"
@@ -252,16 +268,21 @@ ruby -ryaml -e '
   state["entries"].find { |e| e["node"] == "knowledge-sync" }["digest"] = "tampered"
   File.write(ARGV[0], raw.sub(/```yaml\n.*?```/m, "```yaml\n#{YAML.dump(state)}```"))
 ' "${LIB}/manifest.md"
-bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
+bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F03 \
   --discovered-at knowledge-sync --category knowledge-gap --earliest knowledge-sync \
   --source-revision REV2 --evidence-ref "06-知识同步#L2" > /dev/null 2>&1
 RC=$?
 if [[ "${RC}" == "1" ]]; then pass "naive hand-edit -> MANIFEST_CORRUPT_STOP"; else fail "expected corrupt STOP, got ${RC}"; fi
 # repair: rebuild baseline with repair record (repairRecords written before digest), then publish resumes
-bash "${PUBLISHER}" "${LIB}" repair --who owner --reason "fixture digest drift repair" > "${WORK_ROOT}/f8.out" 2>&1
-assert_exit 0 $?
+bash "${PUBLISHER}" "${LIB}" repair --who owner --reason "fixture digest drift repair" > "${WORK_ROOT}/f8-repair.out" 2>&1
+REPAIR_RC=$?
+if [[ "${REPAIR_RC}" != "0" ]]; then
+  echo "REPAIR DEBUG (exit ${REPAIR_RC}):"
+  cat "${WORK_ROOT}/f8-repair.out" >&2
+fi
+assert_exit 0 ${REPAIR_RC}
 assert_contains "${LIB}/manifest.md" "fixture digest drift repair"
-bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
+bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F03 \
   --discovered-at knowledge-sync --category knowledge-gap --earliest knowledge-sync \
   --source-revision REV2 --evidence-ref "06-知识同步#L2" > /dev/null 2>&1
 assert_exit 0 $?
@@ -321,6 +342,25 @@ ruby -ryaml -e '
   d = s["entries"].find { |e| e["node"] == "solution-design" }
   exit(1) unless d["status"] == "stale"
 ' "${LIB2}/manifest.md" && pass "design stale in same publish (H4)" || fail "design not stale"
+# N8: 台账逐项标注断言——gate 模板含台账节且方案文件有台账表
+grep -q "Depth Coverage Ledger" "${GATE2}" && pass "N8: escalation gate has coverage ledger" || fail "N8: no coverage ledger in gate"
+grep -q "未覆盖" "${GATE2}" && pass "N8: escalation gap explicitly listed" || fail "N8: escalation gap not listed"
+# 台账删除检测：删除必需行后 grep 必须失败（承重变异）
+TEMP_PLAN="$(cat "${PLAN2}")"
+grep -v "跨系统接口契约" "${PLAN2}" > "${PLAN2}.tmp" && mv "${PLAN2}.tmp" "${PLAN2}"
+if grep -q "跨系统接口契约" "${PLAN2}"; then
+  fail "N8: ledger deletion mutation not detectable"
+else
+  pass "N8: ledger deletion IS detectable by content grep (mutation verified)"
+fi
+cat > "${PLAN2}" <<'G3FIX'
+# 技术方案 v2（DEEP 补强）
+## Depth Coverage Ledger
+| 档位要求项 | 方案覆盖 |
+| --- | --- |
+| 跨系统接口契约 | 已覆盖 |
+| 状态机/回滚 | 已覆盖 |
+G3FIX
 
 CASE_NAME="G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission"
 cat > "${PLAN2}" <<'G3EOF'
@@ -351,6 +391,7 @@ bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-se
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 assert_exit 0 $?
+grep -q "已覆盖" "${PLAN2}" && pass "N8: reworked plan coverage ledger has item markings" || fail "N8: reworked plan ledger has no item markings"
 bash "${PUBLISHER}" "${LIB2}" check-admission --node task-planning > "${WORK_ROOT}/f10.out" 2>&1
 assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f10.out" "ADMISSION ELIGIBLE: task-planning"
@@ -387,7 +428,7 @@ import json, sys
 d = json.load(open(sys.argv[1]))
 d["declaration_seq"] = 8
 d["finding_registers"] = []
-d["finding_actions"] = [{"finding_id": "20260905-esc-F01", "action": "accept", "closed_by": "solution-gate", "evidence_ref": "02-方案审核/20260905-esc_方案审核.md#risk-ref", "evidence_digest": "cafe123", "bound_revision_id": "2.1.0"}]
+d["finding_actions"] = [{"finding_id": "20260905-esc-F01", "action": "accept", "closed_by": "formal_verdict", "evidence_ref": "02-方案审核/20260905-esc_方案审核.md#risk-ref", "evidence_digest": "cafe123", "bound_revision_id": "2.1.0"}]
 json.dump(d, open(sys.argv[1], "w"), ensure_ascii=False)
 G3PY
 bash "${PUBLISHER}" "${LIB2}" publish --declaration-file "${WORK_ROOT}/decl-esc.json" > "${WORK_ROOT}/f11b.out" 2>&1
@@ -396,13 +437,27 @@ ruby -ryaml -e '
   raw = File.read(ARGV[0])
   s = YAML.safe_load(raw[/```yaml\n(.*?)```/m, 1], permitted_classes: [Time], aliases: false)
   f = s["finding_index"].find { |x| x["finding_id"] == "20260905-esc-F01" }
-  exit(1) unless f && f["status"] == "ACCEPTED" && f["closed_by"] == "solution-gate" && f["closure_bound_revision_id"] == "2.1.0" && f["closure_evidence_digest"] == "cafe123"
+  exit(1) unless f && f["status"] == "ACCEPTED" && f["closed_by"] == "formal_verdict" && f["closure_bound_revision_id"] == "2.1.0" && f["closure_evidence_digest"] == "cafe123"
 ' "${LIB2}/manifest.md" && pass "ACCEPTED with bound ruling revision (H1 closure fields complete)" || fail "ACCEPTED binding incomplete"
 bash "${PUBLISHER}" "${LIB2}" finding-action --finding-id 20260905-esc-F01 \
-  --action accept --closed-by solution-gate --evidence-ref "02-方案审核/20260905-esc_方案审核.md#risk-ref" \
+  --action accept --closed-by formal_verdict --evidence-ref "02-方案审核/20260905-esc_方案审核.md#risk-ref" \
   --evidence-digest cafe123 --bound-revision-id 2.1.0 > "${WORK_ROOT}/f11c.out" 2>&1
 assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f11c.out" "NO-OP REPLAY"
+# entry 重放字节不变断言（H2）
+MD_BEFORE="$(digest_file "${LIB2}/manifest.md")"
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \
+  --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
+  --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
+RC=$?
+MD_AFTER="$(digest_file "${LIB2}/manifest.md")"
+if [[ "${RC}" == "0" && "${MD_BEFORE}" == "${MD_AFTER}" ]]; then pass "H2: entry replay byte-identical (no-op verified)"; else fail "H2: entry replay expected byte-identical no-op (before=${MD_BEFORE:0:8} after=${MD_AFTER:0:8} rc=${RC})"; fi
+# 冲突绑定重放拒绝（H2）：bound_revision_id 改变
+bash "${PUBLISHER}" "${LIB2}" finding-action --finding-id 20260905-esc-F01 \
+  --action accept --closed-by formal_verdict --evidence-ref "02-方案审核/20260905-esc_方案审核.md#risk-ref" \
+  --evidence-digest cafe123 --bound-revision-id WRONG > /dev/null 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "H2: conflicting binding replay rejected"; else fail "H2: expected rejection, got ${RC}"; fi
 
 CASE_NAME="G3-F12: stable paths (N2/N9) — no derived _R files, no third gate authority"
 N2_HITS="$(find "${LIB}" "${LIB2}" -name '*_R[0-9]*' 2>/dev/null | wc -l | tr -d ' ')"
