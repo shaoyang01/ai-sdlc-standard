@@ -40,7 +40,7 @@ requirement-intake -> solution-design -> solution-gate -> task-planning
 
 方案门禁的正式裁决输出互斥的设计深度（完整规则见 [Complexity Routing](complexity-routing.md)）：
 
-- `depth = LIGHT | STANDARD | DEEP`；`decision_status = CONFIRMED | BLOCKED_UNKNOWN`。
+- `depth = LIGHT | STANDARD | DEEP`；`decision_status = CONFIRMED | ESCALATED | BLOCKED_UNKNOWN`。
 - `solution-gate` 是唯一深度裁决点；`BLOCKED_UNKNOWN` 不进入实现。
 - Decision Scope / Delta 隔离（FULL_REQUIREMENT / DELTA_CHANGE、Ignored Aggregate Triggers）与用户 override（`user_requested`）、later Gate 升级（`later_gate_required`）语义平移保留。
 - 深度升级经 finding → 最早受影响节点 Re-Gate 由机器强制下游失效；不得用文档记录代替机器失效。

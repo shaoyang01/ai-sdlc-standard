@@ -545,6 +545,11 @@ export class ExecutionGateway {
     const verdictDepth = isVerdictDispatch && typeof rawDepth === "string" && (DECISION_DEPTHS as readonly string[]).includes(rawDepth)
       ? (rawDepth as typeof DECISION_DEPTHS[number])
       : null;
+    // G4-R1-H1: a real verdict dispatch without a valid depth is a validation
+    // failure, not a silent fallback to STANDARD
+    if (isVerdictDispatch && verdictDepth === null) {
+      throw new Error("formal_verdict dispatch missing or invalid decisionDepth in output");
+    }
     const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
     const deltaDescriptor = isVerdictDispatch
       ? tracing.artifactStore.put(

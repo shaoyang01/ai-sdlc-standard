@@ -101,13 +101,31 @@ function main(): void {
   );
 
   console.log("envelope: risk refs");
-  // G4-02 (Decision-086): PASS_WITH_RISK without refs is now legal — no ENVELOPE_RISK_REFS
+  // G4-02 (Decision-086): PASS_WITH_RISK without refs is now legal
+  const pwrNoRefs = parseNodeOutputEnvelope(
+    wrap({ summary: "x", body: "y", gateResult: "PASS_WITH_RISK", riskAcceptanceRefs: [] }),
+    GATE,
+  );
+  if (pwrNoRefs.gateResult !== "PASS_WITH_RISK") {
+    throw new Error("PWR without refs should be legal but got: " + JSON.stringify(pwrNoRefs));
+  }
+  console.log("  PWR without refs: legal (Decision-086)");
+  // Negative: FAIL with refs still rejected
   expectCode(
     "ENVELOPE_RISK_REFS",
     wrap({ summary: "x", body: "y", gateResult: "FAIL", riskAcceptanceRefs: ["D1"] }),
     GATE,
     "FAIL with refs",
   );
+  // G4-R1-H1: envelope carries decisionDepth for non-STANDARD verdicts
+  const depthEnvelope = parseNodeOutputEnvelope(
+    wrap({ summary: "x", body: "y", gateResult: "PASS", decisionDepth: "DEEP" }),
+    GATE,
+  );
+  if (depthEnvelope.decisionDepth !== "DEEP") {
+    throw new Error("envelope should carry decisionDepth=DEEP but got: " + JSON.stringify(depthEnvelope.decisionDepth));
+  }
+  console.log("  decisionDepth=DEEP: envelope carries depth correctly");
 
   console.log("envelope: findings");
   expectCode(

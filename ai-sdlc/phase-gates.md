@@ -101,7 +101,7 @@ Gate 是阶段准入条件，不是建议。
 - 新逻辑失败、超时、异常时是否影响原流程。
 - 是否改变返回值、状态、事务、日志、MQ、缓存或 DB 写入。
 - 状态流转、数据来源、异常处理、测试方案是否完整。
-- 输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = CONFIRMED/BLOCKED_UNKNOWN）。
+- 输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = CONFIRMED/ESCALATED/BLOCKED_UNKNOWN）。
 - `BLOCKED_UNKNOWN` 不进入实现。
 - 对抗扫描与正式裁决必须由不同 Agent binding 执行（Decision-044）；同一 Agent 执行两角色即 fail-closed。
 - 下游审核必须记录被审阅技术方案的稳定路径和内部 Version。

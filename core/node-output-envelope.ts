@@ -74,9 +74,10 @@ export interface ParsedNodeOutputEnvelope {
   readonly gateResult: NodeGateVerdict | null;
   readonly riskAcceptanceRefs: readonly string[];
   readonly findings: readonly NodeOutputFinding[];
+  readonly decisionDepth: string | null;
 }
 
-const ENVELOPE_FIELDS = ["summary", "body", "gateResult", "riskAcceptanceRefs", "findings"];
+const ENVELOPE_FIELDS = ["summary", "body", "gateResult", "riskAcceptanceRefs", "findings", "decisionDepth"];
 
 function countOccurrences(haystack: string, needle: string): number {
   let n = 0;
@@ -162,6 +163,14 @@ export function parseNodeOutputEnvelope(
   }
 
   // ── risk acceptance refs ──
+  let decisionDepth: string | null = null;
+  if ("decisionDepth" in record && typeof record.decisionDepth === "string") {
+    const depth = record.decisionDepth;
+    if (depth === "LIGHT" || depth === "STANDARD" || depth === "DEEP") {
+      decisionDepth = depth;
+    }
+    // Unknown depth values are left as null (BLOCKED_UNKNOWN组合)
+  }
   let riskAcceptanceRefs: string[] = [];
   if ("riskAcceptanceRefs" in record && record.riskAcceptanceRefs !== undefined && record.riskAcceptanceRefs !== null) {
     if (!Array.isArray(record.riskAcceptanceRefs)) fail("ENVELOPE_RISK_REFS", "riskAcceptanceRefs must be an array");
@@ -223,6 +232,7 @@ export function parseNodeOutputEnvelope(
   return Object.freeze({
     summary,
     body,
+    decisionDepth,
     gateResult,
     riskAcceptanceRefs: Object.freeze(riskAcceptanceRefs),
     findings: Object.freeze(findings),

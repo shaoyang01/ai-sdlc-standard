@@ -51,7 +51,7 @@ requirement-intake
 开发前审计规格是否完整，阻止未定义行为进入实现阶段。两个执行角色必须由不同 Agent binding 执行：
 
 - `adversarial_scan`：对抗扫描，产出首轮 Finding Ledger；不给正式 Gate。
-- `formal_verdict`：消费当前方案与扫描 ledger，输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = CONFIRMED/BLOCKED_UNKNOWN）。
+- `formal_verdict`：消费当前方案与扫描 ledger，输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = CONFIRMED/ESCALATED/BLOCKED_UNKNOWN）。
 
 输出：
 - Gate Result（PASS / FAIL / PASS_WITH_RISK）

@@ -185,7 +185,7 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
   if (isVerdict) {
     lines.push(
       '- "gateResult": one of "PASS", "FAIL", "PASS_WITH_RISK" (you may NOT use NOT_APPLICABLE).',
-      '- "riskAcceptanceRefs": string array; REQUIRED non-empty when gateResult is PASS_WITH_RISK, otherwise omit or [].',
+      '- "riskAcceptanceRefs": string array; optional — include relevant risk finding refs when gateResult is PASS_WITH_RISK, otherwise omit or [].',
     );
   } else if (isScan) {
     lines.push(
