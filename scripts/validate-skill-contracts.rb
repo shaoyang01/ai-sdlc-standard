@@ -960,6 +960,9 @@ else
   if gate_template.include?("ACCEPTED_RISK proof")
     errors << "gate-result-template: proof consumption requirement must not be restored (Decision-086)"
   end
+  if gate_template.include?("只消费") && gate_template.include?("ACCEPTED_RISK")
+    errors << "gate-result-template: PWR proof consumption requirement must not be restored (Decision-086)"
+  end
   unless gate_template.include?("## Risk Refs")
     errors << "gate-result-template missing ## Risk Refs (Decision-086)"
   end

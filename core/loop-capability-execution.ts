@@ -36,6 +36,9 @@ export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 4 as const;
 export const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
 export type DecisionDepth = (typeof DECISION_DEPTHS)[number];
 
+export const DECISION_STATUSES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
+export type DecisionStatus = (typeof DECISION_STATUSES)[number];
+
 export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
 export type LoopNextStepEligibility = "ELIGIBLE" | "INELIGIBLE" | "BLOCKED";
@@ -76,6 +79,7 @@ export type LoopCapabilityExecutionEvent = Readonly<{
    * every other event carries all four as null.
    */
   decisionDepth: DecisionDepth | null;
+  decisionStatus?: DecisionStatus | null;
   decisionScopeId: string | null;
   decisionDeltaRef: string | null;
   decisionDeltaDigest: string | null;
@@ -117,7 +121,7 @@ const EVENT_FIELDS = [
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
   "outputArtifactVersion", "outputDigest", "gateResult", "unresolvedFindingsRef",
   "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
-  "decisionDepth", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
+  "decisionDepth", "decisionStatus", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
   "nextStepEligibility", "errorCode", "retryable", "reasonCode",
   "processInvocationDigest", "processExitCode", "processSignal", "processDurationMs",
   "processTruncated", "stagingRef", "stagingDigest", "promotionRef", "promotionDigest",

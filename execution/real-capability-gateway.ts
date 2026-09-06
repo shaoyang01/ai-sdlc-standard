@@ -306,6 +306,7 @@ export class RealCapabilityGateway extends ExecutionGateway {
     if (outcome.gateResult !== null) output.gateResult = outcome.gateResult;
     if (outcome.unresolvedFindings !== null) output.unresolvedFindings = outcome.unresolvedFindings;
     if (envelope.decisionDepth !== null) output.decisionDepth = envelope.decisionDepth;
+    if (envelope.decisionStatus !== null) output.decisionStatus = envelope.decisionStatus;
 
     return Object.freeze({
       success: true,

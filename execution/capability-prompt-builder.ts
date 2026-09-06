@@ -186,6 +186,7 @@ export function buildNodeCapabilityPrompt(input: NodeCapabilityPromptInput): str
     lines.push(
       '- "gateResult": one of "PASS", "FAIL", "PASS_WITH_RISK" (you may NOT use NOT_APPLICABLE).',
       '- "decisionDepth": one of "LIGHT", "STANDARD", "DEEP", or null (when decisionStatus is BLOCKED_UNKNOWN). Required for formal_verdict.',
+      '- "decisionStatus": one of "CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN". Required for formal_verdict. CONFIRMED: verdict satisfies requiredDepth. ESCALATED: verdict reveals risk requiring higher depth (reflow to design). BLOCKED_UNKNOWN: key facts missing (reflow to intake/design).',
       '- "riskAcceptanceRefs": string array; optional — include relevant risk finding refs when gateResult is PASS_WITH_RISK, otherwise omit or [].',
     );
   } else if (isScan) {

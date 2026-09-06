@@ -332,6 +332,7 @@ export class ExecutionGateway {
       consumedFindingsDigest: hasConsumedDigest ? (context.consumedFindingsDigest as string) : null,
       // v4: the depth decision rides on the succeeded verdict event only.
       decisionDepth: null,
+      decisionStatus: null,
       decisionScopeId: null,
       decisionDeltaRef: null,
       decisionDeltaDigest: null,
@@ -537,31 +538,43 @@ export class ExecutionGateway {
     // depth decision on the event — STANDARD scope with an immutable delta
     // artifact recording what the choice changes.
     const isVerdictDispatch = capability === "solution-gate" && executionRole === "formal_verdict";
-    // G4-01 (C16): extract decisionDepth from the verdict output instead of hardcoding
+    // G4-01 (C16) + G4-R3-H1: extract decisionDepth AND decisionStatus from verdict
     const rawDepth = isVerdictDispatch
       ? (result.output["decisionDepth"] ?? result.output["decision_depth"])
+      : undefined;
+    const rawStatus = isVerdictDispatch
+      ? (result.output["decisionStatus"] ?? result.output["decision_status"])
       : undefined;
     const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
     const verdictDepth = isVerdictDispatch && typeof rawDepth === "string" && (DECISION_DEPTHS as readonly string[]).includes(rawDepth)
       ? (rawDepth as typeof DECISION_DEPTHS[number])
       : null;
-    // G4-R5-H2: depth validation failure uses the existing appendCapabilityFailure
-    // terminal path (same as other output errors — started gets a failed terminal)
-    if (isVerdictDispatch && verdictDepth === null) {
+    const DECISION_STATUSES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
+    const verdictStatus = isVerdictDispatch && typeof rawStatus === "string" && (DECISION_STATUSES as readonly string[]).includes(rawStatus)
+      ? (rawStatus as typeof DECISION_STATUSES[number])
+      : null;
+    // G4-R3-H1: validate legal combinations per contract §4.3
+    // BLOCKED_UNKNOWN + null = legal blocked verdict (not an error)
+    // CONFIRMED/ESCALATED require non-null depth
+    // Missing/invalid status or depth -> failed terminal
+    if (isVerdictDispatch && verdictStatus === null) {
       this.appendCapabilityFailure(
-        tracing,
-        base,
-        startedSequence + 1,
-        now(),
-        "GATE_DEPTH_INVALID",
-        false,
-        result.processEvidence ?? null,
+        tracing, base, startedSequence + 1, now(),
+        "GATE_DEPTH_INVALID", false, result.processEvidence ?? null,
       );
       return Object.freeze({
-        ...result,
-        success: false,
-        agent: binding.agent,
-        error: "formal_verdict dispatch missing or invalid decisionDepth in output",
+        ...result, success: false, agent: binding.agent,
+        error: "formal_verdict dispatch missing or invalid decisionStatus in output",
+      });
+    }
+    if (isVerdictDispatch && verdictStatus !== "BLOCKED_UNKNOWN" && verdictDepth === null) {
+      this.appendCapabilityFailure(
+        tracing, base, startedSequence + 1, now(),
+        "GATE_DEPTH_INVALID", false, result.processEvidence ?? null,
+      );
+      return Object.freeze({
+        ...result, success: false, agent: binding.agent,
+        error: "formal_verdict dispatch CONFIRMED/ESCALATED requires non-null decisionDepth",
       });
     }
     const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
@@ -574,6 +587,7 @@ export class ExecutionGateway {
             runId,
             attempt,
             decisionDepth: verdictDepth ?? "STANDARD",
+            decisionStatus: verdictStatus,
           }),
         )
       : null;
@@ -589,7 +603,8 @@ export class ExecutionGateway {
       gateResult,
       unresolvedFindingsRef: findingsDescriptor?.artifactRef ?? null,
       unresolvedFindingsDigest: findingsDescriptor?.digest ?? null,
-      decisionDepth: isVerdictDispatch ? (verdictDepth ?? "STANDARD") : null,
+      decisionDepth: isVerdictDispatch ? verdictDepth : null,
+      decisionStatus: isVerdictDispatch ? verdictStatus : null,
       decisionScopeId,
       decisionDeltaRef: deltaDescriptor?.artifactRef ?? null,
       decisionDeltaDigest: deltaDescriptor?.digest ?? null,
@@ -629,6 +644,7 @@ export class ExecutionGateway {
       "executionEventId" | "sequence" | "status" | "createdAt" | "outputArtifactRef" |
       "outputArtifactVersion" | "outputDigest" | "gateResult" | "unresolvedFindingsRef" |
       "unresolvedFindingsDigest" | "nextStepEligibility" | "errorCode" | "retryable" | "reasonCode" |
+    "decisionStatus" |
       "processInvocationDigest" | "processExitCode" | "processSignal" | "processDurationMs" |
       "processTruncated" | "stagingRef" | "stagingDigest" | "promotionRef" | "promotionDigest" |
       "humanActionRef">,
@@ -644,6 +660,7 @@ export class ExecutionGateway {
       sequence,
       status: "failed",
       createdAt,
+      decisionStatus: null,
       outputArtifactRef: null,
       outputArtifactVersion: null,
       outputDigest: null,
@@ -1056,6 +1073,7 @@ export function createDeterministicCapabilityGateway(options: {
         consumedFindingsRef: consumedRef,
         consumedFindingsDigest: consumedDigest,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,

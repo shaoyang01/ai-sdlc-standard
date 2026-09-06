@@ -599,6 +599,7 @@ function rowToCapabilityExecution(row: CapabilityExecutionRow): LoopCapabilityEx
     consumedFindingsRef: row.consumed_findings_ref,
     consumedFindingsDigest: row.consumed_findings_digest,
     decisionDepth: row.decision_depth as LoopCapabilityExecutionEvent["decisionDepth"],
+    decisionStatus: (row as Record<string, unknown>).decision_status as LoopCapabilityExecutionEvent["decisionStatus"] ?? null,
     decisionScopeId: row.decision_scope_id,
     decisionDeltaRef: row.decision_delta_ref,
     decisionDeltaDigest: row.decision_delta_digest,
