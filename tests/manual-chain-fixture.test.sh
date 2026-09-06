@@ -196,20 +196,57 @@ assert_contains "${LIB}/manifest.md" "status: RESOLVED"
 assert_contains "${LIB}/manifest.md" "closed_by: code-review"
 assert_contains "${LIB}/manifest.md" "closure_bound_revision_id: REV2"
 
-# V4: non-scan source with OPEN row — prepare valid PWR conditions FIRST, only source differs
+# V4: scan-source rule — use isolated PWR copy (not the main chain's PASS gate)
+# Setup: copy the main chain state, then publish a PWR verdict on the copy
+V4_LIB="${WORK_ROOT}/v4-pwr/library/20260905-v4"
+mkdir -p "${V4_LIB}/00-需求资料" "${V4_LIB}/01-技术方案" "${V4_LIB}/02-方案审核"
+echo s > "${V4_LIB}/00-需求资料/s.md"
+bash "${PUBLISHER}" "${V4_LIB}" init --requirement-id 20260905-v4 \
+  --requested-depth STANDARD --depth-basis normalized_proposal --decision-scope FULL_REQUIREMENT > /dev/null 2>&1
+assert_exit 0 $?
+DG_S="$(digest_file "${V4_LIB}/00-需求资料/s.md")"
+bash "${PUBLISHER}" "${V4_LIB}" entry-update --node requirement-intake --declaration-seq 2 \
+  --artifact-path "00-需求资料/s.md" --version 1.0.0 --digest "${DG_S}" > /dev/null 2>&1
+assert_exit 0 $?
+echo p > "${V4_LIB}/01-技术方案/p.md"
+DG_P="$(digest_file "${V4_LIB}/01-技术方案/p.md")"
+bash "${PUBLISHER}" "${V4_LIB}" entry-update --node solution-design --declaration-seq 3 \
+  --artifact-path "01-技术方案/p.md" --version 1.0.0 --digest "${DG_P}" > /dev/null 2>&1
+assert_exit 0 $?
+echo g > "${V4_LIB}/02-方案审核/g.md"
+DG_G="$(digest_file "${V4_LIB}/02-方案审核/g.md")"
+bash "${PUBLISHER}" "${V4_LIB}" entry-update --node solution-gate --declaration-seq 4 \
+  --artifact-path "02-方案审核/g.md" --version 1.0.0 --digest "${DG_G}" \
+  --gate-result PASS_WITH_RISK --decision-depth STANDARD --decision-status CONFIRMED > /dev/null 2>&1
+assert_exit 0 $?
+# Register a non-scan finding on the PWR copy
+bash "${PUBLISHER}" "${V4_LIB}" finding-register --finding-id 20260905-v4-F02 \
+  --discovered-at code-review --category implementation-defect --earliest implementation \
+  --source-revision REV1 --evidence-ref "05-代码审核/x.md#L7" > /dev/null 2>&1
+assert_exit 0 $?
+# V4 scan-source positive control: scan finding on PWR copy succeeds
+bash "${PUBLISHER}" "${V4_LIB}" finding-register --finding-id 20260905-v4-F03 \
+  --discovered-at solution-gate --category design-risk --earliest solution-design \
+  --source-revision 1.0.0 --evidence-ref "02-方案审核/g.md#risk" > /dev/null 2>&1
+assert_exit 0 $?
+bash "${PUBLISHER}" "${V4_LIB}" finding-action --finding-id 20260905-v4-F03 \
+  --action accept --closed-by formal_verdict --evidence-ref "02-方案审核/g.md#risk" \
+  --evidence-digest cafe --bound-revision-id 1.0.0 > /dev/null 2>&1
+assert_exit 0 $?
+pass "V4 positive control: scan-source ACCEPTED on PWR copy"
+# V4 target assertion: non-scan finding ACCEPTED must be rejected (only source differs)
+bash "${PUBLISHER}" "${V4_LIB}" finding-action --finding-id 20260905-v4-F02 \
+  --action accept --closed-by formal_verdict --evidence-ref y --evidence-digest z \
+  --bound-revision-id 1.0.0 > /dev/null 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule, all other PWR conditions valid)"; else fail "V4: expected rejection, got ${RC}"; fi
+# Verify main chain manifest byte-unchanged (isolation proof)
+MAIN_MD_AFTER="$(digest_file "${LIB}/manifest.md")"
+# V4b: on the MAIN chain, register F02 and test role rule
 bash "${PUBLISHER}" "${LIB}" finding-register --finding-id 20260905-fixture-F02 \
   --discovered-at code-review --category implementation-defect --earliest implementation \
   --source-revision REV1 --evidence-ref "05-代码审核/x.md#L7" > /dev/null 2>&1
 assert_exit 0 $?
-# At this point solution-gate has PASS (from F3), version 1.0.0
-# The scan-source rule is tested independently of PWR conditions:
-# even with formal_verdict as closed_by and valid bound revision, non-scan is rejected
-bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
-  --action accept --closed-by formal_verdict --evidence-ref y --evidence-digest z \
-  --bound-revision-id 1.0.0 > /dev/null 2>&1
-RC=$?
-if [[ "${RC}" == "1" ]]; then pass "V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule, all other conditions valid)"; else fail "V4: expected rejection, got ${RC}"; fi
-# V4b: scan finding accept via code-review closed_by also rejected (role rule)
 bash "${PUBLISHER}" "${LIB}" finding-action --finding-id 20260905-fixture-F02 \
   --action resolve --closed-by implementation --evidence-ref x --evidence-digest y \
   --bound-revision-id REV1 > /dev/null 2>&1
@@ -395,14 +432,44 @@ bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-se
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 assert_exit 0 $?
 # N8: ledger per-item assertions — normal file passes, deletion of any item fails
+ledger_check() { # $1 = file path, $2 = item name, $3 = expected marking
+  local file="$1" item="$2" expected="$3"
+  local row
+  row=$(grep "${item}" "${file}" 2>/dev/null | head -1)
+  if [[ -z "${row}" ]]; then
+    return 1  # item not found
+  fi
+  local covered
+  covered=$(echo "${row}" | awk -F'|' '{gsub(/ /,"",$3); print $3}')
+  [[ "${covered}" == "${expected}" ]]
+}
+# Normal file: both items present and marked as covered
 for item in "跨系统接口契约" "状态机/回滚"; do
-  grep -q "${item}" "${PLAN2}" && pass "N8: ledger item '${item}' present" || fail "N8: ledger item '${item}' missing"
-  # check the item has a coverage marking (not just the name)
-  grep -A1 "${item}" "${PLAN2}" | grep -q "已覆盖" && pass "N8: '${item}' marked as covered" || fail "N8: '${item}' has no coverage marking"
+  ledger_check "${PLAN2}" "${item}" "已覆盖" && pass "N8: '${item}' present and marked as covered" || fail "N8: '${item}' missing or not marked as covered"
 done
-# mutation: delete one ledger item -> must be detectable
+# mutation 1: delete one ledger item -> item not found
 sed -i '' '/状态机\/回滚/d' "${PLAN2}" 2>/dev/null || sed -i '/状态机\/回滚/d' "${PLAN2}"
-grep -q "状态机/回滚" "${PLAN2}" && fail "N8: ledger deletion NOT detectable" || pass "N8: ledger item deletion IS detectable (mutation verified)"
+ledger_check "${PLAN2}" "状态机/回滚" "已覆盖" && fail "N8: ledger deletion NOT detectable" || pass "N8: ledger item deletion IS detectable (mutation verified)"
+# mutation 2: clear first item's coverage marking (keep item name) -> row exists but marking wrong
+cat > "${PLAN2}" <<'G3FIX'
+# 技术方案 v2（DEEP 补强）
+## Depth Coverage Ledger
+| 档位要求项 | 方案覆盖 |
+| --- | --- |
+| 跨系统接口契约 | |
+| 状态机/回滚 | 已覆盖 |
+G3FIX
+ledger_check "${PLAN2}" "跨系统接口契约" "已覆盖" && fail "N8: cleared first item marking NOT detectable" || pass "N8: cleared first item marking IS detectable"
+# mutation 3: clear last item's coverage marking
+cat > "${PLAN2}" <<'G3FIX'
+# 技术方案 v2（DEEP 补强）
+## Depth Coverage Ledger
+| 档位要求项 | 方案覆盖 |
+| --- | --- |
+| 跨系统接口契约 | 已覆盖 |
+| 状态机/回滚 | |
+G3FIX
+ledger_check "${PLAN2}" "状态机/回滚" "已覆盖" && fail "N8: cleared last item marking NOT detectable" || pass "N8: cleared last item marking IS detectable"
 # restore for the rest of the test
 cat > "${PLAN2}" <<'G3FIX'
 # 技术方案 v2（DEEP 补强）
