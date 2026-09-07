@@ -1,0 +1,345 @@
+{
+  "skip-matrix": [
+    {
+      "mode": "init",
+      "kind": "source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "init",
+      "kind": "source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "init",
+      "kind": "dangling-source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "init",
+      "kind": "dangling-source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "init",
+      "kind": "missing-template",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "init",
+      "kind": "missing-template",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "init",
+      "kind": "unsafe-root",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "init",
+      "kind": "unsafe-root",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "audit",
+      "kind": "source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "dangling-source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "dangling-source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "missing-template",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "missing-template",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "unsafe-root",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "audit",
+      "kind": "unsafe-root",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "routed",
+      "kind": "dangling-source",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "dangling-source",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    },
+    {
+      "mode": "routed",
+      "kind": "missing-template",
+      "dry": true,
+      "rc": 2,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": false,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "missing-template",
+      "dry": false,
+      "rc": 2,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": false,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "unsafe-root",
+      "dry": true,
+      "rc": 0,
+      "zero_write": true,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": false
+    },
+    {
+      "mode": "routed",
+      "kind": "unsafe-root",
+      "dry": false,
+      "rc": 0,
+      "zero_write": false,
+      "created_skipped": false,
+      "stdout_notice": true,
+      "report_notice": true
+    }
+  ],
+  "legacy-overlap": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=LEGACY_SDLC_SDD\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=09652f6215931078974394bde5b33bca0085442feb0cbbdacaef1d664aded7b1\nFILES:\n  RETIRE\t.specify/reports/old.md\t.sdlc/legacy/.specify/reports/old.md\tC7\tbfcde9ab173c30b08508f1d97ccbe65fcdf0959b669cecdee0989acb551e011b\n  TRANSFORM\t.specify/coding_guide/b.md\t.sdlc/coding_guide/b.md\tC12\t620c7583e9d7d2e0a93c51076bfd2a14dcced0a9788c1cd86b3a40162509a93b\n  TRANSFORM\t.specify/memory/a.md\t.sdlc/memory/a.md\tC11\t5e79d242752f0b5b017daca2aa1b5df3f0dce7651cca1690cbb446581bcc1112\n  TRANSFORM\t.specify/project-governance-profile.yaml\t.sdlc/legacy/.specify/project-governance-profile.yaml\tC2\te3e8709fdb9ebc2b22dcb2580b7d9072c5909851b415614479247f4ad7fbcd9f\n",
+    "output_tail": "y-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nUPDATED: \nPRESERVED: \nREPORT=.sdlc/reports/knowledge_target_bootstrap_report.20260907-173235.65782.hvuoJq\nREMAINING_CONFIRMATION: owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n",
+    "archive_bytes_all_match": true,
+    "rules": [
+      "C12",
+      "C11",
+      "C2",
+      "C7"
+    ]
+  },
+  "identical-absent": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=cf49f6ea8f3ecc86c8f71550349bc9c2208e25acdc4440920332e8ffd82a52e8\nFILES:\n  RETIRE\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tC11\t5e79d242752f0b5b017daca2aa1b5df3f0dce7651cca1690cbb446581bcc1112\talready adopted (identical after deterministic transformation); redundant source archived\n",
+    "output_tail": "-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-173237.66213.Hgm9Tn\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-173236.66213.md.BF0VYd\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-173236.66213.json.BV9Kgr\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "source_exists": false,
+    "replan_rc": 0,
+    "replan": "/Users/eric_shaoooo/meicai/projects/ai-sdlc-standard-governance-corpus-worktree/scripts/bootstrap-knowledge-target.sh: line 1682: LEGACY_ROOTS[@]: unbound variable\n"
+  },
+  "identical-same": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=0\nPLAN_SHA256=03c19f7f95247396a4fca380c96d3c1a74e34889e0e951bad313dfd5e05b4e8f\nFILES:\n  PRESERVE\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tC11\talready adopted and archived (source identical to archive); nothing to do\n",
+    "output_tail": "-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-173238.66476.DbmXZT\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-173237.66476.md.c0Nfmk\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-173237.66476.json.GAg8BN\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "source_exists": true,
+    "replan_rc": 0,
+    "replan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=0\nPLAN_SHA256=d2c5f4392fd32befc57d050948205fadedb190a21a1ce4f81949a12c5e71cc45\nFILES:\n  PRESERVE\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tC11\talready adopted and archived (source identical to archive); nothing to do\n"
+  },
+  "identical-different": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=e53a7bd7931282d195e98cdac1a1589069aab1f3fa2cedc8f869f325c85845d6\nFILES:\n  BLOCKED\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tCOLLISION\tarchive destination already exists with different content (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\n",
+    "source_exists": true,
+    "replan_rc": 1,
+    "replan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=e53a7bd7931282d195e98cdac1a1589069aab1f3fa2cedc8f869f325c85845d6\nFILES:\n  BLOCKED\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tCOLLISION\tarchive destination already exists with different content (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n"
+  },
+  "identical-dangling": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=e53a7bd7931282d195e98cdac1a1589069aab1f3fa2cedc8f869f325c85845d6\nFILES:\n  BLOCKED\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tCOLLISION\tarchive destination already exists with different content (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\n",
+    "source_exists": true,
+    "replan_rc": 1,
+    "replan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=e53a7bd7931282d195e98cdac1a1589069aab1f3fa2cedc8f869f325c85845d6\nFILES:\n  BLOCKED\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tCOLLISION\tarchive destination already exists with different content (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/a.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n"
+  },
+  "real-archive": {
+    "bindings": 9,
+    "raw_count": 9,
+    "exact_raw": true,
+    "pending": 28,
+    "pending_added": [
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "14"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "15"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "16"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "17"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "18"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "19"
+      ],
+      [
+        ".sdlc/memory/RoleAtlas.md",
+        "20"
+      ]
+    ]
+  },
+  "transform-twice": {
+    "rc": 0,
+    "identical": true
+  },
+  "find-partial": {
+    "rc": 1,
+    "output": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=ac7dd71299964bea6d14a54006c6467b4abd27685f5ee602e0c49db6c2475a03\nFILES:\n  BLOCKED\t<legacy-root>\t-\tC10\ttraversal failed under .specify/memory\nBLOCKED_FILES:\n  - <legacy-root>: traversal failed under .specify/memory (partial enumeration possible)\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n"
+  },
+  "socket": {
+    "rc": 0,
+    "output": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=0\nPLAN_SHA256=0870a16f938461486dff675c47b38fc19eca0eb842da687c1ec2a7155a9a1814\nFILES:\n"
+  },
+  "source-file-root": {
+    "rc": 0,
+    "output": "/Users/eric_shaoooo/meicai/projects/ai-sdlc-standard-governance-corpus-worktree/scripts/bootstrap-knowledge-target.sh: line 1682: LEGACY_ROOTS[@]: unbound variable\n"
+  }
+}

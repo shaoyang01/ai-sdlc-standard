@@ -1,0 +1,521 @@
+{
+  "existing": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected f5e12bb9be0b106aaf0af9b588f19da08bd0a508ee98f5572ca515e988d88310).\n"
+    },
+    "--detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": " present\n  - S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate\nAMBIGUOUS_FILES:\n  - <none>\nDECLARATION_STATE=absent\nTECH_PROFILES=backend-business-service\n"
+    },
+    "--plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "f9b588f19da08bd0a508ee98f5572ca515e988d88310\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "f9b588f19da08bd0a508ee98f5572ca515e988d88310\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected f5e12bb9be0b106aaf0af9b588f19da08bd0a508ee98f5572ca515e988d88310).\n"
+    },
+    "--audit": {
+      "rc": 0,
+      "source_exists": true
+    }
+  },
+  "partial": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected ee67252d2f8be2e0ea81c7826f9d767eef110a2aedb5c78f88f5b59dcfbaec91).\n"
+    },
+    "--detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": " present\n  - S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate\nAMBIGUOUS_FILES:\n  - <none>\nDECLARATION_STATE=absent\nTECH_PROFILES=backend-business-service\n"
+    },
+    "--plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "c7826f9d767eef110a2aedb5c78f88f5b59dcfbaec91\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "c7826f9d767eef110a2aedb5c78f88f5b59dcfbaec91\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected ee67252d2f8be2e0ea81c7826f9d767eef110a2aedb5c78f88f5b59dcfbaec91).\n"
+    },
+    "--audit": {
+      "rc": 0,
+      "source_exists": true
+    }
+  },
+  "empty": {
+    "plain": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "output_tail": "ss-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n"
+    },
+    "--detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "vernance roots coexist (.sdlc + .specify) — ambiguity candidate\nAMBIGUOUS_FILES:\n  - <none>\nDECLARATION_STATE=candidate_pending_confirmation\nTECH_PROFILES=backend-business-service\n"
+    },
+    "--plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "304c46ad66b0b07fb90d21e140627716439158b8be47\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "304c46ad66b0b07fb90d21e140627716439158b8be47\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected 73c7ccf0ed56b7889f54304c46ad66b0b07fb90d21e140627716439158b8be47).\n"
+    },
+    "--audit": {
+      "rc": 0,
+      "source_exists": true
+    }
+  },
+  "legacy": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected 16dd6dc72a77463b3e413971dfb0c4419079dd1294ec12d4d2f06714f030ec11).\n"
+    },
+    "--detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "c skeleton root docs = 0/3\n  - S4 code tree present\n  - S5 .specify legacy root present\nAMBIGUOUS_FILES:\n  - <none>\nDECLARATION_STATE=absent\nTECH_PROFILES=backend-business-service\n"
+    },
+    "--plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "3971dfb0c4419079dd1294ec12d4d2f06714f030ec11\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "output_tail": "3971dfb0c4419079dd1294ec12d4d2f06714f030ec11\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tab446c8543a714554e482045dbedacd5852558db453f4fb1daa2a2db513761fa\n"
+    },
+    "--apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "ed. Re-run with --plan, review the classification,\nthen --apply --confirm-migration-plan <plan_sha256> (expected 16dd6dc72a77463b3e413971dfb0c4419079dd1294ec12d4d2f06714f030ec11).\n"
+    },
+    "--audit": {
+      "rc": 0,
+      "source_exists": true
+    }
+  },
+  "ambiguous": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "cify) — ambiguity candidate\n  - D dual governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS\nResolve the dual-root/ambiguity manually, then re-run.\n"
+    },
+    "--detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "l governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS\nAMBIGUOUS_FILES:\n  - <none>\nDECLARATION_STATE=absent\nTECH_PROFILES=backend-business-service\n"
+    },
+    "--plan": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "cify) — ambiguity candidate\n  - D dual governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS\nResolve the dual-root/ambiguity manually, then re-run.\n"
+    },
+    "--dry-run": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "cify) — ambiguity candidate\n  - D dual governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS\nResolve the dual-root/ambiguity manually, then re-run.\n"
+    },
+    "--apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "output_tail": "cify) — ambiguity candidate\n  - D dual governance roots with active legacy semantics (.sdlc + .specify) -> BLOCKED_AMBIGUOUS\nResolve the dual-root/ambiguity manually, then re-run.\n"
+    },
+    "--audit": {
+      "rc": 1,
+      "source_exists": true
+    }
+  },
+  "real-copy": {
+    "pending": [
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "line": "14",
+        "excerpt": "2. 流程先行：功能开发必须遵循 `Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync`。"
+      },
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "line": "49",
+        "excerpt": "- `.sdlc/legacy/specs/**` 与 `.sdlc/business_domain/**` 的回填关系可追溯。"
+      },
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "line": "57",
+        "excerpt": "- 审计流程：[`GovernanceAuditWorkflow.md`](../workflow/GovernanceAuditWorkflow.md)"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "14",
+        "excerpt": "- 工作流文档：`/.sdlc/legacy/.specify/workflow/`"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "16",
+        "excerpt": "- 模板文档：`/.sdlc/legacy/.specify/templates/`"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "18",
+        "excerpt": "- 过程资产（短期事实源）：`.sdlc/legacy/specs/######-feature-name/`"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "100",
+        "excerpt": "| 治理文档 | `.sdlc/memory/`, `.sdlc/legacy/.specify/workflow/`, `.sdlc/coding_guide/` | ≤ 5 |"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "102",
+        "excerpt": "| 过程文档 | `.sdlc/legacy/specs/**` | ≤ 3 |"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "103",
+        "excerpt": "| 过程子文档 | `.sdlc/legacy/specs/**/**Spec.md`, `**Arch.md`, `**API.md`, `**Impl.md`, `**Test.md` | ≤ 3 |"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "130",
+        "excerpt": "9. Sync 顺序固定为：`.sdlc/legacy/specs/**`（短期事实源） -> `.sdlc/business_domain/**`（长期事实源） -> `.sdlc/memory/**`/`.sdlc/legacy/.sp"
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "line": "131",
+        "excerpt": "10. 冷启动阶段只依赖 `.sdlc/business_domain/**` 骨架与后续 `.sdlc/legacy/specs/**` 回填，避免把零散说明文档重新变成事实源。"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "1",
+        "excerpt": "# SDD 角色图谱 (Role Atlas)"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "7",
+        "excerpt": "> - **Summary**: 定义 logistics-center 在 SDD 各阶段的角色职责与门禁。"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "13",
+        "excerpt": "| Domain Route | 产品架构师 | 匹配 L1/L2/L4、框定知识范围 | 需求已归类为 `existing-change` 或 `new-flow` |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "14",
+        "excerpt": "| Specify | 产品架构师 | 结构化需求与验收标准 | 需求可测试、可追踪 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "15",
+        "excerpt": "| Clarify | 业务仲裁员 | 解决歧义与边界冲突 | 关键歧义清零 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "16",
+        "excerpt": "| Plan | 技术负责人 | 技术方案、事务与补偿决策 | 分层、契约与一致性合规 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "17",
+        "excerpt": "| Tasks | 交付编排师 | 原子任务拆解与依赖排序 | 任务可执行、可验证 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "18",
+        "excerpt": "| Analyze | 合规官 | 一致性与治理审计 | 阻断项清零 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "19",
+        "excerpt": "| Implement | 特性开发者 | 代码实现与测试闭环 | 测试通过、任务回写 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "20",
+        "excerpt": "| Sync | 文档治理官 | 知识归档与文档同步 | 元数据、命名与修订记录合规 |"
+      },
+      {
+        "file": ".sdlc/memory/RoleAtlas.md",
+        "line": "27",
+        "excerpt": "| 2026-03-06 | 1.0.0 | shaoyang01 | 初始版本，加入 Domain Route 阶段。 |"
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "7",
+        "excerpt": "> - **Summary**: 建立 logistics-center 的 SDD 宪章，约束业务知识库、异步一致性与后端交付质量。"
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "12",
+        "excerpt": "所有业务变更 MUST 从 `Domain Route -> Specify -> Clarify -> Plan -> Tasks` 开始，严禁跳过规格直接编码。"
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "28",
+        "excerpt": "- 核心治理目录：`/.sdlc/memory`、`/.sdlc/legacy/.specify/workflow`、`/.sdlc/coding_guide`。"
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "29",
+        "excerpt": "- 短期过程资产目录：`.sdlc/legacy/specs/######-feature-name`。"
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "35",
+        "excerpt": "开发与治理流程以 [SDDWorkflow.md](../workflow/SDDWorkflow.md) 为准，执行顺序："
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "line": "36",
+        "excerpt": "`Domain Route -> Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync`。"
+      }
+    ],
+    "count": 9,
+    "transforms": [
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "rule": 2,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "rule": 7,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/AiGovernance.md",
+        "rule": 9,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 1,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 2,
+        "replacements": 5
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 3,
+        "replacements": 3
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 4,
+        "replacements": 2
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 5,
+        "replacements": 3
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 6,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 7,
+        "replacements": 5
+      },
+      {
+        "file": ".sdlc/memory/DocumentationStandard.md",
+        "rule": 8,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/InteractionProtocol.md",
+        "rule": 9,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "rule": 2,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "rule": 3,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "rule": 4,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "rule": 5,
+        "replacements": 1
+      },
+      {
+        "file": ".sdlc/memory/constitution.md",
+        "rule": 7,
+        "replacements": 1
+      }
+    ]
+  },
+  "logistics-center": {
+    "rc": 0,
+    "unchanged": true,
+    "transform_rows": 9
+  },
+  "logistics-master": {
+    "rc": 0,
+    "unchanged": true,
+    "transform_rows": 0
+  },
+  "checks": [
+    {
+      "name": "fresh 7 files",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "render project/date/author",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "both corpus directories idempotent",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "audit dry-run missing file zero write",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "audit refill",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "audit owner preservation",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "routed repeat corpus and managed documents stable",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "nine rules accounted",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "rule7 boundary preservation",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "rule9 generic archive preserved",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "unicode filename and body",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "same input deterministic",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "pending 50 cap / 120 chars / scoped unicode",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "direct root outside blocked",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "direct root dangling blocked",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "multiple transformed files restored / pruning reversed",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "real corpus 9 adopted",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "real logistics-center zero write",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "real logistics-master zero write",
+      "pass": true,
+      "detail": null
+    }
+  ]
+}
