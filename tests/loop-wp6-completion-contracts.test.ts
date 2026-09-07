@@ -282,8 +282,12 @@ async function main(): Promise<void> {
         resolutionEvidenceRef: `loop-artifact:v1:${implCurrent.artifactKind}:sha256:${implCurrent.digest}`,
         resolutionEvidenceDigest: implCurrent.digest,
       });
-      ok(recoverRunContext(env.runStore, requirementId)!.findingGate.status === "ELIGIBLE",
-        "CC2-R: evidence-bound closure restores eligibility");
+      // G4-R7-B4 (§7.3 A4): the tail rebuild runs AFTER the itemized closure,
+      // and eligibility is restored once the rebuilt tail lands.
+      const fourthRun = await run("build an order export", RUN_OPTIONS(env, { requirementId }));
+      const cc2rRecovery = recoverRunContext(env.runStore, requirementId)!;
+      ok(fourthRun.final_status === "success" && cc2rRecovery.findingGate.status === "ELIGIBLE",
+        "CC2-R: evidence-bound closure restores eligibility and the tail completes");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
     }

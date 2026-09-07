@@ -368,7 +368,7 @@ async function main(): Promise<void> {
         const nowFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === nodeId)!;
         ok(nowFact.revisionId === reusedBefore.get(nodeId), `${nodeId} current reused read-only`);
       }
-      for (const nodeId of ["implementation", "code-review", "knowledge-sync"] as const) {
+      for (const nodeId of ["implementation", "code-review"] as const) {
         const nowFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === nodeId)!;
         ok(nowFact.revisionId !== reusedBefore.get(nodeId) && nowFact.validity === "ACTIVE",
           `${nodeId} was rebuilt to a fresh ACTIVE current`);
@@ -377,6 +377,10 @@ async function main(): Promise<void> {
           `the superseded ${nodeId} revision remains auditable`,
         );
       }
+      // G4-R7-B4 (§7.3 A4): the tail is not admitted while the finding is OPEN.
+      const ksFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === "knowledge-sync")!;
+      ok(ksFact.revisionId === reusedBefore.get("knowledge-sync"),
+        "knowledge-sync is not admitted while the finding is OPEN (A4)");
       ok(afterWave.openFindings.length === 1 && afterWave.openFindings[0]!.findingId === findingId,
         "re-running agents never auto-closes a finding (invariant 8)");
       // RESOLVED orchestration: resolution requires the rebuilt ACTIVE current.
@@ -388,7 +392,16 @@ async function main(): Promise<void> {
         resolutionEvidenceDigest: implCurrent.digest,
       });
       const resolvedRecovery = recoverRunContext(env.runStore, requirementId)!;
-      ok(resolvedRecovery.openFindings.length === 0 && resolvedRecovery.findingGate.status === "ELIGIBLE",
+      ok(resolvedRecovery.openFindings.length === 0,
+        "evidence-bound closure clears the OPEN blocking set");
+      const fourth = await run("build an order export", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+      ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED",
+        "the tail rebuilds and completes after the itemized closure");
+      const finalRecovery = recoverRunContext(env.runStore, requirementId)!;
+      const ksCurrent = finalRecovery.currentArtifactMap.find((fact) => fact.nodeId === "knowledge-sync")!;
+      ok(ksCurrent.revisionId !== reusedBefore.get("knowledge-sync") && ksCurrent.validity === "ACTIVE",
+        "knowledge-sync rebuilt to a fresh ACTIVE current after the closure");
+      ok(finalRecovery.findingGate.status === "ELIGIBLE",
         "evidence-bound closure restores eligibility");
     } finally {
       rmSync(env.root, { recursive: true, force: true });

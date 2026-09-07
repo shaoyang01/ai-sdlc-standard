@@ -405,9 +405,13 @@ export class LoopCapabilityEntry {
         );
       }
       const planningNodeIdx = NODE_CAPABILITY_IDS.indexOf("task-planning");
+      // G4-R7-B4: §5.2 rework-target semantics — an OPEN finding whose
+      // earliest node IS task-planning names planning as the rework target;
+      // it must stay dispatchable to produce the repair evidence. Only
+      // strictly-upstream OPEN findings block planning admission.
       const blocking = recovery.openFindings.filter(
         (finding) =>
-          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <=
+          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
           planningNodeIdx,
       );
       if (blocking.length > 0) {

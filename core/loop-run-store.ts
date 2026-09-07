@@ -2139,8 +2139,38 @@ export class LoopRunStore {
           "a failed terminal persists no output blob and registers no findings",
         );
       }
-      return;
     }
+    // G4-R7-B2: the registration DIRECTIVE is a pure function of the
+    // terminal event's own facts (the gateway derives it from exactly these
+    // facts), so the caller-supplied directive is compared in FULL against
+    // the derivation — a mutated runInvalidation, reflow flag or adjudication
+    // can no longer ride an exact-replay no-op or a live append.
+    const isScanTerminal = event.capability === "solution-gate" && event.executionRole === "adversarial_scan";
+    const derivedRunInvalidation = !isScanTerminal;
+    if (registration.runInvalidation !== derivedRunInvalidation) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "registration directive (runInvalidation) must match the terminal's own facts",
+      );
+    }
+    const derivedAdmits = event.status === "succeeded" &&
+      event.decisionStatus === "CONFIRMED" && event.gateResult !== "FAIL";
+    const derivedReflow = event.capability === "solution-gate" && event.executionRole === "formal_verdict" &&
+      !derivedAdmits && (event.gateResult === "FAIL" || event.decisionStatus === "ESCALATED");
+    if (Boolean(registration.registerReflowFinding ?? false) !== derivedReflow) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "registration directive (registerReflowFinding) must match the terminal's own facts",
+      );
+    }
+    const derivedAdjudication = derivedAdmits && event.gateResult === "PASS_WITH_RISK";
+    if (derivedAdjudication !== (adjudication !== null)) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "registration directive (adjudicateScanFindings) must match the terminal's own facts",
+      );
+    }
+    if (adjudication !== null) {
     if (adjudication.mode !== "PWR_ACCEPT") {
       throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings mode is not canonical");
     }
@@ -2163,6 +2193,7 @@ export class LoopRunStore {
         "ILLEGAL_TRANSITION",
         "adjudication scope must be the ruling event's own decisionScopeId",
       );
+    }
     }
   }
 
@@ -2225,16 +2256,42 @@ export class LoopRunStore {
       if (event.consumedFindingsRef === null || event.consumedFindingsDigest === null) {
         throw new LoopRunJournalError("STORE_CORRUPT", "replayed PWR ruling carries no consumed ledger");
       }
-      // Same origin binding as the acceptance itself: only gate-source
-      // findings whose evidence IS the consumed ledger were acceptable in
-      // the original transaction — a foreign finding that borrows the
-      // ledger reference (registered later or not) was never in scope.
+      // G4-R7-B2: membership identity, same as the acceptance itself — only
+      // findings REGISTERED by the producing scan round (bound to its
+      // terminal createdAt) were acceptable in the original transaction.
+      // Content-equal ledgers from later rounds and foreign borrowed rows
+      // are neither members nor replay conflicts.
+      const executions = this.readCapabilityExecutionsInTransaction(db, event.runId);
+      const producerScan = executions.find((item) =>
+        item.status === "succeeded" &&
+        item.capability === "solution-gate" &&
+        item.executionRole === "adversarial_scan" &&
+        item.unresolvedFindingsRef === event.consumedFindingsRef &&
+        item.unresolvedFindingsDigest === event.consumedFindingsDigest,
+      );
+      if (producerScan === undefined) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "replayed ledger acceptance has no producing adversarial_scan round",
+        );
+      }
+      const expectedMemberCount = this.readScanLedgerMemberCount(
+        producerScan.unresolvedFindingsRef!,
+        producerScan.unresolvedFindingsDigest!,
+      );
+      const snapshot = this.readRunSnapshotInTransaction(db, event.runId)!;
+      const revisions = this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId);
+      const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
       const ledgerFindings = findings.filter(
         (finding) =>
-          finding.sourceCapability === "solution-gate" &&
-          finding.evidenceRef === event.consumedFindingsRef &&
-          finding.evidenceDigest === event.consumedFindingsDigest,
+          this.isRegisteredScanMember(finding, producerScan, producerExaminedRevisionId),
       );
+      if (expectedMemberCount !== null && ledgerFindings.length !== expectedMemberCount) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "replayed ledger membership does not match the producing scan's Finding Ledger",
+        );
+      }
       for (const target of ledgerFindings) {
         if (target.severity === "CRITICAL") {
           if (target.status !== "OPEN") {
@@ -2420,13 +2477,12 @@ export class LoopRunStore {
         event.runId,
       );
     }
-    // G4-R5-H5/H6: the verdict round's ledger adjudication — the ruling IS
-    // the event being appended. Scan-source findings are the OPEN findings
-    // whose evidence is a scan Finding Ledger blob of this run; the PASS
-    // ruling resolves ALL of them (old ledger included — the reflowed scope
-    // closes as a whole), the PWR ruling risk-accepts the consumed ledger's
-    // non-CRITICAL findings under THIS decision scope. CRITICAL findings are
-    // never acceptable and stay OPEN, blocking A1 admission — fail-closed.
+    // G4-R5-H5/H6, as amended by G4-R6-H3: the verdict round's ledger
+    // adjudication — the ruling IS the event being appended. A plain PASS
+    // ruling resolves NOTHING (per-item resolveFinding is the only closure);
+    // the PWR ruling risk-accepts the consumed ledger's non-CRITICAL members
+    // under the ruling event's own decision scope. CRITICAL members are
+    // never acceptable and stay OPEN, blocking — fail-closed.
     // G4-R6-H3: a plain PASS ruling no longer batch-closes scan findings —
     // closure is the per-item resolveFinding lifecycle with real repair
     // evidence (§5.2 复验), and unresolved findings keep blocking downstream
@@ -2459,6 +2515,7 @@ export class LoopRunStore {
           "ledger acceptance requires a real producing adversarial_scan round for the consumed Finding Ledger",
         );
       }
+      const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
       for (const target of current) {
         if (target.status !== "OPEN") continue;
         if (target.sourceCapability !== "solution-gate") continue;
@@ -2467,6 +2524,11 @@ export class LoopRunStore {
           target.evidenceRef !== event.consumedFindingsRef ||
           target.evidenceDigest !== event.consumedFindingsDigest
         ) continue;
+        // G4-R7-B2: membership identity — an acceptable finding is one the
+        // producing scan round actually REGISTERED (bound to the producer
+        // terminal's createdAt or to the revision that round examined),
+        // never a later row that merely borrows the ledger blob identity.
+        if (!this.isRegisteredScanMember(target, producerScan, producerExaminedRevisionId)) continue;
         const acceptance = validateLoopFindingRiskAcceptance({
           riskAcceptedBy: "formal_verdict",
           riskAcceptanceEvidenceRef: event.outputArtifactRef!,
@@ -3211,6 +3273,85 @@ export class LoopRunStore {
       }
       storageFailure();
     }
+  }
+
+  /**
+   * G4-R7-B2: derive the EXPECTED registration membership count from the
+   * scan round's own persisted Finding Ledger blob — the registration is
+   * one finding per declared ledger member, so the blob (a digest-verified
+   * journal fact) is the authoritative member count. Parse failure of a
+   * digest-verified blob is corruption, fail-closed.
+   */
+  private readScanLedgerMemberCount(ref: string, digest: string): number | null {
+    // Parity with verifyFindingEvidenceBlob: an unbound artifact store
+    // (legacy in-memory test constructions) cannot derive the blob count —
+    // membership falls back to the producer-createdAt binding alone.
+    if (this.artifactStore === null) return null;
+    let raw: Buffer;
+    try {
+      raw = this.artifactStore.read(ref, digest);
+    } catch (error) {
+      if (error instanceof LoopArtifactStoreError) {
+        if (error.code === "ARTIFACT_CORRUPT") corrupt("finding ledger blob is corrupt in the bound artifact store");
+        corrupt("finding ledger blob is missing in the bound artifact store");
+      }
+      storageFailure();
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw.toString("utf8"));
+    } catch {
+      // Opaque (legacy/fixture) ledger payload — count undecidable, binding
+      // falls back to the producer-identity predicates.
+      return null;
+    }
+    const record = parsed as { schema?: unknown; findings?: unknown };
+    if (
+      record === null || typeof record !== "object" ||
+      record.schema !== "loop-capability-findings:v1" || !Array.isArray(record.findings)
+    ) {
+      // Legacy/fixture ledgers are opaque strings, not canonical envelopes —
+      // membership count stays undecidable there and the binding falls back
+      // to the producer-identity predicates. Production gateway rounds always
+      // write the canonical envelope.
+      return null;
+    }
+    return (record.findings as unknown[]).length;
+  }
+
+  /**
+   * G4-R7-B2: the membership identity of findings REGISTERED by a scan
+   * round. The producer-terminal createdAt binding is the gateway-era
+   * receipt; the examined-revision binding is the structural identity both
+   * share (the registration anchors each finding to the revision the round
+   * examined). A row matching the ledger blob identity but neither binding
+   * is a foreign borrower.
+   */
+  private isRegisteredScanMember(
+    finding: { sourceCapability: string; evidenceRef: string; evidenceDigest: string; createdAt: string; sourceRevisionId: string | null },
+    producerScan: LoopCapabilityExecutionEvent,
+    producerExaminedRevisionId: string | null,
+  ): boolean {
+    return (
+      finding.sourceCapability === "solution-gate" &&
+      finding.evidenceRef === (producerScan.unresolvedFindingsRef ?? "") &&
+      finding.evidenceDigest === (producerScan.unresolvedFindingsDigest ?? "") &&
+      (finding.createdAt === producerScan.createdAt ||
+        (producerExaminedRevisionId !== null && finding.sourceRevisionId === producerExaminedRevisionId))
+    );
+  }
+
+  /** The revision identity the producer scan round examined (its input triple). */
+  private producerExaminedRevisionId(
+    producerScan: LoopCapabilityExecutionEvent,
+    revisions: readonly Readonly<{ revisionId: string; artifactRef: string; semver: string }>[],
+  ): string | null {
+    if (producerScan.inputArtifactRef === null || producerScan.inputArtifactVersion === null) return null;
+    return revisions.find(
+      (revision) =>
+        revision.artifactRef === producerScan.inputArtifactRef &&
+        revision.semver === producerScan.inputArtifactVersion,
+    )?.revisionId ?? null;
   }
 
   /**
@@ -4443,6 +4584,35 @@ export class LoopRunStore {
             "the ruling's consumed Finding Ledger has no producing adversarial_scan round in this run",
           );
         }
+        // G4-R7-B2: membership identity + integrity. The acceptable set is
+        // exactly what the producing scan round REGISTERED — rows bound to
+        // the producer terminal's createdAt, in a count equal to the scan's
+        // own Finding Ledger membership. A later row that borrows the ledger
+        // blob identity (even with the right source capability) is not a
+        // member; a membership count drift refuses fail-closed instead of
+        // accepting an unverifiable set.
+        const requirementId = this.readRunSnapshotInTransaction(db, runId)!.state.identity.requirementId;
+        const revisions = this.readArtifactRevisionsInTransaction(db, runId, requirementId);
+        const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
+        const members = findings.filter((item) =>
+          this.isRegisteredScanMember(item, producerScan, producerExaminedRevisionId),
+        );
+        const expectedMemberCount = this.readScanLedgerMemberCount(
+          producerScan.unresolvedFindingsRef!,
+          producerScan.unresolvedFindingsDigest!,
+        );
+        if (expectedMemberCount !== null && members.length !== expectedMemberCount) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "finding membership does not match the producing scan's Finding Ledger",
+          );
+        }
+        if (!members.some((item) => item.findingId === target.findingId)) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "the target finding is not a registered member of the ruling's scan round",
+          );
+        }
         this.verifyFindingEvidenceBlob(
           valid.riskAcceptanceEvidenceRef,
           valid.riskAcceptanceEvidenceDigest,
@@ -4710,8 +4880,10 @@ export class LoopRunStore {
    * Re-Gate target (append-time strictness); `historicalFindings` enables
    * read-path re-validation of already-recorded restarts against immutable
    * finding facts. Pure journal data — no skill surface, no caller input.
+   * G4-R7 note: the planner facts come from the shared reducers
+   * (reduceBlockedPointIndexes / reduceGateRoundFacts over the latest
+   * terminal per execution point) — no MAX(attempt) proxy remains.
    */
-  /** Per-point MAX(attempt) for Re-Gate mid-wave role refinement (WP4). */
   private regateChainContextInTransaction(
     db: Database.Database,
     runId: string,

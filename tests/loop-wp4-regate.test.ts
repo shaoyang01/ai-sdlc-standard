@@ -482,9 +482,11 @@ async function main(): Promise<void> {
       (afterCounts.get("code-review:primary") ?? 0) === (beforeCounts.get("code-review:primary") ?? 0) + 1,
       "improvement drives direct code-review rework",
     );
+    // G4-R7-B4 (§7.3 A4): the tail is NOT admitted while the finding is OPEN
+    // — knowledge-sync rebuild waits for the itemized closure.
     ok(
-      (afterCounts.get("knowledge-sync:primary") ?? 0) === (beforeCounts.get("knowledge-sync:primary") ?? 0) + 1,
-      "knowledge-sync rebuilds downstream of the reworked review",
+      (afterCounts.get("knowledge-sync:primary") ?? 0) === (beforeCounts.get("knowledge-sync:primary") ?? 0),
+      "knowledge-sync is not admitted while the improvement is OPEN (A4)",
     );
     ok(
       (afterCounts.get("solution-design:primary") ?? 0) === (beforeCounts.get("solution-design:primary") ?? 0) &&
@@ -492,6 +494,22 @@ async function main(): Promise<void> {
       "implementation rework does not re-walk the Gate (I-D)",
     );
     ok(second.chain_status === "BLOCKED" && second.final_status === "failed", "open improvement keeps run honestly BLOCKED");
+    // Closure re-verification first: the discovering node resolves the
+    // finding against the repaired review artifact; the tail then rebuilds.
+    const reviewCurrent = env.runStore.listRegateCurrentFacts(first.run_id)
+      .find((fact) => fact.nodeId === "code-review")!;
+    env.runStore.resolveFinding(first.run_id, improvementId, {
+      resolvedByNodeId: "code-review",
+      resolvedByRevisionId: reviewCurrent.revisionId,
+      resolutionEvidenceRef: reviewCurrent.artifactRef,
+      resolutionEvidenceDigest: reviewCurrent.digest,
+    });
+    const third = await run("add export button", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+    const finalCounts = pointDispatchCounts(env, third.run_id);
+    ok(
+      (finalCounts.get("knowledge-sync:primary") ?? 0) === (beforeCounts.get("knowledge-sync:primary") ?? 0) + 1,
+      "knowledge-sync rebuilds after the itemized closure",
+    );
     void improvementId;
   }
 

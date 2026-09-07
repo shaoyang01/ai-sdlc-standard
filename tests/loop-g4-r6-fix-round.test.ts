@@ -31,11 +31,12 @@ import {
   type LoopCapabilityExecutionEvent,
 } from "../core/loop-capability-execution";
 import { NODE_OUTPUT_ENVELOPE_BEGIN, NODE_OUTPUT_ENVELOPE_END } from "../core/node-output-envelope";
-import { createLoopFinding } from "../core/loop-finding-lifecycle";
+import { canonicalizeLoopFinding, createLoopFinding } from "../core/loop-finding-lifecycle";
 import {
   planRegateFromFacts,
   reduceBlockedPointIndexes,
   reduceGateRoundFacts,
+  verdictConsumedLatestScan,
   type CurrentRevisionFacts,
   type RegateFindingFacts,
 } from "../core/loop-regate";
@@ -144,12 +145,13 @@ async function main(): Promise<void> {
     const h = makeHarness("h1");
     try {
       const script = new Map<ScriptKey, EnvelopeSpec[]>([
-        ["solution-gate:adversarial_scan", [{ findings: [finding("F-1", "CRITICAL", "SOLUTION")] }]],
+        ["solution-gate:adversarial_scan", [{ findings: [finding("F-1", "HIGH", "SOLUTION"), finding("F-2", "CRITICAL", "SOLUTION")] }]],
         ["solution-gate:formal_verdict", [{ gateResult: "PASS_WITH_RISK", decisionStatus: "CONFIRMED", decisionDepth: "STANDARD", riskAcceptanceRefs: ["RISK-1"], findings: [] }]],
       ]);
       const { adapter } = scriptedAdapter(script);
       const first = await runOnce(h, adapter, 5);
-      // The CRITICAL scan finding stays OPEN and blocks — bounded stop.
+      // The CRITICAL scan finding stays OPEN and blocks — bounded stop. The
+      // HIGH member was accepted in-terminal (real PWR semantics).
       ok(first.chain_status !== "COMPLETED", "the probe run stops before completion (CRITICAL finding blocks)");
       const runId = runIdOf(h);
 
@@ -222,22 +224,49 @@ async function main(): Promise<void> {
       ok(recovery.nextExecutionPoint === null || recovery.solutionGateDecision?.status === "BLOCKED_UNKNOWN",
         "the forged ruling cannot admit downstream work");
 
-      // (d) The acceptance consumer requires the same version.
-      const scanEvent = events(h).find((e) => e.capability === "solution-gate" && e.executionRole === "adversarial_scan")!;
-      const openCritical = h.runStore.listFindings(runId).find((findingItem) => findingItem.status === "OPEN")!;
-      let acceptanceRefused = false;
+      // (d) R7-B8: the acceptance version gate is probed with a LEGAL
+      // ORIGINAL scan member in an OPEN HIGH shape — never the CRITICAL
+      // rule (which fires before the ruling lookup and would shadow the
+      // version premise). The member is the scan's own registered HIGH
+      // row, SQL-normalized back to OPEN with a canonical-consistent hash:
+      // only the RULING's version differs from a legal acceptance state.
+      const scanEvent = events(h).find((e) => e.status === "succeeded" && e.capability === "solution-gate" && e.executionRole === "adversarial_scan")!;
+      void scanEvent;
+      const acceptedMember = h.runStore.listFindings(runId).find((findingItem) => findingItem.status === "ACCEPTED_RISK")!;
+      const flippedOpen = {
+        ...acceptedMember,
+        status: "OPEN" as const,
+        riskAcceptedBy: null,
+        riskAcceptanceEvidenceRef: null,
+        riskAcceptanceEvidenceDigest: null,
+        riskAcceptedScopeId: null,
+      };
+      const flippedHash = createHash("sha256").update(canonicalizeLoopFinding(flippedOpen)).digest("hex");
+      const db2 = new Database(join(h.root, "journal.db"));
+      db2.prepare(
+        "UPDATE loop_findings SET status='OPEN', risk_accepted_by=NULL, risk_acceptance_evidence_ref=NULL, risk_acceptance_evidence_digest=NULL, risk_accepted_scope_id=NULL, canonical_sha256=? WHERE finding_id=?",
+      ).run(flippedHash, acceptedMember.findingId);
+      // The closure proof must not survive an OPEN shape (same rule as
+      // supersedeFinding) — otherwise the chain validation refuses the row
+      // as corrupt instead of reaching the version premise.
+      db2.prepare("DELETE FROM loop_finding_proofs WHERE finding_id=?").run(acceptedMember.findingId);
+      db2.close();
+      let acceptanceRefusedCode: string | null = null;
       try {
-        h.runStore.acceptFindingRisk(runId, openCritical.findingId, {
+        h.runStore.acceptFindingRisk(runId, acceptedMember.findingId, {
           riskAcceptedBy: "formal_verdict",
           riskAcceptanceEvidenceRef: verdict.outputArtifactRef,
           riskAcceptanceEvidenceDigest: verdict.outputDigest,
           decisionScopeId: verdict.decisionScopeId,
         });
-      } catch {
-        acceptanceRefused = true;
+      } catch (error) {
+        acceptanceRefusedCode = (error as { code?: string }).code ?? null;
       }
-      ok(acceptanceRefused, "acceptFindingRisk refuses: the ruling is v4 — no decisionStatus authority (R6-H1)");
-      void scanEvent;
+      if (acceptanceRefusedCode !== "ILLEGAL_TRANSITION") {
+        console.error("  h1(d) diagnose: refused code =", acceptanceRefusedCode);
+      }
+      ok(acceptanceRefusedCode === "ILLEGAL_TRANSITION",
+        "acceptFindingRisk refuses a legal OPEN HIGH original member when the ruling is v4 — version gate is the deciding premise (R6-H1/R7-B8)");
     } finally {
       closeHarness(h);
     }
@@ -324,7 +353,10 @@ async function main(): Promise<void> {
         evidenceRef: terminal.unresolvedFindingsRef ?? terminal.outputArtifactRef!,
         evidenceDigest: terminal.unresolvedFindingsDigest ?? terminal.outputDigest!,
         findings: [],
-        runInvalidation: false,
+        // G4-R7-B2: the directive is derived from the terminal's own facts —
+        // a verdict terminal is not a scan, so runInvalidation derives TRUE.
+        runInvalidation: true,
+        registerReflowFinding: false,
         adjudicateScanFindings: { decisionScopeId: terminal.decisionScopeId!, mode: "PWR_ACCEPT" as const },
       };
       const replayNoop = h.runStore.appendCapabilityExecutionWithFindings(
@@ -563,10 +595,34 @@ async function main(): Promise<void> {
       planInScope.nodesToRebuild.join(",") === "code-review,knowledge-sync",
       "an in-scope blocked point re-drives first with consistently regenerated plan fields");
 
-    // (e) The shared reductions: latest-terminal semantics — a point blocked
-    // once but successfully re-driven is NOT blocked anymore.
-    const reduced = reduceBlockedPointIndexes([]);
-    ok(reduced.length === 0, "reduceBlockedPointIndexes over an empty journal is empty");
+    // (e) R7-B8: the shared blocked-point reduction reads the LATEST terminal
+    // per execution point over REAL journal events — a point blocked once but
+    // successfully re-driven is not blocked; a currently-blocked point is.
+    const ev = (capability: string, executionRole: string, status: string, sequence: number, eligibility: string | null) =>
+      ({ capability, executionRole, status, sequence, nextStepEligibility: eligibility }) as never as LoopCapabilityExecutionEvent;
+    const reduced = reduceBlockedPointIndexes([
+      ev("implementation", "primary", "succeeded", 4, "BLOCKED"),
+      ev("implementation", "primary", "succeeded", 6, "ELIGIBLE"),
+      ev("code-review", "primary", "succeeded", 8, "BLOCKED"),
+    ]);
+    ok(reduced.length === 1 && reduced[0] === 6,
+      "blocked-point reduction reads the LATEST terminal per point (blocked-then-succeeded is not blocked, R7-B8)");
+
+    // (f) R7-B8: the journal-ORDER gate is load-bearing — a content-equal
+    // ledger consumed by an EARLIER verdict is not the latest scan's
+    // adjudication. Deleting the ordering condition must turn this red.
+    const sameLedger = "loop-artifact:v1:capability_findings:sha256:same";
+    const orderFacts = {
+      lastScan: {
+        inputArtifactRef: newDesign.artifactRef, inputArtifactVersion: newDesign.semver, inputDigest: newDesign.digest,
+        unresolvedFindingsRef: sameLedger, unresolvedFindingsDigest: "d".repeat(64),
+        sequence: 12,
+      },
+      lastVerdict: { consumedFindingsRef: sameLedger, consumedFindingsDigest: "d".repeat(64), sequence: 8 },
+      designCurrent: newDesign,
+    };
+    ok(verdictConsumedLatestScan(orderFacts) === false,
+      "a content-equal ledger consumed by an EARLIER verdict is not the latest scan's adjudication (journal-order gate, R7-B8)");
   }
 
   console.log(`\ng4-r6 fix-round matrix: ${p} passed, ${f} failed`);

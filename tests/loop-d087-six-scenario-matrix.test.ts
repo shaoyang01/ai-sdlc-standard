@@ -52,14 +52,18 @@ function envelopeText(spec: EnvelopeSpec): string {
 }
 
 /** Scripted fake adapter: returns the next scripted envelope per capability:role. */
-function scriptedAdapter(script: Map<ScriptKey, EnvelopeSpec[]>): {
+function scriptedAdapter(script: Map<ScriptKey, EnvelopeSpec[]>, capture?: (req: Record<string, unknown>) => void): {
   adapter: RealGatewayAdapter;
   calls: ScriptKey[];
+  cwds: string[];
 } {
   const calls: ScriptKey[] = [];
+  const cwds: string[] = [];
   const execute = async (req: Record<string, unknown>): Promise<ExecutionResult> => {
     const key = `${String(req.capability)}:${String(req.executionRole)}`;
     calls.push(key);
+    cwds.push(typeof req.cwd === "string" ? req.cwd : "<none>");
+    if (capture !== undefined) capture(req);
     const queue = script.get(key) ?? [];
     // Unscripted dispatches answer with a minimal valid product.
     const spec: EnvelopeSpec = queue.length === 0
@@ -75,6 +79,7 @@ function scriptedAdapter(script: Map<ScriptKey, EnvelopeSpec[]>): {
   };
   return {
     calls,
+    cwds,
     adapter: { execute } as unknown as RealGatewayAdapter,
   };
 }
@@ -324,7 +329,17 @@ async function main(): Promise<void> {
           riskAcceptanceRefs: ["RISK-1"], findings: [],
         }]],
       ]);
-      const { adapter } = scriptedAdapter(script);
+      // G4-R7-B5: capture the ACTUAL dispatch carriers — the unique risk
+      // marker must reach the real staged/stdin content, not just the delta.
+      const captured: { stdin: string | null; stagedText: string } = { stdin: null, stagedText: "" };
+      const { adapter } = scriptedAdapter(script, (req) => {
+        if (req.capability === "task-planning" || req.capability === "implementation") {
+          captured.stdin = typeof req.stdinContent === "string" ? req.stdinContent : null;
+          const pointers = req.promptPointers as ReadonlyArray<{ absolutePath?: string }> | undefined;
+          const path = pointers?.[0]?.absolutePath;
+          captured.stagedText = typeof path === "string" ? readFileSync(path, "utf8") : "";
+        }
+      });
       const result = await run("build a risky feature", {
         requirementId: h.requirementId,
         workspaceRoot: h.root,
@@ -347,6 +362,11 @@ async function main(): Promise<void> {
       );
       ok(events.some((e) => e.capability === "task-planning" && e.status === "succeeded"),
         "task-planning was admitted (A1) by the CONFIRMED ruling");
+      // G4-R7-B5: the risk refs ride the ACTUAL downstream input carriers.
+      ok(captured.stdin !== null && captured.stdin.includes("RISK-1") &&
+        captured.stagedText.includes("RISK-1") &&
+        captured.stagedText.includes("decisionDeltaRef"),
+        "the PWR risk refs + delta pointer reach the real staged/stdin input of downstream nodes");
     } finally {
       closeHarness(h);
     }
@@ -431,7 +451,7 @@ async function main(): Promise<void> {
       const script = new Map<ScriptKey, EnvelopeSpec[]>([
         ["solution-gate:formal_verdict", [{ gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "STANDARD", findings: [] }]],
       ]);
-      const { adapter, calls } = scriptedAdapter(script);
+      const { adapter, calls, cwds } = scriptedAdapter(script);
       const preparedRoot = mkdtempSync(join(tmpdir(), "d087-s6-prepared-"));
       const parsed = parseProductionEntryRequest({
         schema: PRODUCTION_ENTRY_SCHEMA,
@@ -467,8 +487,15 @@ async function main(): Promise<void> {
       ok(existsSync(join(preparedRoot, "prompt-input")) &&
         readdirSync(join(preparedRoot, "prompt-input")).length >= 7,
         "every dispatch staged its prompt input inside the prepared attempt worktree (actual cwd pin)");
-      ok(!existsSync(join(h.root, "prompt-input")),
-        "the business root received zero dispatch side effects (no staged inputs leaked to the resolver's stale answer)");
+      // G4-R7-B8: EVERY dispatch's actual cwd is asserted individually — a
+      // directory-level file count cannot prove each dispatch was pinned.
+      ok(cwds.length >= 8 && cwds.every((cwd) => cwd === preparedRoot),
+        `all ${cwds.length} dispatched adapters executed with cwd === the prepared worktree (R7-B8)`);
+      // The request's REAL business root is the parsed repositoryPath
+      // (h.root/repo) — the zero-side-effect assertion checks THAT root (the
+      // earlier check of the resolver's stale answer h.root stays as well).
+      ok(!existsSync(join(h.root, "prompt-input")) && !existsSync(join(h.root, "repo", "prompt-input")),
+        "the business root (and the stale resolver answer) received zero dispatch side effects");
       rmSync(preparedRoot, { recursive: true, force: true });
 
       // G4-R6-H6 negatives: the prepared workspace is a REQUIRED, VERIFIED

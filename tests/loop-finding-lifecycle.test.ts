@@ -86,6 +86,10 @@ function expectThrow(code: string, fn: () => unknown, message: string): void {
 }
 
 const TS = "2026-08-20T00:00:00.000Z";
+// G4-R7-B2: the producing scan terminal's createdAt, recorded by the driver.
+// A synthetic scan member (public appendFinding path) binds this registration
+// identity so acceptFindingRisk's membership check sees a legal member.
+let driverScanCreatedAt: string | null = null;
 let tsCounter = 0;
 function nextTs(): string {
   tsCounter += 1;
@@ -281,7 +285,7 @@ function makeCapabilityDriver(
           bindingId: `binding-kimi-${capability}-adversarial_scan`,
         });
         store.appendCapabilityExecution(scanStarted);
-        store.appendCapabilityExecution(event(capability, "succeeded", {
+        const scanSucceeded = event(capability, "succeeded", {
           attempt: scanAttempt,
           executionRole: "adversarial_scan",
           executorAgent: "kimi",
@@ -295,7 +299,8 @@ function makeCapabilityDriver(
           // v3 (Round 1): the scan round always persists its Finding Ledger.
           unresolvedFindingsRef: scanLedger.ref,
           unresolvedFindingsDigest: scanLedger.digest,
-        }));
+        });
+        store.appendCapabilityExecution(scanSucceeded);
       }
       const executionRole = isGate ? "formal_verdict" : "primary";
       const attempt = nextAttempt(capability, executionRole);
@@ -478,6 +483,13 @@ function findingDraft(o: {
     earliestAffectedNodeId: o.earliestAffectedNodeId,
     createdAt: o.createdAt ?? nextTs(),
   };
+}
+
+// G4-R7-B2: the producing scan terminal's createdAt — the registration
+// identity a synthetic scan member must carry for acceptance membership.
+function scanMemberCreatedAt(store: LoopRunStore): string {
+  return store.listCapabilityExecutions("run-001")
+    .find((e) => e.executionRole === "adversarial_scan" && e.status === "succeeded")!.createdAt;
 }
 
 const RESOLUTION_EVIDENCE = Object.freeze({
@@ -1294,7 +1306,8 @@ withRunningStore((store) => {
     sourceRevisionId: "run-001:revision:solution-design:1",
     evidenceRef: ledgerRef(),
     evidenceDigest: ledgerDigest(),
-  }))).record;
+      createdAt: scanMemberCreatedAt(store),
+    }))).record;
   const boundRevision = store.listArtifactRevisions("run-001")
     .find((item) => item.nodeId === "solution-design")!;
   assert(boundRevision.validity === "STALE", "the bound current goes stale with the open finding");
@@ -1415,7 +1428,8 @@ withRunningStore((store) => {
     earliestAffectedNodeId: "solution-design",
     sourceRevisionId: "run-001:revision:solution-design:1",
     evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
-  }))).record;
+      createdAt: scanMemberCreatedAt(store),
+    }))).record;
   store.acceptFindingRisk("run-001", first.findingId, pwrRuling(store));
   // The first finding staled everything from solution-design downstream, so
   // the replacement binds the only surviving current — requirement-intake's.
@@ -1463,7 +1477,8 @@ withRunningStore((store) => {
     earliestAffectedNodeId: "solution-design",
     sourceRevisionId: "run-001:revision:implementation:1",
     evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
-  }))).record;
+      createdAt: scanMemberCreatedAt(store),
+    }))).record;
   // The append marked code-review stale; knowledge-sync has not run yet.
   const validation = driver.succeed("knowledge-sync", NODE_OUT["knowledge-sync"]);
   const validationRevision = store.appendArtifactRevision(createLoopArtifactRevision(revisionDraft({
@@ -1533,9 +1548,14 @@ withRunningStore((store) => {
   // G4-R5-H6: the PWR ruling must exist for the legal acceptance below.
   driveNodes(store, driver, NODE_CAPABILITY_IDS, "PASS_WITH_RISK");
   void driver;
+  const scanTs = scanMemberCreatedAt(store);
   const first = store.appendFinding(createLoopFinding(findingDraft({
     sequence: 1, sourceCapability: "knowledge-sync", category: "KNOWLEDGE",
     earliestAffectedNodeId: "knowledge-sync",
+    // Chain monotonicity: the member binding below pins the second finding
+    // to the scan terminal's createdAt — the first finding must not carry a
+    // later timestamp than its superseding successor.
+    createdAt: scanTs,
   }))).record;
   const second = store.appendFinding(createLoopFinding(findingDraft({
     sequence: 2, sourceCapability: "solution-gate", category: "SOLUTION",
@@ -1543,6 +1563,7 @@ withRunningStore((store) => {
     sourceRevisionId: "run-001:revision:requirement-intake:1",
     evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
     severity: "MEDIUM",
+    createdAt: scanTs,
   }))).record;
   store.supersedeFinding("run-001", first.findingId, second.findingId);
   store.acceptFindingRisk("run-001", second.findingId, pwrRuling(store));
@@ -2143,7 +2164,8 @@ function setupResolvableFinding(
     earliestAffectedNodeId: "solution-design",
     sourceRevisionId: "run-001:revision:knowledge-sync:1",
     evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
-  }))).record;
+      createdAt: scanMemberCreatedAt(store),
+    }))).record;
   // Round 1 (H1-4): the bound current is invalidated by its own finding;
   // RESOLVED closure needs a rebuilt current (WP4). Concurrency/rollback
   // coverage below therefore rides the ACCEPTED_RISK / SUPERSEDED edges.
@@ -2227,6 +2249,7 @@ withRunningStore((store, dir) => {
     sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
     earliestAffectedNodeId: "solution-design",
     sourceRevisionId: "run-001:revision:implementation:1",
+    createdAt: scanMemberCreatedAt(store),
     evidenceRef: ledgerRef(), evidenceDigest: ledgerDigest(),
   }))).record;
   const raw = new Database(join(dir, "journal.db"));
@@ -2674,6 +2697,7 @@ function driveBoundNodes(
       sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
       earliestAffectedNodeId: "solution-design",
       sourceRevisionId: "run-001:revision:solution-design:1",
+      createdAt: scanMemberCreatedAt(store),
       evidenceRef: verdict.consumedFindingsRef!,
       evidenceDigest: verdict.consumedFindingsDigest!,
     }))).record;
@@ -2713,6 +2737,7 @@ function driveBoundNodes(
       sequence: 1, sourceCapability: "solution-gate", category: "SOLUTION",
       earliestAffectedNodeId: "solution-design",
       sourceRevisionId: "run-001:revision:solution-design:1",
+      createdAt: scanMemberCreatedAt(store),
       evidenceRef: verdict.consumedFindingsRef!,
       evidenceDigest: verdict.consumedFindingsDigest!,
     }))).record;

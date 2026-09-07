@@ -169,7 +169,24 @@ export class RealCapabilityGateway extends ExecutionGateway {
     const role = executionRole as CapabilityExecutionRole;
     const providerId = enriched.agent as AgentCliProviderId;
 
-    const inputText = extractInputText(enriched.input, this.realDeps.artifactText);
+    // G4-R7-B5 (§7.3 A2 随行): the PWR risk provenance carried on the dispatch
+    // input — the ruling's verified decision-delta pointer and its non-empty
+    // risk refs — is appended to the actual input TEXT so it reaches every
+    // content carrier (staged workspace file, stdin transport and prompt).
+    // Absent/empty provenance leaves the upstream text byte-identical.
+    const rawInputText = extractInputText(enriched.input, this.realDeps.artifactText);
+    const provenanceRefs = Array.isArray(enriched.input?.["riskAcceptanceRefs"])
+      ? (enriched.input["riskAcceptanceRefs"] as unknown[]).filter(
+        (ref): ref is string => typeof ref === "string" && ref.length > 0,
+      )
+      : [];
+    const deltaRef = enriched.input?.["decisionDeltaRef"];
+    const deltaDigest = enriched.input?.["decisionDeltaDigest"];
+    const inputText = provenanceRefs.length > 0 &&
+      typeof deltaRef === "string" && deltaRef.length > 0 &&
+      typeof deltaDigest === "string" && deltaDigest.length > 0
+      ? `${rawInputText}\n\n## Gate risk acceptance provenance (§7.3 A2)\n\n- decisionDeltaRef: ${deltaRef}\n- decisionDeltaDigest: ${deltaDigest}\n${provenanceRefs.map((ref) => `- riskAcceptanceRef: ${ref}\n`).join("")}`
+      : rawInputText;
     const cwd = this.realDeps.attemptWorkspace(enriched);
 
     // ── E5-W3 plan C: keep the instruction shell small and constant ──

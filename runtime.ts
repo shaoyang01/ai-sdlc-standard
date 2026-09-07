@@ -532,6 +532,39 @@ export async function run(
     ) {
       invalid("maxRegateRounds must be a positive safe integer");
     }
+    // G4-R7-B5 (§7.3 A2): read the latest ruling's PWR risk provenance from
+    // its persisted, digest-verified decision delta. Returns null when there
+    // is no verdict, no delta, a non-v1 delta, or EMPTY refs — provenance is
+    // only ever REAL facts, never a placeholder.
+    const readPwrProvenance = (): {
+      riskAcceptanceRefs: readonly string[];
+      decisionDeltaRef: string;
+      decisionDeltaDigest: string;
+    } | null => {
+      if (journalRunId === null) return null;
+      const verdictEvents = runStore.listCapabilityExecutions(journalRunId)
+        .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict" && e.status === "succeeded");
+      const lastVerdict = verdictEvents[verdictEvents.length - 1] ?? null;
+      if (lastVerdict === null || lastVerdict.decisionDeltaRef === null || lastVerdict.decisionDeltaDigest === null) {
+        return null;
+      }
+      try {
+        const blob = artifactStore.read(lastVerdict.decisionDeltaRef, lastVerdict.decisionDeltaDigest);
+        const delta = JSON.parse(blob.toString("utf8")) as { schema?: unknown; riskAcceptanceRefs?: unknown };
+        if (delta.schema !== "loop-decision-delta:v1" || !Array.isArray(delta.riskAcceptanceRefs)) return null;
+        const refs = (delta.riskAcceptanceRefs as unknown[]).filter(
+          (ref): ref is string => typeof ref === "string" && ref.length > 0,
+        );
+        if (refs.length === 0) return null;
+        return {
+          riskAcceptanceRefs: refs,
+          decisionDeltaRef: lastVerdict.decisionDeltaRef!,
+          decisionDeltaDigest: lastVerdict.decisionDeltaDigest!,
+        };
+      } catch {
+        return null;
+      }
+    };
     let dispatches = 0;
     // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
     // through the existing interrupted-attempt semantics — the recorded input
@@ -714,9 +747,16 @@ export async function run(
       // not an exception that escapes the run.
       if (next.capability === "task-planning" && journalRunId !== null && recovery !== undefined) {
         const planningNodeIdx = NODE_CAPABILITY_IDS.indexOf("task-planning");
+        // G4-R7-B4: the A1 blocking scope follows §5.2 — an OPEN finding
+        // blocks the ADMISSION of its earliest node's DOWNSTREAM products,
+        // while the earliest node itself is the rework target that must run
+        // to produce the repair evidence. A finding whose earliest node IS
+        // task-planning therefore must not block the planning re-run; only
+        // strictly-upstream findings (whose scope covers planning as a
+        // downstream product) block it.
         const blockingOpenFindings = recovery.openFindings.filter(
           (finding) =>
-            (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <=
+            (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
             planningNodeIdx,
         );
         if (recovery.solutionGateDecision?.status !== "DECIDED" || blockingOpenFindings.length > 0) {
@@ -827,6 +867,50 @@ export async function run(
         implementationDepth = entryDecision.depth;
         resolvedImplementationDepth = entryDecision.depth;
       }
+      // G4-R7-B4 (§7.3 A4): knowledge-sync is admitted only with NO OPEN
+      // blocking finding — checked BEFORE the tail dispatch, not first
+      // executed and only then flipped to BLOCKED by the completion check.
+      // The predicate is OPEN-based: a CLOSED (resolved/accepted) finding
+      // whose downstream tail currents are missing is the NORMAL pre-tail
+      // state (the tail has not produced its products yet) and must not
+      // deadlock the tail's own admission.
+      if (
+        next!.capability === "knowledge-sync" && journalRunId !== null &&
+        recovery !== undefined && recovery.openFindings.length > 0
+      ) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: journalRunId,
+          final_status: "failed" as const,
+          chain_status: "BLOCKED" as const,
+          blocking_reason_code: "ADMISSION_DENIED" as const,
+          execution_trace: Object.freeze(
+            runStore.listCapabilityExecutions(journalRunId).map((event) => Object.freeze({
+              capability: event.capability,
+              executionRole: event.executionRole,
+              agent: event.executorAgent,
+              attempt: event.attempt,
+              status: event.status,
+              gateResult: event.gateResult,
+              outputArtifactRef: event.outputArtifactRef,
+              outputDigest: event.outputDigest,
+            })),
+          ),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
+          completed_at: now(),
+        });
+      }
+      // G4-R7-B5 (§7.3 A2 随行): the verified PWR risk provenance — the
+      // ruling's digest-checked decision delta and its non-empty risk refs —
+      // rides the ACTUAL downstream dispatch inputs, so it reaches the
+      // adapter's staged/stdin/prompt carriers instead of stopping at the
+      // entry guard. Empty refs stay legal (no fabrication); a missing or
+      // drifted delta yields no provenance block (never a placeholder).
+      const pwrProvenance = journalRunId !== null ? readPwrProvenance() : null;
       const executed = await entry.execute({
         requirementId,
         ...(firstDispatch ? { identity } : {}),
@@ -844,6 +928,11 @@ export async function run(
         input: {
           inputArtifactRef: inputRef,
           ...(implementationDepth !== null ? { designDepth: implementationDepth } : {}),
+          ...(pwrProvenance !== null ? {
+            riskAcceptanceRefs: pwrProvenance.riskAcceptanceRefs,
+            decisionDeltaRef: pwrProvenance.decisionDeltaRef,
+            decisionDeltaDigest: pwrProvenance.decisionDeltaDigest,
+          } : {}),
         },
       });
       firstDispatch = false;
@@ -1289,20 +1378,47 @@ export async function runProduction(
     ...(deps.maxDispatches !== undefined ? { maxDispatches: deps.maxDispatches } : {}),
     ...(deps.maxRegateRounds !== undefined ? { maxRegateRounds: deps.maxRegateRounds } : {}),
   });
-  // G4-R6-H6: containment verification AFTER the run. A root-directory side
-  // effect (source-branch WIP appearing at the business root) or base drift
-  // detected post-run flips a would-be COMPLETED result into an honest
-  // BLOCKED failure — isolation violations are never reported as success,
-  // and the preflight's single inspect is no longer the only observation.
-  if (
-    source === "real" && deps.inspectWorkspace !== undefined &&
-    preflightSnapshot !== null &&
-    result.final_status === "success" && result.chain_status === "COMPLETED"
-  ) {
+  // G4-R7-B7: the post-run containment verification runs for EVERY exit of
+  // a real invocation (completed, blocked or failed) — an isolation failure
+  // is not a property of the returned object but a FACT about the run. It is
+  // therefore persisted durably (run_blocked / PRODUCTION_ISOLATION_VIOLATED)
+  // so a later resume of the same run cannot treat the polluted source state
+  // as the new clean baseline and reuse the run's outputs as a success. The
+  // preflight has inspected once; this is the second and final inspection.
+  if (source === "real" && deps.inspectWorkspace !== undefined && preflightSnapshot !== null) {
     const post = await deps.inspectWorkspace(identity);
     const rootSideEffects =
       post.baseDrifted || post.sourceWipDigestSha256 !== preflightSnapshot.sourceWipDigestSha256;
     if (rootSideEffects) {
+      try {
+        const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+        if (
+          runState !== undefined && runState.status === "running" &&
+          (runState.blockingReasonCode === null || runState.blockingReasonCode === undefined)
+        ) {
+          runStore.appendEvent(Object.freeze({
+            eventId: `${runState.identity.runId}:${runState.lastSequence + 1}:run_blocked`,
+            runId: runState.identity.runId,
+            sequence: runState.lastSequence + 1,
+            kind: "run_blocked" as const,
+            stage: null,
+            attempt: 0,
+            createdAt: new Date().toISOString(),
+            inputDigest: null,
+            outputArtifactRef: null,
+            outputDigest: null,
+            errorCode: null,
+            retryable: null,
+            reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+            bindingId: null,
+            bindingVersion: null,
+            inputArtifactRef: null,
+          }));
+        }
+      } catch {
+        // A run already durably blocked keeps its own block; the returned
+        // failure below still names the isolation violation either way.
+      }
       return Object.freeze({
         ...result,
         final_status: "failed" as const,
