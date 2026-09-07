@@ -1,0 +1,26 @@
+[
+  {
+    "mutation": "M-A-status-default",
+    "exit": 1,
+    "killed": true,
+    "test": "tests/node-output-envelope.test.ts"
+  },
+  {
+    "mutation": "M-C-blocked-retry",
+    "exit": 1,
+    "killed": true,
+    "test": "tests/loop-g4-r6-fix-round.test.ts"
+  },
+  {
+    "mutation": "M-E-accept-version",
+    "exit": 1,
+    "killed": true,
+    "test": "tests/loop-g4-r6-fix-round.test.ts"
+  },
+  {
+    "mutation": "M-F-ledger-order",
+    "exit": 1,
+    "killed": true,
+    "test": "tests/loop-g4-r6-fix-round.test.ts"
+  }
+]

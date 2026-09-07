@@ -1,0 +1,44 @@
+[
+  {
+    "name": "tsc",
+    "exit": 0,
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ]
+  },
+  {
+    "name": "skill-contracts",
+    "exit": 0,
+    "command": [
+      "ruby",
+      "scripts/validate-skill-contracts.rb"
+    ]
+  },
+  {
+    "name": "compact-prompt",
+    "exit": 0,
+    "command": [
+      "ruby",
+      "scripts/validate-compact-prompt-contracts.rb"
+    ]
+  },
+  {
+    "name": "capability-metadata",
+    "exit": 0,
+    "command": [
+      "ruby",
+      "scripts/validate-capability-metadata-chain.rb"
+    ]
+  },
+  {
+    "name": "control-plane",
+    "exit": 0,
+    "command": [
+      "ruby",
+      "/Users/eric_shaoooo/meicai/projects/ai-project-control-plane/tools/validate_state.rb",
+      "/Users/eric_shaoooo/meicai/projects/ai-project-control-plane/projects/ai-sdlc/STATE.yaml"
+    ]
+  }
+]
