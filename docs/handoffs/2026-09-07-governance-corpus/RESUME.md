@@ -11,8 +11,8 @@
 | 工作目录（worktree，**本机 = 家用机 eric**） | `/Users/eric/meicai/projects/ai-sdlc-standard-governance-corpus-worktree`（公司机路径为 `/Users/eric_shaoooo/...`，两机分支同名） |
 | 分支 | `codex/d088-governance-corpus`（基线 `9e6e0c7e2b3384a83337c90b86863493b2c1c206`，即 D087 G4-R6 rework 后主仓 HEAD） |
 | 提交链 | `9e6e0c7` → `cc10bbb`（首轮）→ `f3faac8`（R2 修复）→ `eb4bb23`（R3 修复）→ `792f377`（R3 交接 docs）→ `8454834`（R4 修复）→ `cb8bc21`/`7d3ad3d`（R4 交接 docs）→ R5 修复提交（代码+决策+规格）→ R5 交接 docs 提交（本文件所在） |
-| 最新独立复审覆盖的精确 SHA | `7d3ad3d`（对象 `792f377..8454834`，D091-R4，结论 **FAIL/1 项 P2 阻塞 B1**） |
-| R5 修复轮提交 | 见 git log；**尚未经独立复审**，等待 D091-R5 复审（请求文本由实施会话在会话中提供，Owner 偏好不落盘） |
+| 最新独立复审覆盖的精确 SHA | `41dd8dad99ac1f600bb6fea92223f0b8191ccf9e`（对象 `7d3ad3d..3b167eb`，D091-R5，结论 **PASS**） |
+| R5 修复轮提交 | `3b167eb7426ab609493c8668652cf27f5a249afe`（代码+决策+规格）；交接 docs `41dd8da…`；**R5 复审 PASS**（报告入仓 `D091-R5-review.md`，独立证据 `evidence/r5-independent-*`）；R5 复审请求由实施会话在会话中提供（Owner 偏好不落盘） |
 | 远端 | `origin/codex/d088-governance-corpus`（R5 提交后已推送） |
 | 主工作区（勿动） | 家用机 `/Users/eric/meicai/projects/ai-sdlc-standard` @ `feature/c03-e5-autonomous-acceptance`，归 D087 会话；本线全部工作只在上述 worktree |
 
@@ -57,15 +57,17 @@
 | R1 | cc10bbb | FAIL（7 阻塞） | R2 关闭 |
 | R2 | f3faac8 | FAIL（B1-B5） | R3 关闭（B4/B5 获复审 CLOSED） |
 | R3 | eb4bb23 | FAIL（F1-F3，B4/B5 CLOSED） | R4 关闭（F3/S1/S4 获复审 CLOSED；F1/F2 判 PARTIAL，其余根因已闭） |
-| R4 | 7d3ad3d | **FAIL（1 项 P2：B1 转换写后失败未登记所有权）** | **R5 关闭（本轮）**；S2 残留一并清理 |
+| R4 | 7d3ad3d | FAIL（1 项 P2：B1 转换写后失败未登记所有权） | R5 关闭（B1 五项核对全 CLOSED） |
+| R5 | 41dd8da | **PASS**（阻塞 0；非阻塞建议 1：回滚提示措辞统一，不重开 B1） | —（待 Owner 裁决定夺） |
 
-R4 复审其余判定（供 R5 复审参考）：F1 原越界根因 CLOSED（非目录 `.sdlc` 根的既有
-mkdir 退出路径为零写入基线行为，复审列为非阻塞差异——R5 已在 Decision 注记 5 据实
-记录）；F3/S1/S4 CLOSED；真实仓预演、边界矩阵、R3 反例复跑全部通过。
+R4 复审其余判定（供参考）：F1 原越界根因 CLOSED（非目录 `.sdlc` 根的既有 mkdir 退出
+路径为零写入基线行为，复审列为非阻塞差异——已在 Decision 注记 5 据实记录）；F3/S1/S4
+CLOSED。R5 复审独立证据：29 项探针 + 流式回执探针（FIFO 无读取端时回执已产出，证明
+不依赖退出冲刷）+ 双 bash 800/0 + 边界矩阵 + 真实仓只读预演，全部入仓
+`evidence/r5-independent-*`。
 
-**当前唯一未关闭层：D091-R5 独立复审未执行。** 复审 PASS → Owner 收口裁决（四仓正式
-收编执行授权、Decision-091 状态改注、合并策略）；出新阻塞 → 按其修复边界在本分支继续
-R6 修复轮（流程同本轮）。
+**当前唯一未关闭层：Current User 收口裁决（D091 状态改注终值、四仓正式收编执行授权、
+合并策略）。复审 PASS 不代行该授权。**
 
 ## 5. R5 修复的复现条件、代码位置与回归矩阵
 
@@ -135,9 +137,11 @@ bash scripts/bootstrap-knowledge-target.sh /Users/eric/meicai/projects/logistics
 
 ## 8. 恢复后的第一步与建议顺序
 
-1. **第一步（唯一入口）**：把实施会话在对话中提供的 D091-R5 复审请求交给独立复审会话，
-   对 R5 修复提交执行复审（复审需独立重跑回归矩阵、B1 反例探针与真实仓只读预演）。
-2. 复审 PASS → 交 Owner 做收口裁决；出新阻塞 → 按其修复边界在本分支继续 R6 修复轮
-   （修复 → 补场景 → 双 bash 全量 → 更新 Decision 注记 → 提交 → 再审）。
+1. **D091-R5 已 PASS（2026-09-08），实现线收工**。下一步在 Owner：收口裁决
+   （Decision-091 状态终值改注、四个业务仓正式收编执行授权、合并策略、非阻塞措辞
+   建议是否采纳）。授权下达后再按 §2 排除清单以外的范围推进四仓执行。
+2. 若 Owner 要求处理非阻塞措辞建议（脚本 L1742 附近"完整恢复"提示与 Markdown 引导句
+   对未决对象的措辞），按最小修订走一轮即可，不需要新复审（复审已判定不重开 B1，
+   但任何代码变更后建议自行评估是否需要知会复审方）。
 3. 始终：不使用 SDLC/DocFlow 治理；不动 G4/D087 工作线与其主工作区；不消费收口或
    发布授权；不合并、不 rebase、不改 Control Plane；不自证 PASS。

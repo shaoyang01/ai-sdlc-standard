@@ -1,0 +1,121 @@
+{
+  "receipt_before_log_reader": true,
+  "process_waiting_at_log": true,
+  "exit": 0,
+  "stdout_rest": "",
+  "stderr": "",
+  "digest_matches": true,
+  "total": 3,
+  "tsv_total": 3,
+  "log": "receipt-test\t3\t1\nreceipt-test\t7\t1\nreceipt-test\t8\t1\n",
+  "state_matrix": [
+    {
+      "site": 0,
+      "rollback_ok": "true",
+      "residue": "unset",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 0,
+      "rollback_ok": "true",
+      "residue": "false",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 0,
+      "rollback_ok": "true",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 0,
+      "rollback_ok": "false",
+      "residue": "unset",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 0,
+      "rollback_ok": "false",
+      "residue": "false",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 0,
+      "rollback_ok": "false",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "true",
+      "residue": "unset",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "true",
+      "residue": "false",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "true",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "false",
+      "residue": "unset",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "false",
+      "residue": "false",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 1,
+      "rollback_ok": "false",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "true",
+      "residue": "unset",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "true",
+      "residue": "false",
+      "result": "ROLLED_BACK"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "true",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "false",
+      "residue": "unset",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "false",
+      "residue": "false",
+      "result": "INCOMPLETE"
+    },
+    {
+      "site": 2,
+      "rollback_ok": "false",
+      "residue": "true",
+      "result": "INCOMPLETE"
+    }
+  ]
+}
