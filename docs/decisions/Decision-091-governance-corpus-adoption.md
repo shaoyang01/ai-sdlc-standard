@@ -3,10 +3,11 @@
 ## 状态
 
 Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺失生成"两条需求均已明确）。
-独立复审两轮：D091-R1 FAIL（7 阻塞）→ R2 修复（626→668）；D091-R2 FAIL（5 合并根因
-阻塞 B1-B5）→ **R3 修复轮已逐项关闭**（B1 输出路径逐组件链接校验、B2 所有权绑定回滚、
-B3 原件归档原子发布、B4 Bash 3.2 空集合、B5 非普通条目 C10；回归 714 passed 0 failed，
-双 bash 3.2/当前版本各全量一遍，2026-09-07）；等待 D091-R3 复审确认。
+独立复审三轮：D091-R1 FAIL（7 阻塞）→ R2 修复（626→668）；D091-R2 FAIL（5 合并根因
+阻塞 B1-B5）→ R3 修复（668→714，B4/B5 获复审 CLOSED）；**D091-R3 FAIL（3 组合并根因
+阻塞 F1-F3：语料归档分支路径守卫缺口 + `.sdlc` 根本体链接、转换后摘要采样可变目的地、
+归档生命周期入口/暂存/撤销未统一保护）→ R4 修复轮已按复审给定修复边界逐项关闭**
+（回归 778 passed 0 failed，双 bash 3.2 全量，2026-09-07）；等待 D091-R4 复审确认。
 本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
 
 ## 背景
@@ -50,8 +51,9 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
    与 `--domain-map` 互斥（exit 2）。不开标志时 C8 行为逐字节兼容。
 5. **同名冲突确定性**：目的地已存在时，转换后逐字节一致 → 源归档 `.sdlc/legacy/.specify/…`
    （RETIRE 行，"already adopted"）；不一致 → COLLISION 阻塞（fail-closed，源与目的地均不动）。
-6. **残留门精确化**：门与审计扫描的 `.specify` 模式加 `(?<!legacy\/)` 负向断言——
-   指向归档地址（`.sdlc/legacy/.specify/…`）的引用是归档自身的路径，不是活旧根引用。
+6. **残留门精确化**：门与审计扫描的 `.specify` 模式加 `(?<!\.sdlc\/legacy\/)` 完整归档
+   前缀负向断言——指向归档地址（`.sdlc/legacy/.specify/…`）的引用是归档自身的路径，
+   不是活旧根引用；其余任何 `legacy/` 目录段照常触发。
    这是路径精确化，不是目录豁免；收编内容与其他活跃面同门、同回滚。
 
 ## 原因
@@ -98,8 +100,7 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
      （修复 `.sdlc/legacy/.specify/memory/x` → `.sdlc/legacy/.sdlc/memory/x` 损坏）；
   6. 门与审计扫描的 `.specify` 豁免收紧为完整归档前缀（仅 `.sdlc/legacy/.specify/**`
      归档地址引用豁免；`.sdlc/business_domain/legacy/.specify/*` 等其余任何
-     `legacy/` 目录段照常触发）
-     正确触发）；
+     `legacy/` 目录段照常触发，正确触发）；
   7. pending_confirmation 补齐阶段链（两个阶段词 + 箭头）与角色矩阵表行（阶段词首列）
      两类上下文，精确行号；
   附带：S1 转换日志失败路径清理、S2 usage 文本同步、S3 模板占位符块替换（字面值）。
@@ -107,7 +108,27 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
   9/9 收编 + 9/9 原件归档 + 28 行待确认。
 - 真实仓只读预演与正式收编执行留给 Owner 审阅后进行（logistics-master 补生成、
   logistics-center/wms-monitor 收编）。
-- 独立复审：D091-R1 FAIL 已修复，等待 D091-R2 复审确认；本文件不自证通过。
+- **D091-R3 复审 FAIL（3 组 P1 合并根因 F1-F3）→ R4 修复轮（2026-09-07，按复审给定
+  修复边界一次性关闭）**：
+  1. F1 路径守卫补全：RETIRE 行的最终落点（归档地址）纳入计划级与 apply 复验的逐组件
+     symlink 检查（含仓外/仓内/悬空链接变体）；`corpus_output_path_unsafe` 增加 `.sdlc`
+     根本体检查，`CORPUS_DEST_BLOCKED` 覆盖 `.sdlc` 为链接/非目录（INIT/AUDIT 跳过生成
+     并入报告，adoption 计划级阻塞）；
+  2. F2 所有权登记窗口关闭：转换后期望摘要改由 transformer 在内存中对**本次写入字节**
+     计算并返回（`total\tsha256`），不再重新读取可能被接管的目的地；回滚比较不匹配时
+     后来者保留、源恢复、冲突入报告（新增 KT_TEST_TRANSFORM_PAUSE_FILE 测试钩子）；
+  3. F3 归档生命周期统一：复用前当场以备份字节验证（计划快照过期不静默复用）；暂存文件
+     noclobber 独占创建（占用对象永不截断/跟随/发布），清理登记在独占创建成功之后；
+     发布后目录检测 + 所有权证明后才撤销嵌套暂存；`MIG_ARCHIVE_CREATED` 携带已验证
+     digest，三处失败清理改为 `mig_archive_remove_owned` 所有权校验（后来者归档保留
+     并记 `rollback.ownership_conflicts`）；
+  4. S2 补全：本决策第 6 条与 README 索引改为完整归档前缀表述（并清除重复残留）；
+     S4 补全：AUDIT 的旧源存在/模板缺失跳过写入正式报告。
+  回归 714 → 778 passed 0 failed（场景 80-88 对应 F1/F2/F3 三条矩阵关键格）；
+  复审方 R3 反例脚本（retire-escape、sdlc-root、late-before-stage、temp-owner×2、
+  archive×5、post-transform-owner）与边界矩阵（32 非普通条目、24 空集合、6 所有权）
+  在修复后代码上全部复跑为安全结果；真实仓只读预演零写入。
+- 独立复审：D091-R3 复审 FAIL 已修复，等待 D091-R4 复审确认；本文件不自证通过。
 
 ## 依据
 

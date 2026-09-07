@@ -336,7 +336,7 @@ script_exit_guard() {
       rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
     done
     for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+      mig_archive_remove_owned "${MIG_ARCHIVE_CREATED[${c}]}"
     done
     local at
     for at in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
@@ -597,7 +597,7 @@ mig_finalize() {
       if [[ -n "${v}" ]]; then echo "  - ${v}" >&2; fi
     done < "${GATE_OUT}"
     for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+      mig_archive_remove_owned "${MIG_ARCHIVE_CREATED[${c}]}"
     done
     local at
     for at in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
@@ -804,8 +804,8 @@ mig_digest() { ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$
 # mappable retired-era text stays verbatim and is surfaced by the pending-
 # confirmation scan. Per-rule replacement counts are appended to the run log so
 # the migration report carries before/after provenance.
-corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; stdout: replacement count
-  ruby -e '
+corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; stdout: "<total>\t<sha256 of written bytes>"
+  ruby -rdigest -e '
     src, dst, label, logf = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
     rules = [
       [/(?<!\.sdlc\/legacy\/)\.specify\/scripts\/bash\/audit-entry-coverage\.sh/, ".sdlc/scripts/bash/audit-entry-coverage.sh"],
@@ -846,7 +846,11 @@ corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; s
       exit 1
     end
     File.open(logf, "a") { |f| log.each { |l| f.puts(l) } } if logf != "-"
-    puts total
+    # D091-R4 (F2): the digest of the EXACT bytes this process wrote is computed
+    # in memory and returned with the count — callers must treat it as the
+    # expected output of the transformation instead of re-reading the mutable
+    # destination (a later writer there is an ownership conflict, not our bytes).
+    puts "#{total}\t#{Digest::SHA256.hexdigest(content)}"
   ' "$1" "$2" "$3" "$4"
 }
 
@@ -894,6 +898,10 @@ corpus_pending_scan() { # $1 = output tsv file; $2.. = rel paths of adopted file
 corpus_output_path_unsafe() { # $1 = abs output path under SDLC_DIR ; exit 0 = unsafe
   ruby -e '
     sdlc, path = ARGV[0], ARGV[1]
+    # D091-R4 (F1): the .sdlc root ITSELF is the first component of every corpus
+    # output path — a symlinked root would carry every write outside the
+    # repository even when the destination leaf does not exist yet.
+    exit(0) if File.symlink?(sdlc)
     prefix = sdlc + File::SEPARATOR
     exit(1) unless path.start_with?(prefix)
     cur = sdlc
@@ -921,6 +929,22 @@ corpus_transform_digest_of() { # $1 = abs dst ; stdout: recorded post-transform 
     [[ "${e}" == "$1"$'\t'* ]] && { printf '%s' "${e#*$'\t'}"; return 0; }
   done
   return 1
+}
+
+# --- D091-R4 (F3): ownership-bound archive cleanup ------------------------------------
+# The created-archive registry stores "rel<TAB>expected-digest". Cleanup removes a
+# published original archive ONLY when the object still at that path is verifiably
+# the bytes this transaction published; anything else belongs to a later writer and
+# is left untouched and reported as a rollback ownership conflict.
+mig_archive_remove_owned() { # $1 = registry entry (rel<TAB>expected-digest)
+  local arel="${1%%$'\t'*}" adig="${1#*$'\t'}" apath="${TARGET_PATH}/${1%%$'\t'*}"
+  if [[ -e "${apath}" || -L "${apath}" ]]; then
+    if [[ -f "${apath}" && ! -L "${apath}" ]] && [[ "$(mig_digest "${apath}")" == "${adig}" ]]; then
+      rm -f "${apath}"
+    else
+      MIG_ROLLBACK_CONFLICTS+=("${arel} (published archive now owned by a later writer; left untouched)")
+    fi
+  fi
 }
 
 # --- signal collection (spec §2.1) --------------------------------------------------
@@ -1124,6 +1148,14 @@ fi
 # Adoption and LEGACY runs block at plan level; plain skeleton generation never
 # writes outside (stage/fill helpers check this flag and skip with a notice).
 CORPUS_DEST_BLOCKED=""
+# D091-R4 (F1): the .sdlc root itself is part of every corpus write path — when it
+# is a symlink (or not a directory), skeleton generation and adoption would write
+# through it even though the corpus destination roots do not exist yet.
+if [[ -L "${SDLC_DIR}" ]]; then
+  CORPUS_DEST_BLOCKED=".sdlc is a symlink"
+elif [[ -e "${SDLC_DIR}" && ! -d "${SDLC_DIR}" ]]; then
+  CORPUS_DEST_BLOCKED=".sdlc is not a directory"
+fi
 for dest_root in "${SDLC_DIR}/memory" "${SDLC_DIR}/coding_guide"; do
   if [[ -L "${dest_root}" ]]; then
     CORPUS_DEST_BLOCKED="${dest_root#"${TARGET_PATH}/"} is a symlink"
@@ -1409,11 +1441,22 @@ ${part}"
                 MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION		archive destination already exists with different content (Decision-091)")
               fi
             else
-              pre="$(mig_digest "${src_abs}")"
-              MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
-              MIG_PLAN_LINES+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
-              MIG_TSV+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
-              MIG_ADD_ONLY="false"
+              # D091-R4 (F1): the RETIRE row's FINAL landing spot is the archive
+              # destination (.sdlc/legacy/...) — it must pass the same
+              # component-by-component output-path guard as a TRANSFORM
+              # destination, otherwise a symlinked .sdlc/legacy carries the
+              # redundant source out of the repository.
+              if corpus_output_path_unsafe "${TARGET_PATH}/${dst_rel}"; then
+                MIG_BLOCKED+=("${rel}" "corpus output path contains a symlink component: ${dst_rel}")
+                MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	C10	corpus output path contains a symlink component (Decision-091 R3)")
+                MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	C10		corpus output path contains a symlink component (Decision-091 R3)")
+              else
+                pre="$(mig_digest "${src_abs}")"
+                MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
+                MIG_PLAN_LINES+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+                MIG_TSV+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+                MIG_ADD_ONLY="false"
+              fi
             fi
           else
             rm -f "${CORPUS_CMP}"
@@ -1668,7 +1711,7 @@ ${PLAN_BODY}"
     fi
     local c t
     for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+      mig_archive_remove_owned "${MIG_ARCHIVE_CREATED[${c}]}"
     done
     rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     for t in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
@@ -1708,6 +1751,20 @@ ${PLAN_BODY}"
       rm -rf "${MIG_BACKUP_DIR}"
       exit 1
     fi
+    # D091-R4 (F1): the FINAL landing spot of every corpus row — TRANSFORM
+    # destinations AND RETIRE archive destinations — is re-verified here, so a
+    # symlink component that appeared after the plan (including during the backup
+    # phase just above) can never be written through at move or transform time.
+    case "${src#"${TARGET_PATH}/"}" in
+      .specify/memory/*|.specify/coding_guide/*)
+        if corpus_output_path_unsafe "${dst}" \
+          || corpus_output_path_unsafe "${TARGET_PATH}/.sdlc/legacy/${src#"${TARGET_PATH}/"}"; then
+          MIG_TX_ACTIVE="false"
+          echo "BLOCKED: corpus output path became unsafe (symlink component): ${src#"${TARGET_PATH}/"}; nothing was moved (zero partial upgrade)." >&2
+          rm -rf "${MIG_BACKUP_DIR}"
+          exit 1
+        fi ;;
+    esac
   done
 
   # phase 2: moves; failure rolls back exactly the moved prefix. mv -n refuses to
@@ -1784,6 +1841,16 @@ ${PLAN_BODY}"
         if [[ ! -e "${arch_abs}" && ! -L "${arch_abs}" ]]; then
           tmp_arch="${arch_abs}.tmp.$$"
           mkdir -p "$(dirname "${tmp_arch}")"
+          # D091-R4 (F3): the private staging file is EXCLUSIVELY created
+          # (noclobber O_EXCL redirect) — a regular file, symlink or dangling link
+          # already sitting at this path belongs to another writer: it is never
+          # truncated, never followed, never published (transaction fails, object
+          # left untouched). The cleanup registry is only joined AFTER the
+          # exclusive create succeeds, so a declined staging can never delete the
+          # occupying object as if it were ours.
+          if ! (set -o noclobber; : > "${tmp_arch}") 2> /dev/null; then
+            mig_fail_rollback "original archive staging path occupied: ${arch_rel}.tmp.$$ (exclusive staging declined; existing object left untouched)"
+          fi
           MIG_ARCHIVE_TMP_FILES+=("${tmp_arch}")
           if ! cp -p "${MIG_BACKUP_DIR}/${src_rel}" "${tmp_arch}"; then
             rm -f "${tmp_arch}"
@@ -1806,22 +1873,60 @@ ${PLAN_BODY}"
               rm -f "${tmp_arch}"
               mig_fail_rollback "original archive publish declined: ${arch_rel} (later writer preserved)"
             fi
+            # D091-R4 (F3): BSD mv -n with a DIRECTORY at the archive address moves
+            # the staging file INSIDE it and still exits 0. The nested object is
+            # removed only when its bytes are verifiably ours; the later writer's
+            # directory itself is left untouched, and the transaction fails.
+            if [[ -d "${arch_abs}" && ! -L "${arch_abs}" ]]; then
+              nested_arch="${arch_abs}/${tmp_arch##*/}"
+              if [[ -f "${nested_arch}" && ! -L "${nested_arch}" ]] \
+                && cmp -s "${MIG_BACKUP_DIR}/${src_rel}" "${nested_arch}"; then
+                rm -f "${nested_arch}"
+              fi
+              mig_fail_rollback "original archive destination is a directory: ${arch_rel} (nested staging removed; later writer's directory preserved)"
+            fi
             if [[ ! -f "${arch_abs}" ]] \
               || [[ "$(mig_digest "${arch_abs}")" != "$(mig_digest "${MIG_BACKUP_DIR}/${src_rel}")" ]]; then
               mig_fail_rollback "original archive verify failed: ${arch_rel}"
             fi
-            MIG_ARCHIVE_CREATED+=("${arch_rel}")
+            # D091-R4 (F3): the registry carries the verified digest so failure-path
+            # cleanup can prove ownership before removing (later writer's archive
+            # objects are preserved and reported as conflicts instead of deleted).
+            MIG_ARCHIVE_CREATED+=("${arch_rel}	$(mig_digest "${MIG_BACKUP_DIR}/${src_rel}")")
           fi
         else
-          # pre-existing archive: the plan-level collision check guaranteed
-          # byte-identical content — reuse it without writing.
-          :
+          # D091-R4 (F3): the plan-level collision check is a PLAN-TIME snapshot —
+          # before reusing a pre-existing archive its bytes are re-verified against
+          # the ORIGINAL source bytes right now; anything else at this address is
+          # a later writer's object: preserved, reported, transaction failed.
+          if [[ ! -f "${arch_abs}" || -L "${arch_abs}" ]] \
+            || ! cmp -s "${MIG_BACKUP_DIR}/${src_rel}" "${arch_abs}"; then
+            mig_fail_rollback "original archive appeared with different content before staging: ${arch_rel} (later writer preserved)"
+          fi
         fi
         printf '%s\t%s\t%s\n' "${dst_label}" "${published_archive}" "${src_rel}" >> "${MIG_ARCHIVE_TSV_FILE}"
-        if corpus_transform_file "${dst}" "${dst}" "${dst_label}" "${MIG_TRANSFORM_LOG_FILE}" > /dev/null; then
+        transform_out="$(corpus_transform_file "${dst}" "${dst}" "${dst_label}" "${MIG_TRANSFORM_LOG_FILE}")"
+        transform_rc=$?
+        t_total="${transform_out%%$'\t'*}"
+        t_digest="${transform_out##*$'\t'}"
+        t_ok="true"
+        [[ "${transform_rc}" -eq 0 ]] || t_ok="false"
+        case "${t_total}" in ""|*[!0-9]*) t_ok="false" ;; esac
+        case "${t_digest}" in ""|*[!0-9a-f]*) t_ok="false" ;; esac
+        [[ "${#t_digest}" -eq 64 ]] || t_ok="false"
+        if [[ "${t_ok}" == "true" ]]; then
+          # D091-R4 test hook (KT_TEST_PAUSE_FILE precedent): deterministic
+          # post-transform / pre-registration window for ownership regressions.
+          if [[ -n "${KT_TEST_TRANSFORM_PAUSE_FILE:-}" && -e "${KT_TEST_TRANSFORM_PAUSE_FILE}" ]]; then
+            while [[ -e "${KT_TEST_TRANSFORM_PAUSE_FILE}" ]]; do sleep 0.02; done
+          fi
+          # D091-R4 (F2): the expected post-transform digest is the digest of the
+          # bytes THIS run generated (returned by the transformer from memory) —
+          # never a re-read of the mutable destination, which a later writer may
+          # have taken over between the transform and this registration.
           MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
           MIG_CORPUS_DSTS+=("${dst_label}")
-          MIG_CORPUS_TRANSFORM_DIGESTS+=("${dst}	$(mig_digest "${dst}")")
+          MIG_CORPUS_TRANSFORM_DIGESTS+=("${dst}	${t_digest}")
         else
           mig_fail_rollback "corpus transformation failed: ${dst_label}"
         fi ;;
@@ -2551,10 +2656,14 @@ if [[ "${MODE}" == "audit" ]]; then
       return 0
     fi
     if corpus_adoption_source_present "${rel}"; then
+      # D091-R4 (S4): every skip reason is persisted in the formal AUDIT report,
+      # not only echoed to stdout.
+      AUDIT_CORPUS_SKIPPED+=("${rel}	adoption source still present (.specify/${rel}); use --adopt-governance-corpus")
       echo "CORPUS SKIP (adoption source still present; use --adopt-governance-corpus): .specify/${rel}"
       return 0
     fi
     if [[ ! -f "${tmpl}" ]]; then
+      AUDIT_CORPUS_SKIPPED+=("${rel}	corpus template missing; skeleton skipped")
       echo "CORPUS SKIP (template missing): ${tmpl#"${STANDARD_PACKAGE}/"}"
       return 0
     fi
