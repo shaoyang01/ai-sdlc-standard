@@ -12,7 +12,7 @@
 | 分支 | `codex/d088-governance-corpus`（基线 `9e6e0c7e2b3384a83337c90b86863493b2c1c206`，即 D087 G4-R6 rework 后主仓 HEAD） |
 | 提交链 | `9e6e0c7` → `cc10bbb`（首轮）→ `f3faac8`（R2 修复）→ `eb4bb23`（R3 修复）→ `792f377`（R3 夜间交接 docs）→ R4 修复轮提交（代码+决策+规格）→ R4 交接 docs 提交（本文件所在） |
 | 最新独立复审覆盖的精确 SHA | `eb4bb23e40c4ffb353dbea65e15e7c906d7ff447`（D091-R3，结论 **FAIL/F1-F3**） |
-| R4 修复轮提交 | 见 git log；**尚未经独立复审**，等待 D091-R4 复审（请求文件已备好，见 §8） |
+| R4 修复轮提交 | `845483451fc2cf380d41553b8827b29ea1511b21`（代码+决策+规格）；交接 docs `cb8bc21…`；**尚未经独立复审**，等待 D091-R4 复审（请求文件已备好，见 §8） |
 | 远端 | `origin/codex/d088-governance-corpus`（R4 提交后已推送） |
 | 主工作区（勿动） | 家用机 `/Users/eric/meicai/projects/ai-sdlc-standard` @ `feature/c03-e5-autonomous-acceptance`，归 D087 会话；本线全部工作只在上述 worktree |
 
