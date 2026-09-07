@@ -1,7 +1,7 @@
 # D-088-01 v3 行为规格：四类项目一站式初始化与迁移
 
-> Version: 1.1.0
-> Status: ACCEPTED（2026-09-05 接受并冻结为 G1 验收基线；同日 v1.1.0 勘误：A10/A13/A14 经 Current User 裁决改注为双根拒绝格，验收语义以 §2.2/§2.3 为准，无行为变更）
+> Version: 1.2.0
+> Status: ACCEPTED（2026-09-05 接受并冻结为 G1 验收基线；同日 v1.1.0 勘误：A10/A13/A14 经 Current User 裁决改注为双根拒绝格，验收语义以 §2.2/§2.3 为准，无行为变更；2026-09-07 v1.2.0 按 Decision-091 追加治理语料附录，正文行为不变）
 > 上游: Decision-090 决策 3 · [冻结执行计划](decision-090-c03e-prerun-governance-plan.md) §3/§4/G1 · [需求拆分](decision-090-c03e-prerun-requirement-decomposition.md) §3（R01–R27）
 > 候选基线: 产品仓 `a626335`（v2 双模式实现 + R1/R2 修复，35 测试场景）
 > 授权声明: 本规格不授权任何代码修改；实施需 Current User 显式授权。
@@ -204,5 +204,30 @@ R1/R2 全部 findings（R1 H1–H8、R2 H1–H6）按本规格重新归因；候
 
 ## 变更记录
 
+- 1.2.0（2026-09-07）：追加 Decision-091 治理语料附录（见文末「v3.1 附录」节）：迁移分类新增 C11/C12、`--adopt-governance-corpus` 入口、语料骨架生成、残留门 `.specify` 模式完整归档前缀负向断言。原有 C1-C10 行为不变。
 - 1.1.0（2026-09-05）：Current User 裁决维持 D1/D2 双根阻断语义，A10/A13/A14 改注为双根拒绝格（验收=阻断零写入，场景 39）；向已治理表面迁移的支持推迟至真实需求出现时做针对性修订。无实现行为变更。
 - 1.0.0（2026-09-05）：Current User 审查接受，冻结为 G1 实施与验收基线。
+
+## v3.1 附录（Decision-091，2026-09-07）
+
+本节为 Decision-091 授权的行为增量，正文条款的适用范围不变：
+
+1. **迁移分类**：在 §4.2 C1-C10 之外新增 C11（`.specify/memory/*` → `.sdlc/memory/*`）与
+   C12（`.specify/coding_guide/*` → `.sdlc/coding_guide/*`），动词 TRANSFORM；语料内容经
+   9 条有序确定性路径/词汇规则转换（归档地址 `.sdlc/legacy/.specify/**` 由完整前缀负向
+   断言保护、永不被重映射），逐规则替换数与 `pending_confirmation` 待确认清单写入迁移报告。
+   首次收编的原始字节在事务窗口内持久归档至 `.sdlc/legacy/.specify/**`（冲突保护、失败回滚）。
+2. **收编入口**：LEGACY 全 walk 自动含语料；已完成迁移的 EXISTING* 仓经
+   `--adopt-governance-corpus` 显式收编（受限 walk 仅两目录），复用 PLAN_SHA/DP1/
+   两阶段事务/所有权绑定回滚/双报告。与 `--domain-map` 互斥。
+3. **生成**：INIT/AUDIT 的 create-if-missing 集合含 7 份语料骨架
+   （`templates/governance-corpus/`）；旧源存在（含悬空链接叶子）时不生成同名骨架；
+   生成内容零退役词汇。
+4. **残留门**：`.specify` 模式带完整归档前缀负向断言 `(?<!\.sdlc\/legacy\/)`——仅
+   `.sdlc/legacy/.specify/**` 归档地址引用豁免；其余任何 `.specify` 出现照常触发。
+5. **所有权绑定回滚**：发布对象按备份源字节（与语料转换后摘要）验证所有权；后续
+   写入者的对象在回滚中原样保留，源仍从备份恢复，冲突逐项进入失败报告
+   `rollback.ownership_conflicts`。
+6. **兼容性**：本附录不改变正文 C1-C10、D1-D9、双根阻断（D2/R16）与 §6 残留门对
+   非 C11/C12 内容的全部既有行为；运行于 macOS /bin/bash 3.2 与 BSD mv/cp 语义
+   （空集合遍历、`mv -n` 拒绝语义、目录目标非发布）已纳入回归矩阵。

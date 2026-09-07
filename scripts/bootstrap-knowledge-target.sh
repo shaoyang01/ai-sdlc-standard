@@ -338,8 +338,12 @@ script_exit_guard() {
     for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
       rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
     done
+    local at
+    for at in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
+      [[ -e "${at}" ]] && rm -f "${at}"
+    done
     rm -f "${REPORT_FILE:-}"
-    rm -f "${MIG_TRANSFORM_LOG_FILE:-}"
+    rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
     mig_write_failure_report "unexpected exit in transaction window" "${mig_rb}"
   fi
@@ -594,6 +598,10 @@ mig_finalize() {
     done < "${GATE_OUT}"
     for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
       rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+    done
+    local at
+    for at in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
+      [[ -e "${at}" ]] && rm -f "${at}"
     done
     rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
@@ -876,6 +884,45 @@ corpus_pending_scan() { # $1 = output tsv file; $2.. = rel paths of adopted file
   ' "${TARGET_PATH}" "$@" 2>/dev/null || true
 }
 
+# --- D091-R3 (B1): corpus output path safety -----------------------------------------
+# A corpus output path is UNSAFE when ANY component between the .sdlc root and the
+# leaf (inclusive) is a symlink — a write would follow it out of the repository or
+# through a dangling link. File.symlink? is lstat-based, so a DANGLING leaf link
+# is also detected (it must be treated as an existing object, never written
+# through). Archive paths (.sdlc/legacy/...) share the same .sdlc base and are
+# checked with the same walk.
+corpus_output_path_unsafe() { # $1 = abs output path under SDLC_DIR ; exit 0 = unsafe
+  ruby -e '
+    sdlc, path = ARGV[0], ARGV[1]
+    prefix = sdlc + File::SEPARATOR
+    exit(1) unless path.start_with?(prefix)
+    cur = sdlc
+    path.delete_prefix(prefix).split(File::SEPARATOR).reject(&:empty?).each do |comp|
+      cur = File.join(cur, comp)
+      exit(0) if File.symlink?(cur)
+    end
+    exit(1)
+  ' "${SDLC_DIR}" "$1"
+}
+
+# --- D091-R3 (B2): move ownership bookkeeping ----------------------------------------
+# Every published move records the destination digest AT PUBLISH TIME; corpus rows
+# additionally record the digest after their in-place transformation. Rollback
+# then verifies ownership before touching any destination: an object whose digest
+# no longer matches what this transaction wrote belongs to a later writer and is
+# left completely alone (source is still restored from the backup).
+MIG_MOVE_META=()
+MIG_CORPUS_TRANSFORM_DIGESTS=()
+MIG_ROLLBACK_CONFLICTS=()
+MIG_ARCHIVE_TMP_FILES=()
+corpus_transform_digest_of() { # $1 = abs dst ; stdout: recorded post-transform digest
+  local e
+  for e in "${MIG_CORPUS_TRANSFORM_DIGESTS[@]:-}"; do
+    [[ "${e}" == "$1"$'\t'* ]] && { printf '%s' "${e#*$'\t'}"; return 0; }
+  done
+  return 1
+}
+
 # --- signal collection (spec §2.1) --------------------------------------------------
 HAS_S1="false"; HAS_S4="false"; HAS_S5="false"; HAS_S6="false"; HAS_S7="false"
 HAS_S8="false"; HAS_S9="false"; HAS_S10="false"; HAS_S11="false"; HAS_S12="false"
@@ -1126,6 +1173,9 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
     if [[ "${HAS_S5}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/.specify"); fi
     if [[ "${HAS_S12}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/specs"); fi
   fi
+  # D091-R3 (B4): Bash 3.2 + set -u treats `${arr[@]}` on an EMPTY (but declared)
+  # array as unbound — an empty root set is a NORMAL input for the adoption entry
+  # (no legacy corpus left), so every iteration below must be length-guarded.
 
   # C10 root containment (G1-R1-H1; D091-R2 P1-2 hardened): a walk root is admitted
   # only when its REAL path resolves inside the target repository — this covers
@@ -1134,6 +1184,7 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
   # yield an empty plan and a fake success.
   LEGACY_WALK_ROOTS=()
   MIG_ROOT_BLOCKED=""
+  if [[ "${#LEGACY_ROOTS[@]}" -gt 0 ]]; then
   for root in "${LEGACY_ROOTS[@]}"; do
     resolved_root="$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue StandardError; exit 1; end' "${root}" 2>/dev/null || true)"
     if [[ -z "${resolved_root}" ]]; then
@@ -1146,6 +1197,7 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
       LEGACY_WALK_ROOTS+=("${root}")
     fi
   done
+  fi
 
   if [[ -n "${MIG_ROOT_BLOCKED}" ]]; then
     # G1-R2-M1: a dangerous root is a plan-level blocked row, so --plan exits 1 and
@@ -1167,11 +1219,21 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
   LEGACY_FILES=""
   for root in "${LEGACY_WALK_ROOTS[@]:-}"; do
     [[ -n "${root}" ]] || continue
+    # D091-R3 (B5): corpus roots enumerate EVERY non-directory entry (FIFOs,
+    # sockets and other special objects must reach the C10 classification instead
+    # of being silently skipped by a -type f/-type l filter); the generic legacy
+    # walk keeps its files+links scope.
+    case "${root}" in
+      "${TARGET_PATH}/.specify/memory"|"${TARGET_PATH}/.specify/coding_guide")
+        find_sel=( -mindepth 1 ! -type d ) ;;
+      *)
+        find_sel=( -mindepth 1 \( -type f -o -type l \) ) ;;
+    esac
     # D091-R2 (P1-2): a traversal error means the enumeration is INCOMPLETE —
     # silently swallowing it would under-report the plan and fake success.
     find_err="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-find-err.XXXXXX")"
     find_rc=0
-    part="$(find "${root}/" -mindepth 1 \( -type f -o -type l \) 2>"${find_err}")" || find_rc=$?
+    part="$(find "${root}/" "${find_sel[@]}" 2>"${find_err}")" || find_rc=$?
     if [[ "${find_rc}" -ne 0 ]]; then
       rm -f "${find_err}"
       MIG_BLOCKED+=("<legacy-root>" "traversal failed under ${root#"${TARGET_PATH}/"} (partial enumeration possible)")
@@ -1189,6 +1251,29 @@ ${part}"
       fi
     fi
   done
+  # D091-R3 (B5): in LEGACY mode the corpus dirs are nested inside the walked
+  # root, and special objects there are invisible to the files+links filter —
+  # enumerate them explicitly so they reach the C10 classification.
+  if [[ "${MIG_ADOPTION_MODE}" != "true" ]]; then
+    for corpus_root in "${TARGET_PATH}/.specify/memory" "${TARGET_PATH}/.specify/coding_guide"; do
+      [[ -d "${corpus_root}" ]] || continue
+      find_err="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-find-err.XXXXXX")"
+      find_rc=0
+      part="$(find "${corpus_root}/" -mindepth 1 ! -type d 2>"${find_err}")" || find_rc=$?
+      if [[ "${find_rc}" -ne 0 ]]; then
+        rm -f "${find_err}"
+        MIG_BLOCKED+=("<legacy-root>" "traversal failed under ${corpus_root#"${TARGET_PATH}/"} (partial enumeration possible)")
+        MIG_PLAN_LINES+=("BLOCKED	<legacy-root>	-	C10	traversal failed under ${corpus_root#"${TARGET_PATH}/"}")
+        MIG_TSV+=("BLOCKED_AMBIGUOUS	<legacy-root>	-	C10		traversal failed under ${corpus_root#"${TARGET_PATH}/"}")
+        continue
+      fi
+      rm -f "${find_err}"
+      if [[ -n "${part}" ]]; then
+        LEGACY_FILES="${LEGACY_FILES}
+${part}"
+      fi
+    done
+  fi
   LEGACY_FILES="$(printf '%s' "${LEGACY_FILES}" | LC_ALL=C sort -u)"
 
   # per-rule rationale (spec R06: every classification carries its reason)
@@ -1346,6 +1431,7 @@ ${part}"
         # file-set drift between plan and apply invalidates the confirmation.
         pre="$(mig_digest "${src_abs}")"
         corpus_arch_conflict=""
+        corpus_path_unsafe=""
         if [[ "${rule}" == "C11" || "${rule}" == "C12" ]]; then
           # D091-R2 (P1-3/P2-4): the ORIGINAL-BYTES archive address is a protected
           # destination checked at PLAN time — a pre-existing differing archive
@@ -1355,11 +1441,26 @@ ${part}"
             && ! cmp -s "${src_abs}" "${TARGET_PATH}/${corpus_arch_rel}"; then
             corpus_arch_conflict="${corpus_arch_rel}"
           fi
+          # D091-R3 (B1): the ACTUAL output paths — destination and original-bytes
+          # archive — must be symlink-free on every component (nested dirs and the
+          # leaf included), otherwise writes would escape the repository or follow
+          # a dangling link.
+          if [[ -z "${corpus_arch_conflict}" ]]; then
+            if corpus_output_path_unsafe "${TARGET_PATH}/${dst_rel}"; then
+              corpus_path_unsafe="${dst_rel}"
+            elif corpus_output_path_unsafe "${TARGET_PATH}/${corpus_arch_rel}"; then
+              corpus_path_unsafe="${corpus_arch_rel}"
+            fi
+          fi
         fi
         if [[ -n "${corpus_arch_conflict}" ]]; then
           MIG_BLOCKED+=("${rel}" "original archive already exists with different content: ${corpus_arch_conflict}")
           MIG_PLAN_LINES+=("BLOCKED	${rel}	${corpus_arch_conflict}	COLLISION	original archive already exists with different content (Decision-091)")
           MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${corpus_arch_conflict}	COLLISION		original archive already exists with different content (Decision-091)")
+        elif [[ -n "${corpus_path_unsafe}" ]]; then
+          MIG_BLOCKED+=("${rel}" "corpus output path contains a symlink component: ${corpus_path_unsafe}")
+          MIG_PLAN_LINES+=("BLOCKED	${rel}	${corpus_path_unsafe}	C10	corpus output path contains a symlink component (Decision-091 R3)")
+          MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${corpus_path_unsafe}	C10		corpus output path contains a symlink component (Decision-091 R3)")
         else
           MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
           MIG_PLAN_LINES+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}")
@@ -1439,24 +1540,53 @@ ${PLAN_BODY}"
   MIG_FAIL_REASON=""
 
   mig_rollback() {
-    local m src dst brel rc=0
+    local m src dst brel rc=0 md rd td
     for ((m = MIG_MOVED - 1; m >= 0; m--)); do
       IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
       brel="${src#"${TARGET_PATH}/"}"
-      if [[ -f "${dst}" ]]; then
+      if [[ -e "${dst}" || -L "${dst}" ]]; then
+        # D091-R3 (B2): rollback is OWNERSHIP-BOUND. The expected bytes of a
+        # published destination are the SOURCE bytes recorded at backup time
+        # (meta stores the backup rel — no registration race); a corpus row also
+        # owns its post-transform digest. Anything else at the destination
+        # belongs to a later writer: it is left untouched, the source is still
+        # restored from the backup, and the conflict is reported.
+        expected="$(mig_digest "${MIG_BACKUP_DIR}/${brel}" 2>/dev/null || true)"
+        md="$(mig_digest "${dst}" 2>/dev/null || true)"
+        td="$(corpus_transform_digest_of "${dst}" 2>/dev/null || true)"
+        owned="false"
+        if [[ -f "${dst}" && ! -L "${dst}" ]]; then
+          if [[ -n "${expected}" && "${md}" == "${expected}" ]]; then owned="true"
+          elif [[ -n "${td}" && "${md}" == "${td}" ]]; then owned="true"
+          fi
+        fi
+        mkdir -p "$(dirname "${src}")"
         case "${dst}" in
           "${SDLC_DIR}/memory/"*|"${SDLC_DIR}/coding_guide/"*)
             # Decision-091: corpus rows are transformed in place after the move,
-            # so a plain reverse move would land transformed bytes at the source.
-            # Restore the ORIGINAL bytes from the backup and drop the
-            # transformed destination; the cmp below then proves the restore.
-            rm -f "${dst}"
-            mkdir -p "$(dirname "${src}")"
-            cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}" ;;
+            # so the destination cannot be reverse-moved — restore the ORIGINAL
+            # bytes from the backup and drop the transformed destination.
+            if [[ "${owned}" == "true" ]]; then
+              rm -f "${dst}"
+              cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
+            else
+              cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
+              MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"}")
+            fi ;;
           *)
-            mkdir -p "$(dirname "${src}")"
-            if ! mv "${dst}" "${src}"; then rc=1; continue; fi ;;
+            if [[ "${owned}" == "true" ]]; then
+              if ! mv "${dst}" "${src}"; then rc=1; continue; fi
+            else
+              cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
+              MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"}")
+            fi ;;
         esac
+      else
+        # destination vanished after publish (later writer deleted it) — the
+        # source is still restored, and the disappearance is reported.
+        mkdir -p "$(dirname "${src}")"
+        cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
+        MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"} (destination no longer present)")
       fi
       if [[ -f "${MIG_BACKUP_DIR}/${brel}" ]] && ! cmp -s "${src}" "${MIG_BACKUP_DIR}/${brel}"; then
         rc=1
@@ -1478,6 +1608,7 @@ ${PLAN_BODY}"
     if [[ "${rb_status}" != "ROLLED_BACK" && "${rb_status}" != "INCOMPLETE" ]]; then rb_status="INCOMPLETE"; fi
     M_FAIL_REASON="${reason}" M_RB_STATUS="${rb_status}" M_VIOL_FILE="${viol_file}" \
     M_PLAN_SHA="${PLAN_SHA:-}" M_MOVED="${MIG_MOVED}" \
+    M_CONFLICTS="$(printf '%s\n' "${MIG_ROLLBACK_CONFLICTS[@]:-}" | sed '/^$/d')" \
     M_TYPE="${V3_TYPE}" M_TS="${RUN_TIMESTAMP}" M_NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" M_TARGET="${TARGET_PATH}" \
     ruby -rjson -e '
       rolled_back = ENV["M_RB_STATUS"] == "ROLLED_BACK"
@@ -1485,6 +1616,7 @@ ${PLAN_BODY}"
       if ENV["M_VIOL_FILE"] != "" && File.file?(ENV["M_VIOL_FILE"])
         violations = File.readlines(ENV["M_VIOL_FILE"]).map(&:strip).reject(&:empty?).first(50)
       end
+      conflicts = ENV.fetch("M_CONFLICTS", "").split("\n").map(&:strip).reject(&:empty?)
       status = rolled_back ? "FAILED_ROLLED_BACK" : "FAILED_ROLLBACK_INCOMPLETE"
       doc = {
         "run_timestamp" => ENV["M_TS"], "generated_at" => ENV["M_NOW"],
@@ -1497,7 +1629,8 @@ ${PLAN_BODY}"
         "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/",
                             "violations_count" => violations.size, "violations" => violations },
         "post_detect_type" => "",
-        "rollback" => { "occurred" => rolled_back, "status" => ENV["M_RB_STATUS"], "reason" => ENV["M_FAIL_REASON"] },
+        "rollback" => { "occurred" => rolled_back, "status" => ENV["M_RB_STATUS"], "reason" => ENV["M_FAIL_REASON"],
+                        "ownership_conflicts" => conflicts },
         "status" => status,
         "migration_completed_at" => nil
       }
@@ -1506,6 +1639,11 @@ ${PLAN_BODY}"
       md << "# Migration Report (FAILED, #{ENV["M_RB_STATUS"]})\n\n"
       md << "> **Reason**: #{ENV["M_FAIL_REASON"]}\n> **Moved before failure**: #{ENV["M_MOVED"]}\n> **Rolled back**: #{rolled_back}\n"
       md << "> **Plan SHA-256**: `#{ENV["M_PLAN_SHA"]}`\n"
+      unless conflicts.empty?
+        md << "\n## Rollback Ownership Conflicts\n\n"
+        md << "以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n"
+        conflicts.each { |c| md << "- #{c}\n" }
+      end
       unless violations.empty?
         md << "\n## Residue Violations\n\n"
         violations.each { |v| md << "- #{v}\n" }
@@ -1513,6 +1651,32 @@ ${PLAN_BODY}"
       File.write(ARGV[1], md)
     ' "${fjson}" "${fmd}" 2>/dev/null || true
     echo "MIGRATION FAILURE REPORT=${fjson#${TARGET_PATH}/}"
+  }
+
+  # D091-R3: one rollback/report helper for every in-window failure so the cleanup
+  # set (original archives, temp archive files, corpus logs, TSVs) stays identical
+  # across all failure kinds.
+  mig_fail_rollback() { # $1 = reason
+    MIG_FAIL_REASON="$1"
+    echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
+    MIG_TX_ACTIVE="false"
+    if mig_rollback; then
+      echo "ROLLED BACK: repository restored to pre-migration state." >&2
+    else
+      echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+      MIG_ROLLBACK_OK="false"
+    fi
+    local c t
+    for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+    done
+    rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
+    for t in "${MIG_ARCHIVE_TMP_FILES[@]:-}"; do
+      [[ -e "${t}" ]] && rm -f "${t}"
+    done
+    mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
+    exit 1
   }
 
 
@@ -1554,34 +1718,33 @@ ${PLAN_BODY}"
     IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
     mkdir -p "$(dirname "${dst}")"
     if ! mv -n "${src}" "${dst}"; then
-      MIG_FAIL_REASON="move failed: ${src#"${TARGET_PATH}/"} -> ${dst#"${TARGET_PATH}/"}"
-      echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
-      MIG_TX_ACTIVE="false"
-      if mig_rollback; then
-        echo "ROLLED BACK: repository restored to pre-migration state." >&2
-      else
-        echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-        MIG_ROLLBACK_OK="false"
-      fi
-      mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-      mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
-      exit 1
+      mig_fail_rollback "move failed: ${src#"${TARGET_PATH}/"} -> ${dst#"${TARGET_PATH}/"}"
     fi
     if [[ -e "${src}" ]]; then
-      MIG_FAIL_REASON="destination appeared during apply: ${dst#"${TARGET_PATH}/"} (publish declined; another writer's data left untouched)"
-      echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
-      MIG_TX_ACTIVE="false"
-      if mig_rollback; then
-        echo "ROLLED BACK: repository restored to pre-migration state." >&2
-      else
-        echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-        MIG_ROLLBACK_OK="false"
-      fi
-      mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-      mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
-      exit 1
+      mig_fail_rollback "destination appeared during apply: ${dst#"${TARGET_PATH}/"} (publish declined; another writer's data left untouched)"
     fi
+    # D091-R3 (B2): BSD `mv -n src dst` with a DIRECTORY at dst moves the source
+    # INSIDE it (dst/basename) and still exits 0 — that is not a file publication.
+    # Undo the nested move and fail with a full rollback of the moved prefix.
+    if [[ ! -f "${dst}" || -L "${dst}" ]]; then
+      nested="${dst}/${src##*/}"
+      if [[ -f "${nested}" ]]; then
+        mkdir -p "$(dirname "${src}")"
+        mv "${nested}" "${src}"
+      fi
+      mig_fail_rollback "destination is not a regular file: ${dst#"${TARGET_PATH}/"} (directory target; nested move undone)"
+    fi
+    # ownership registration stores the BACKUP REL (not a post-move digest): the
+    # expected bytes are the source bytes at backup time, so rollback ownership
+    # verification has NO registration race (D091-R3 B2)
+    MIG_MOVE_META+=("${dst}	${src#"${TARGET_PATH}/"}")
     MIG_MOVED=$((MIG_MOVED + 1))
+    # D091-R3 test hook (mirrors the KT_FAULT_SCAN_FAILURE precedent): when a
+    # pause file exists right after a publish, the apply WAITS until the test
+    # removes it — deterministic mid-transaction state changes for regression.
+    if [[ -n "${KT_TEST_PAUSE_FILE:-}" && -e "${KT_TEST_PAUSE_FILE}" ]]; then
+      while [[ -e "${KT_TEST_PAUSE_FILE}" ]]; do sleep 0.02; done
+    fi
   done
 
   # prune legacy directories emptied by the migration (spec R16 idempotence: an
@@ -1595,9 +1758,10 @@ ${PLAN_BODY}"
   # Decision-091: deterministic corpus transformation runs INSIDE the transaction
   # window (after the moves, before the residue gate) so the gate scans the final
   # content and any failure rolls corpus rows back to their original bytes.
-  # D091-R2 (P2-4): BEFORE transforming, the ORIGINAL bytes are persisted at the
-  # archive address (.sdlc/legacy/.specify/…) from the phase-1 backup, so the
-  # report's provenance claim holds without trusting git history or temp dirs.
+  # D091-R2 (P2-4)/D091-R3 (B3): BEFORE transforming, the ORIGINAL bytes are
+  # persisted at the archive address from the phase-1 backup — published through a
+  # private temp file and an atomic non-clobbering rename, so a later writer's
+  # object is never overwritten and a partial write never leaks into the archive.
   MIG_CORPUS_COUNT=0
   MIG_TRANSFORM_LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-log.XXXXXX")"
   MIG_ARCHIVE_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-archive.XXXXXX")"
@@ -1606,70 +1770,60 @@ ${PLAN_BODY}"
     case "${dst}" in
       "${SDLC_DIR}/memory/"*|"${SDLC_DIR}/coding_guide/"*)
         src_rel="${src#"${TARGET_PATH}/"}"
+        dst_label="${dst#"${TARGET_PATH}/"}"
         # .specify/memory/X -> .sdlc/legacy/.specify/memory/X (src_rel already
         # carries the leading dot of the legacy root)
         arch_rel=".sdlc/legacy/${src_rel}"
         arch_abs="${TARGET_PATH}/${arch_rel}"
-        if [[ -e "${arch_abs}" || -L "${arch_abs}" ]]; then
-          if ! cmp -s "${MIG_BACKUP_DIR}/${src_rel}" "${arch_abs}"; then
-            MIG_FAIL_REASON="original archive already exists with different content: ${arch_rel}"
-            echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
-            MIG_TX_ACTIVE="false"
-            if mig_rollback; then
-              echo "ROLLED BACK: repository restored to pre-migration state." >&2
-            else
-              echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-              MIG_ROLLBACK_OK="false"
-            fi
-            for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-              rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
-            done
-            mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-            mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
-            exit 1
-          fi
-        else
-          mkdir -p "$(dirname "${arch_abs}")"
-          if ! cp -p "${MIG_BACKUP_DIR}/${src_rel}" "${arch_abs}"; then
-            MIG_FAIL_REASON="original archive write failed: ${arch_rel}"
-            echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
-            MIG_TX_ACTIVE="false"
-            if mig_rollback; then
-              echo "ROLLED BACK: repository restored to pre-migration state." >&2
-            else
-              echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-              MIG_ROLLBACK_OK="false"
-            fi
-            for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-              rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
-            done
-            mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-            mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
-            exit 1
-          fi
-          MIG_ARCHIVE_CREATED+=("${arch_rel}")
+        # D091-R3 (B1): re-verify the ACTUAL output paths at APPLY time — a
+        # symlink component may have appeared after the plan.
+        if corpus_output_path_unsafe "${dst}" || corpus_output_path_unsafe "${arch_abs}"; then
+          mig_fail_rollback "corpus output path became unsafe (symlink component): ${dst_label}"
         fi
-        printf '%s\t%s\t%s\n' "${dst#"${TARGET_PATH}/"}" "${arch_rel}" "${src_rel}" >> "${MIG_ARCHIVE_TSV_FILE}"
-        if corpus_transform_file "${dst}" "${dst}" "${dst#"${TARGET_PATH}/"}" "${MIG_TRANSFORM_LOG_FILE}" > /dev/null; then
-          MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
-          MIG_CORPUS_DSTS+=("${dst#"${TARGET_PATH}/"}")
-        else
-          MIG_FAIL_REASON="corpus transformation failed: ${dst#"${TARGET_PATH}/"}"
-          echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
-          MIG_TX_ACTIVE="false"
-          if mig_rollback; then
-            echo "ROLLED BACK: repository restored to pre-migration state." >&2
-          else
-            echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
-            MIG_ROLLBACK_OK="false"
+        published_archive="${arch_rel}"
+        if [[ ! -e "${arch_abs}" && ! -L "${arch_abs}" ]]; then
+          tmp_arch="${arch_abs}.tmp.$$"
+          mkdir -p "$(dirname "${tmp_arch}")"
+          MIG_ARCHIVE_TMP_FILES+=("${tmp_arch}")
+          if ! cp -p "${MIG_BACKUP_DIR}/${src_rel}" "${tmp_arch}"; then
+            rm -f "${tmp_arch}"
+            mig_fail_rollback "original archive staging failed: ${arch_rel}"
           fi
-          for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
-            rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
-          done
-          rm -f "${MIG_TRANSFORM_LOG_FILE}" "${MIG_ARCHIVE_TSV_FILE}"
-          mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
-          mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
-          exit 1
+          if [[ -e "${arch_abs}" || -L "${arch_abs}" ]]; then
+            # appeared between plan and publish
+            if cmp -s "${tmp_arch}" "${arch_abs}"; then
+              rm -f "${tmp_arch}"   # identical bytes — reuse the existing archive
+            else
+              rm -f "${tmp_arch}"
+              mig_fail_rollback "original archive appeared with different content: ${arch_rel} (later writer preserved)"
+            fi
+          else
+            if ! mv -n "${tmp_arch}" "${arch_abs}"; then
+              rm -f "${tmp_arch}"
+              mig_fail_rollback "original archive publish failed: ${arch_rel}"
+            fi
+            if [[ -e "${tmp_arch}" ]]; then
+              rm -f "${tmp_arch}"
+              mig_fail_rollback "original archive publish declined: ${arch_rel} (later writer preserved)"
+            fi
+            if [[ ! -f "${arch_abs}" ]] \
+              || [[ "$(mig_digest "${arch_abs}")" != "$(mig_digest "${MIG_BACKUP_DIR}/${src_rel}")" ]]; then
+              mig_fail_rollback "original archive verify failed: ${arch_rel}"
+            fi
+            MIG_ARCHIVE_CREATED+=("${arch_rel}")
+          fi
+        else
+          # pre-existing archive: the plan-level collision check guaranteed
+          # byte-identical content — reuse it without writing.
+          :
+        fi
+        printf '%s\t%s\t%s\n' "${dst_label}" "${published_archive}" "${src_rel}" >> "${MIG_ARCHIVE_TSV_FILE}"
+        if corpus_transform_file "${dst}" "${dst}" "${dst_label}" "${MIG_TRANSFORM_LOG_FILE}" > /dev/null; then
+          MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
+          MIG_CORPUS_DSTS+=("${dst_label}")
+          MIG_CORPUS_TRANSFORM_DIGESTS+=("${dst}	$(mig_digest "${dst}")")
+        else
+          mig_fail_rollback "corpus transformation failed: ${dst_label}"
         fi ;;
     esac
   done
@@ -1938,6 +2092,16 @@ stage_corpus_skeleton() { # $1 = rel under .sdlc (staging-relative too)
   fi
   if [[ -n "${CORPUS_DEST_BLOCKED}" ]]; then
     NOTICE_LINES+=("corpus skeleton not generated; destination root unsafe: ${CORPUS_DEST_BLOCKED}")
+    CORPUS_SKIPPED_RELS+=("${rel}")
+    return 0
+  fi
+  # D091-R3 (B1): the FULL output path is checked component by component — a
+  # dangling leaf symlink or any symlinked ancestor must never be written through
+  # (an INIT/AUDIT run only ever creates missing files; existing links are left
+  # exactly as they are and reported).
+  local target_file="${SDLC_DIR}/${rel}"
+  if [[ -L "${target_file}" ]] || corpus_output_path_unsafe "${target_file}"; then
+    NOTICE_LINES+=("corpus skeleton not generated; destination leaf/ancestor is a symlink or path unsafe: ${rel}")
     CORPUS_SKIPPED_RELS+=("${rel}")
     return 0
   fi
@@ -2330,6 +2494,7 @@ if [[ "${MODE}" == "audit" ]]; then
 
   # 1) fill missing machine artifacts (the ONLY writes in audit mode)
   AUDIT_FILLED=()
+  AUDIT_CORPUS_SKIPPED=()
   fill_audit_artifact() { # $1 = rel under .sdlc, $2 = generator function name.
     # The generator is invoked inside this function (no pipeline) so the
     # AUDIT_FILLED mutation survives: a pipeline's last element runs in a subshell.
@@ -2367,8 +2532,21 @@ if [[ "${MODE}" == "audit" ]]; then
     local target_file="${SDLC_DIR}/${rel}"
     local tmpl="${CORPUS_TEMPLATE_DIR}/${rel}"
     local tmp_content
+    # D091-R3 (B1): a dangling leaf link counts as an EXISTING object (never
+    # write through it), and a symlinked ancestor/leaf skips the fill entirely.
+    if [[ -L "${target_file}" ]]; then
+      AUDIT_CORPUS_SKIPPED+=("${rel}	destination leaf is a symlink; left untouched")
+      echo "CORPUS SKIP (destination leaf is a symlink): ${rel}"
+      return 0
+    fi
     [[ -e "${target_file}" ]] && return 0
+    if corpus_output_path_unsafe "${target_file}"; then
+      AUDIT_CORPUS_SKIPPED+=("${rel}	destination leaf/ancestor is a symlink or path unsafe")
+      echo "CORPUS SKIP (destination leaf/ancestor is a symlink or path unsafe): ${rel}"
+      return 0
+    fi
     if [[ -n "${CORPUS_DEST_BLOCKED}" ]]; then
+      AUDIT_CORPUS_SKIPPED+=("${rel}	destination root unsafe: ${CORPUS_DEST_BLOCKED}")
       echo "CORPUS SKIP (destination root unsafe): ${CORPUS_DEST_BLOCKED}"
       return 0
     fi
@@ -2719,6 +2897,18 @@ RUBY
     FINAL_AUDIT_REPORT="$(mktemp "${REPORT_DIR}/knowledge_target_audit_report.$(date '+%Y%m%d-%H%M%S').${$}.XXXXXX")"
     cat "${AUDIT_REPORT}" > "${FINAL_AUDIT_REPORT}"
     rm -f "${AUDIT_REPORT}"
+    # D091-R3 (S4): corpus skeleton skips are persisted in the formal AUDIT
+    # report (item + reason), not only echoed to stdout.
+    if [[ "${#AUDIT_CORPUS_SKIPPED[@]}" -gt 0 ]]; then
+      {
+        printf '\n## Corpus Skeleton Skips (Decision-091)\n\n'
+        printf '| Item | Reason |\n| --- | --- |\n'
+        for skip_line in "${AUDIT_CORPUS_SKIPPED[@]}"; do
+          printf '| %s |\n' "${skip_line/	/ | }"
+        done
+
+      } >> "${FINAL_AUDIT_REPORT}"
+    fi
     echo "AUDIT_FILLED: ${AUDIT_FILLED[*]:-}"
     echo "REPORT=${FINAL_AUDIT_REPORT#${TARGET_PATH}/}"
   fi

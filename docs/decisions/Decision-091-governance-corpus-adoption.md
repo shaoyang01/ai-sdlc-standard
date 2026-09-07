@@ -2,10 +2,11 @@
 
 ## 状态
 
-Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺失生成"两条需求均已明确）；
-实现与回归已在 `codex/d088-governance-corpus` 分支完成（首轮 626 passed 0 failed）。
-独立复审 D091-R1 判定 FAIL（7 阻塞：3×P1 + 4×P2），R2 修复轮已逐项关闭并追加回归
-场景 65-72（668 passed 0 failed，2026-09-07）；等待 D091-R2 复审确认。
+Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺失生成"两条需求均已明确）。
+独立复审两轮：D091-R1 FAIL（7 阻塞）→ R2 修复（626→668）；D091-R2 FAIL（5 合并根因
+阻塞 B1-B5）→ **R3 修复轮已逐项关闭**（B1 输出路径逐组件链接校验、B2 所有权绑定回滚、
+B3 原件归档原子发布、B4 Bash 3.2 空集合、B5 非普通条目 C10；回归 714 passed 0 failed，
+双 bash 3.2/当前版本各全量一遍，2026-09-07）；等待 D091-R3 复审确认。
 本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
 
 ## 背景
@@ -95,7 +96,9 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
      失败回滚清理），报告逐文件绑定 `original_archive`；
   5. 转换器规则 1-6/9 加 `(?<!\.sdlc\/legacy\/)` 完整前缀负向断言，归档地址不再被重映射
      （修复 `.sdlc/legacy/.specify/memory/x` → `.sdlc/legacy/.sdlc/memory/x` 损坏）；
-  6. 门与审计扫描的 `.specify` 豁免收紧为完整归档前缀（`.sdlc/business_domain/legacy/.specify/*`
+  6. 门与审计扫描的 `.specify` 豁免收紧为完整归档前缀（仅 `.sdlc/legacy/.specify/**`
+     归档地址引用豁免；`.sdlc/business_domain/legacy/.specify/*` 等其余任何
+     `legacy/` 目录段照常触发）
      正确触发）；
   7. pending_confirmation 补齐阶段链（两个阶段词 + 箭头）与角色矩阵表行（阶段词首列）
      两类上下文，精确行号；
