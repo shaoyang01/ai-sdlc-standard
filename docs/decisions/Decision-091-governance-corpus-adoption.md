@@ -162,8 +162,10 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
   全部闭合（`evidence/r5-b1-closure-*`）；R3 反例套件 11/11 复跑安全
   （`evidence/r5-r3probe-rerun.json`）。
 - 独立复审：D091-R5 **PASS**（R4-B1 五项核对全 CLOSED；唯一非阻塞建议 = 回滚提示
-  措辞统一，待 Owner 收口裁决时定夺，不重开 B1）；下一步为 Current User 收口裁决；
-  本文件不自证通过。
+  措辞统一，不重开 B1）。**Owner 指示后已按最小修订落实该措辞项**（PASS 基线
+  `41dd8da` 之后的纯措辞提交：两处 "ROLLED BACK" 提示区分未决残留态、失败报告
+  Markdown 引导句不再将回执缺失对象笼统称为后来者；双 bash 800/0 复跑）。下一步为
+  Current User 收口裁决；本文件不自证通过。
 
 ## 依据
 

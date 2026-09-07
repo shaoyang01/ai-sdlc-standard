@@ -318,7 +318,11 @@ script_exit_guard() {
     MIG_TX_ACTIVE="false"
     echo "UNEXPECTED EXIT in transaction window; rolling back migration..." >&2
     if mig_rollback; then
-      echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      if [[ "${MIG_UNRESOLVED_RESIDUE:-false}" == "true" ]]; then
+        echo "ROLLED BACK WITH UNRESOLVED RESIDUE: sources restored; unresolved corpus destinations preserved as-is (recovery INCOMPLETE; see failure report)." >&2
+      else
+        echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      fi
     else
       echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR:-}" >&2
       MIG_ROLLBACK_OK="false"
@@ -1719,7 +1723,7 @@ ${PLAN_BODY}"
       md << "> **Plan SHA-256**: `#{ENV["M_PLAN_SHA"]}`\n"
       unless conflicts.empty?
         md << "\n## Rollback Ownership Conflicts\n\n"
-        md << "以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n"
+        md << "以下目的地在回滚时未被本事务撤销——属于后续写入者，或转换回执缺失、归属无法证明（逐条注记见下）——其内容原样保留、未删除；源已从备份恢复：\n\n"
         conflicts.each { |c| md << "- #{c}\n" }
       end
       unless violations.empty?
@@ -1739,7 +1743,11 @@ ${PLAN_BODY}"
     echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
     MIG_TX_ACTIVE="false"
     if mig_rollback; then
-      echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      if [[ "${MIG_UNRESOLVED_RESIDUE:-false}" == "true" ]]; then
+        echo "ROLLED BACK WITH UNRESOLVED RESIDUE: sources restored; unresolved corpus destinations preserved as-is (recovery INCOMPLETE; see failure report)." >&2
+      else
+        echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      fi
     else
       echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
       MIG_ROLLBACK_OK="false"
