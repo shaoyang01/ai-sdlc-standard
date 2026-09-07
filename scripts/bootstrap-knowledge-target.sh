@@ -62,7 +62,9 @@ Options:
                                 plan_sha256 of the latest plan output; a drifted
                                 plan is rejected (re-plan + re-confirm).
   --audit                      Force applicability audit mode (report + fill
-                               missing machine artifacts only).
+                               missing machine artifacts and governance-corpus
+                               skeletons (Decision-091) only; adoption is
+                               suppressed, use --adopt-governance-corpus).
   --project-name <name>        Project display name. Defaults to target directory name.
   --domain-map <path>          Confirmed domain map YAML (INIT only). Switches to
                                routed mode and generates routable L1/L2/L4 + xx99
@@ -254,6 +256,18 @@ CORPUS_SKELETONS=(
   "memory/InteractionProtocol.md"
   "coding_guide/CodingGuide.md"
 )
+# D091-R2 (P1-1): rels whose skeleton staging was SKIPPED (adoption source present,
+# template missing, unsafe destination root). The PAIR planner and the execution
+# loop consult this so a skipped file can never be planned as "create" and then
+# fail a missing-source copy halfway through initialization.
+CORPUS_SKIPPED_RELS=()
+corpus_skip_recorded() { # $1 = rel ; exit 0 when skipped at staging
+  local r
+  for r in "${CORPUS_SKIPPED_RELS[@]:-}"; do
+    [[ "${r}" == "$1" ]] && return 0
+  done
+  return 1
+}
 
 # D088-R2-H1: single legacy-root presence test (-d || -L, symlink target never
 # read) shared by mode selection and the migration advisory, so a dangling
@@ -291,6 +305,8 @@ MIG_TX_ACTIVE="false"
 # read them (G1-R2-H1: early failures must not hit unbound-variable errors)
 CREATED_FILES=(); UPDATED_FILES=(); PRESERVED_FILES=(); BLOCKED_REASONS=(); NOTICE_LINES=()
 MIG_AUDIT_CREATED=()
+MIG_ARCHIVE_CREATED=()
+MIG_CORPUS_DSTS=()
 PLAN_OK="true"
 
 # G1-R3-H1: ONE EXIT guard for the whole script — transaction rollback (when the
@@ -319,7 +335,11 @@ script_exit_guard() {
     for ((c = 0; c < ${#MIG_AUDIT_CREATED[@]}; c++)); do
       rm -f "${SDLC_DIR}/${MIG_AUDIT_CREATED[${c}]}"
     done
+    for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+    done
     rm -f "${REPORT_FILE:-}"
+    rm -f "${MIG_TRANSFORM_LOG_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
     mig_write_failure_report "unexpected exit in transaction window" "${mig_rb}"
   fi
@@ -496,10 +516,11 @@ mig_finalize() {
   GATE_RC="$(ruby -e '
     sdlc = ARGV[0]; target = ARGV[1]; out = ARGV[2]
     skip_prefixes = ["#{sdlc}/legacy/", "#{sdlc}/reports/", "#{sdlc}/migration/"]
-    # Decision-091: a `.specify` mention immediately preceded by `legacy/` is a
-    # reference INTO the archive (.sdlc/legacy/.specify/...) — the archive address
-    # itself, not a live retired-root reference — and must not fire the gate.
-    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!legacy\/)\.specify/]
+    # Decision-091 (D091-R2 P2-6): only the FULL archive address prefix
+    # (.sdlc/legacy/) grants the exemption — a `legacy/` directory segment anywhere
+    # else (e.g. .sdlc/business_domain/legacy/.specify/x) is a live retired-root
+    # reference and must fire.
+    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!\.sdlc\/legacy\/)\.specify/]
     apos = 39.chr
     negation = Regexp.new("(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\\s+not|do\\s+not|don" + apos + "t|prohibit\\w*|forbidden|retired)", Regexp::IGNORECASE)
     machine_re = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
@@ -571,6 +592,10 @@ mig_finalize() {
     while IFS= read -r v; do
       if [[ -n "${v}" ]]; then echo "  - ${v}" >&2; fi
     done < "${GATE_OUT}"
+    for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+      rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+    done
+    rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
     mig_write_failure_report "residue gate violation" "${mig_rb}" "${GATE_OUT}"
     rm -f "${GATE_OUT}"
@@ -659,16 +684,27 @@ mig_finalize() {
   M_MOVED="${MIG_MOVED}" M_PLAN_SHA="${PLAN_SHA}" M_SIGNALS="${M_SIGNALS_CSV}" \
   M_ADD_ONLY="${MIG_ADD_ONLY}" M_CONFIRM_REQUIRED="${MIG_CONFIRM_REQUIRED}" M_CONFIRM_PROVIDED="${MIG_CONFIRM_PROVIDED}" \
   ruby -rjson -rdigest -e '
-    tsv_file, map_file, xform_file, pend_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5]
+    tsv_file, map_file, xform_file, pend_file, arch_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5], ARGV[6]
     target = ENV["M_TARGET"]
+    archive_map = {}
+    if File.file?(arch_file)
+      File.readlines(arch_file).map(&:chomp).reject(&:empty?).each do |l|
+        dst, arch, legacy_src = l.split("\t")
+        archive_map[dst] = { "archive" => arch, "legacy_source" => legacy_src }
+      end
+    end
     files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
       verb, rel, dst, rule, pre, rationale = l.split("\t")
       post = nil
       if dst != "-" && File.file?(File.join(target, dst))
         post = Digest::SHA256.file(File.join(target, dst)).hexdigest
       end
-      { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
+      entry = { "verb" => verb, "path" => rel, "target" => dst, "rule" => rule,
         "pre_digest" => pre, "post_digest" => post, "rationale" => rationale }
+      if (a = archive_map[dst])
+        entry["original_archive"] = a["archive"]
+      end
+      entry
     end
     mappings = File.readlines(map_file).map(&:chomp).reject(&:empty?).map do |l|
       k, v = l.split("\t", 2)
@@ -728,10 +764,18 @@ mig_finalize() {
       md << "| File | Line | Excerpt |\n| --- | --- | --- |\n"
       pending.each { |p| md << "| #{p["file"]} | #{p["line"]} | #{p["excerpt"]} |\n" }
     end
+    unless archive_map.empty?
+      md << "\n## Original Archive (Decision-091)\n\n"
+      md << "首次收编语料的原始字节持久归档位置（转换前的原件，未经任何改写）：\n\n"
+      md << "| Adopted File | Original Archive | Legacy Source |\n| --- | --- | --- |\n"
+      archive_map.sort.each do |dst, a|
+        md << "| #{dst} | #{a["archive"]} | #{a["legacy_source"]} |\n"
+      end
+    end
     md << "\nRETIRE/TRANSFORM 原件归档于 `.sdlc/legacy/**`（不物理删除）；候选域与稳定事实仍由 sdlc-knowledge-sync 依 routed 声明写入。\n"
     File.write(md_out, md)
-  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
-  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}"
+  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_ARCHIVE_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
+  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}" "${MIG_ARCHIVE_TSV_FILE}"
 
   # transaction complete: reports finalized, disarm the EXIT guard (H3)
   trap - EXIT
@@ -756,15 +800,15 @@ corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; s
   ruby -e '
     src, dst, label, logf = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
     rules = [
-      [/\.specify\/scripts\/bash\/audit-entry-coverage\.sh/, ".sdlc/scripts/bash/audit-entry-coverage.sh"],
-      [/\.specify\/business_domain/, ".sdlc/business_domain"],
-      [/\.specify\/memory/, ".sdlc/memory"],
-      [/\.specify\/coding_guide/, ".sdlc/coding_guide"],
-      [/\.specify\/workflow/, ".sdlc/legacy/.specify/workflow"],
-      [/\.specify\/templates/, ".sdlc/legacy/.specify/templates"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/scripts\/bash\/audit-entry-coverage\.sh/, ".sdlc/scripts/bash/audit-entry-coverage.sh"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/business_domain/, ".sdlc/business_domain"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/memory/, ".sdlc/memory"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/coding_guide/, ".sdlc/coding_guide"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/workflow/, ".sdlc/legacy/.specify/workflow"],
+      [/(?<!\.sdlc\/legacy\/)\.specify\/templates/, ".sdlc/legacy/.specify/templates"],
       [/([\s\x28\x60\u{2018}\u{FF08}])\/?specs\//, :specs_block],
       [/\$speckit-sync/, "$sdlc-knowledge-sync"],
-      [/(?<!legacy\/)\.specify\//, ".sdlc/"]
+      [/(?<!\.sdlc\/legacy\/)\.specify\//, ".sdlc/"]
     ]
     begin
       content = File.read(src)
@@ -808,7 +852,11 @@ corpus_pending_scan() { # $1 = output tsv file; $2.. = rel paths of adopted file
   ruby -e '
     target, out = ARGV[0], ARGV[1]
     files = ARGV[2..] || []
-    marker = /\.sdlc\/legacy\/|SDDWorkflow|\bSDD\b|Domain Route|\.\.\/workflow\/|\.\.\/templates\//
+    # D091-R2 (P2-7): markers cover the declared non-transformable retired-era
+    # contexts — archive-address references, retired workflow documents, the stage
+    # CHAIN body (two stage words joined by an arrow, with or without the Domain
+    # Route head) and role-matrix TABLE ROWS keyed by a stage word in column one.
+    marker = /\.sdlc\/legacy\/|SDDWorkflow|\bSDD\b|Domain Route|\.\.\/workflow\/|\.\.\/templates\/|(Specify|Clarify|Plan|Tasks|Analyze|Implement|Sync)\s*(->|→)\s*(Specify|Clarify|Plan|Tasks|Analyze|Implement|Sync)|(^\|\s*(Domain Route|Specify|Clarify|Plan|Tasks|Analyze|Implement|Sync)\s*\|)/
     entries = []
     files.sort.each do |rel|
       path = File.join(target, rel)
@@ -1023,6 +1071,27 @@ if [[ "${PLAN_ONLY}" == "true" && "${V3_TYPE}" != LEGACY_* ]]; then
   DRY_RUN="true"
 fi
 
+# --- D091-R2 (P1-2): corpus DESTINATION roots must be real directories inside the
+# target repository. A symlinked or escaping .sdlc/memory / .sdlc/coding_guide
+# would route adopted files and generated skeletons OUT of the repository.
+# Adoption and LEGACY runs block at plan level; plain skeleton generation never
+# writes outside (stage/fill helpers check this flag and skip with a notice).
+CORPUS_DEST_BLOCKED=""
+for dest_root in "${SDLC_DIR}/memory" "${SDLC_DIR}/coding_guide"; do
+  if [[ -L "${dest_root}" ]]; then
+    CORPUS_DEST_BLOCKED="${dest_root#"${TARGET_PATH}/"} is a symlink"
+  elif [[ -e "${dest_root}" ]]; then
+    if [[ ! -d "${dest_root}" ]]; then
+      CORPUS_DEST_BLOCKED="${dest_root#"${TARGET_PATH}/"} is not a directory"
+    else
+      rdest="$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue StandardError; exit 1; end' "${dest_root}" 2>/dev/null || true)"
+      if [[ -z "${rdest}" || "${rdest}" != "${TARGET_REAL}"/* ]]; then
+        CORPUS_DEST_BLOCKED="${dest_root#"${TARGET_PATH}/"} escapes target repository"
+      fi
+    fi
+  fi
+done
+
 # =====================================================================================
 # --- v3: legacy migration plan / transactional apply ---------------------------------
 # =====================================================================================
@@ -1058,21 +1127,21 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
     if [[ "${HAS_S12}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/specs"); fi
   fi
 
-  # C10 root containment (G1-R1-H1): a legacy root that is itself a symlink must
-  # resolve inside the target repository before it is walked at all; otherwise the
-  # walk would collect (and migrate) out-of-repo files.
+  # C10 root containment (G1-R1-H1; D091-R2 P1-2 hardened): a walk root is admitted
+  # only when its REAL path resolves inside the target repository — this covers
+  # symlinked ancestors (e.g. .specify itself a symlink), not just the root being a
+  # symlink — and when it is readable, so an unreadable root can never silently
+  # yield an empty plan and a fake success.
   LEGACY_WALK_ROOTS=()
   MIG_ROOT_BLOCKED=""
   for root in "${LEGACY_ROOTS[@]}"; do
-    if [[ -L "${root}" ]]; then
-      resolved_root="$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue StandardError; exit 1; end' "${root}" 2>/dev/null || true)"
-      if [[ -z "${resolved_root}" ]]; then
-        MIG_ROOT_BLOCKED="dangling legacy root symlink: ${root#"${TARGET_PATH}/"}"
-      elif [[ "${resolved_root}" != "${TARGET_REAL}"/* ]]; then
-        MIG_ROOT_BLOCKED="legacy root symlink escapes target repository: ${root#"${TARGET_PATH}/"} -> ${resolved_root}"
-      else
-        LEGACY_WALK_ROOTS+=("${root}")
-      fi
+    resolved_root="$(ruby -e 'begin; puts File.realpath(ARGV[0]); rescue StandardError; exit 1; end' "${root}" 2>/dev/null || true)"
+    if [[ -z "${resolved_root}" ]]; then
+      MIG_ROOT_BLOCKED="legacy root does not resolve: ${root#"${TARGET_PATH}/"}"
+    elif [[ "${resolved_root}" != "${TARGET_REAL}"/* ]]; then
+      MIG_ROOT_BLOCKED="legacy root escapes target repository (ancestor symlink?): ${root#"${TARGET_PATH}/"} -> ${resolved_root}"
+    elif [[ ! -r "${resolved_root}" ]]; then
+      MIG_ROOT_BLOCKED="legacy root not readable: ${root#"${TARGET_PATH}/"}"
     else
       LEGACY_WALK_ROOTS+=("${root}")
     fi
@@ -1086,10 +1155,31 @@ if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${F
     MIG_TSV+=("BLOCKED_AMBIGUOUS	<legacy-root>	-	C10		${MIG_ROOT_BLOCKED}")
   fi
 
+  # D091-R2 (P1-2): a corpus destination root that is a symlink, not a directory,
+  # or escapes the repository blocks the plan — adoption and LEGACY runs would
+  # otherwise write adopted files and skeletons through it, out of the repository.
+  if [[ -n "${CORPUS_DEST_BLOCKED}" ]]; then
+    MIG_BLOCKED+=("<corpus-destination>" "${CORPUS_DEST_BLOCKED}")
+    MIG_PLAN_LINES+=("BLOCKED	<corpus-destination>	-	C10	${CORPUS_DEST_BLOCKED}")
+    MIG_TSV+=("BLOCKED_AMBIGUOUS	<corpus-destination>	-	C10		${CORPUS_DEST_BLOCKED}")
+  fi
+
   LEGACY_FILES=""
   for root in "${LEGACY_WALK_ROOTS[@]:-}"; do
     [[ -n "${root}" ]] || continue
-    part="$(find "${root}/" -mindepth 1 \( -type f -o -type l \) 2>/dev/null || true)"
+    # D091-R2 (P1-2): a traversal error means the enumeration is INCOMPLETE —
+    # silently swallowing it would under-report the plan and fake success.
+    find_err="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-find-err.XXXXXX")"
+    find_rc=0
+    part="$(find "${root}/" -mindepth 1 \( -type f -o -type l \) 2>"${find_err}")" || find_rc=$?
+    if [[ "${find_rc}" -ne 0 ]]; then
+      rm -f "${find_err}"
+      MIG_BLOCKED+=("<legacy-root>" "traversal failed under ${root#"${TARGET_PATH}/"} (partial enumeration possible)")
+      MIG_PLAN_LINES+=("BLOCKED	<legacy-root>	-	C10	traversal failed under ${root#"${TARGET_PATH}/"}")
+      MIG_TSV+=("BLOCKED_AMBIGUOUS	<legacy-root>	-	C10		traversal failed under ${root#"${TARGET_PATH}/"}")
+      continue
+    fi
+    rm -f "${find_err}"
     if [[ -n "${part}" ]]; then
       if [[ -n "${LEGACY_FILES}" ]]; then
         LEGACY_FILES="${LEGACY_FILES}
@@ -1136,6 +1226,18 @@ ${part}"
     fi
     if [[ -z "${rule}" && ! -r "${src_abs}" ]]; then
       rule="C10"; MIG_BLOCKED+=("${rel}" "file not readable")
+    fi
+    if [[ -z "${rule}" ]]; then
+      # D091-R2 (P1-2): corpus entries are transformed IN PLACE at the destination,
+      # so a symlink source would make the transformer follow it and rewrite the
+      # link target. Corpus rows accept regular files only (unsafe entries fail
+      # closed as C10 instead of entering the transformation path).
+      case "${rel}" in
+        .specify/memory/*|.specify/coding_guide/*)
+          if [[ ! -f "${src_abs}" || -L "${src_abs}" ]]; then
+            rule="C10"; MIG_BLOCKED+=("${rel}" "corpus entry must be a regular file (symlink or non-file would be transformed through its target)")
+          fi ;;
+      esac
     fi
     if [[ -z "${rule}" ]]; then
       case "${rel}" in
@@ -1191,23 +1293,43 @@ ${part}"
       MIG_PLAN_LINES+=("BLOCKED	${rel}	-	${rule}	${reason}")
       MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	-	${rule}		${reason}")
     else
-      if [[ -e "${TARGET_PATH}/${dst_rel}" ]]; then
+      # D091-R2 (P1-3): destination existence includes DANGLING SYMLINKS (-L) —
+      # a dangling link at a destination must never be silently replaced.
+      if [[ -e "${TARGET_PATH}/${dst_rel}" || -L "${TARGET_PATH}/${dst_rel}" ]]; then
         if [[ "${rule}" == "C11" || "${rule}" == "C12" ]]; then
           # Decision-091 corpus collision policy: the destination is human-owned
           # content and is NEVER overwritten or merged. If the transformed source
           # is byte-identical to the destination, the adoption already happened —
-          # archive the redundant source under .sdlc/legacy. Otherwise the
-          # difference needs owner adjudication (blocked, source stays in place).
+          # archive the redundant source under .sdlc/legacy (the ARCHIVE path gets
+          # its own full collision check; an existing differing archive blocks).
+          # Otherwise the difference needs owner adjudication (blocked, source
+          # stays in place).
           CORPUS_CMP="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-cmp.XXXXXX")"
           if corpus_transform_file "${src_abs}" "${CORPUS_CMP}" "${rel}" "-" > /dev/null \
             && cmp -s "${CORPUS_CMP}" "${TARGET_PATH}/${dst_rel}"; then
             rm -f "${CORPUS_CMP}"
             dst_rel=".sdlc/legacy/${rel}"
-            pre="$(mig_digest "${src_abs}")"
-            MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
-            MIG_PLAN_LINES+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
-            MIG_TSV+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
-            MIG_ADD_ONLY="false"
+            if [[ -e "${TARGET_PATH}/${dst_rel}" || -L "${TARGET_PATH}/${dst_rel}" ]]; then
+              # D091-R2 (P1-3): the archive location is itself a protected
+              # destination. Identical bytes mean the source is already fully
+              # archived — a no-op keeps everything intact; anything else is a
+              # historical archive the tool must not overwrite.
+              if cmp -s "${src_abs}" "${TARGET_PATH}/${dst_rel}"; then
+                MIG_PRESERVED+=("${rel}")
+                MIG_PLAN_LINES+=("PRESERVE	${rel}	${dst_rel}	${rule}	already adopted and archived (source identical to archive); nothing to do")
+                MIG_TSV+=("PRESERVE	${rel}	${dst_rel}	${rule}		already adopted and archived (source identical to archive); nothing to do")
+              else
+                MIG_BLOCKED+=("${rel}" "archive destination already exists with different content: ${dst_rel}")
+                MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	COLLISION	archive destination already exists with different content (Decision-091)")
+                MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION		archive destination already exists with different content (Decision-091)")
+              fi
+            else
+              pre="$(mig_digest "${src_abs}")"
+              MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
+              MIG_PLAN_LINES+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+              MIG_TSV+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+              MIG_ADD_ONLY="false"
+            fi
           else
             rm -f "${CORPUS_CMP}"
             MIG_BLOCKED+=("${rel}" "destination exists and differs from the transformed source; owner adjudication required: ${dst_rel}")
@@ -1223,10 +1345,27 @@ ${part}"
         # H2: the confirmed plan binds each file's pre-digest, so any content or
         # file-set drift between plan and apply invalidates the confirmation.
         pre="$(mig_digest "${src_abs}")"
-        MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
-        MIG_PLAN_LINES+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}")
-        MIG_TSV+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}	$(mig_rule_rationale "${rule}")")
-        MIG_ADD_ONLY="false"
+        corpus_arch_conflict=""
+        if [[ "${rule}" == "C11" || "${rule}" == "C12" ]]; then
+          # D091-R2 (P1-3/P2-4): the ORIGINAL-BYTES archive address is a protected
+          # destination checked at PLAN time — a pre-existing differing archive
+          # blocks instead of failing (or overwriting) at apply.
+          corpus_arch_rel=".sdlc/legacy/${rel}"
+          if [[ -e "${TARGET_PATH}/${corpus_arch_rel}" || -L "${TARGET_PATH}/${corpus_arch_rel}" ]] \
+            && ! cmp -s "${src_abs}" "${TARGET_PATH}/${corpus_arch_rel}"; then
+            corpus_arch_conflict="${corpus_arch_rel}"
+          fi
+        fi
+        if [[ -n "${corpus_arch_conflict}" ]]; then
+          MIG_BLOCKED+=("${rel}" "original archive already exists with different content: ${corpus_arch_conflict}")
+          MIG_PLAN_LINES+=("BLOCKED	${rel}	${corpus_arch_conflict}	COLLISION	original archive already exists with different content (Decision-091)")
+          MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${corpus_arch_conflict}	COLLISION		original archive already exists with different content (Decision-091)")
+        else
+          MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
+          MIG_PLAN_LINES+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}")
+          MIG_TSV+=("${verb}	${rel}	${dst_rel}	${rule}	${pre}	$(mig_rule_rationale "${rule}")")
+          MIG_ADD_ONLY="false"
+        fi
       fi
     fi
   done <<< "${LEGACY_FILES}"
@@ -1394,13 +1533,42 @@ ${PLAN_BODY}"
     fi
   done
 
-  # phase 2: moves; failure rolls back exactly the moved prefix
+  # phase 2a (D091-R2 P1-3): re-verify EVERY planned destination immediately
+  # before publishing. A destination that appeared between plan and apply (another
+  # writer, a race) must never be overwritten — abort with zero moves.
+  for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
+    IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
+    if [[ -e "${dst}" || -L "${dst}" ]]; then
+      MIG_TX_ACTIVE="false"
+      echo "BLOCKED: destination appeared after plan: ${dst#"${TARGET_PATH}/"}; nothing was moved (zero partial upgrade)." >&2
+      rm -rf "${MIG_BACKUP_DIR}"
+      exit 1
+    fi
+  done
+
+  # phase 2: moves; failure rolls back exactly the moved prefix. mv -n refuses to
+  # overwrite, and the src-still-there post-check catches a destination that
+  # appeared even between the re-verification and this move (D091-R2 P1-3).
   MIG_TX_ACTIVE="true"
   for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
     IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
     mkdir -p "$(dirname "${dst}")"
-    if ! mv "${src}" "${dst}"; then
+    if ! mv -n "${src}" "${dst}"; then
       MIG_FAIL_REASON="move failed: ${src#"${TARGET_PATH}/"} -> ${dst#"${TARGET_PATH}/"}"
+      echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
+      MIG_TX_ACTIVE="false"
+      if mig_rollback; then
+        echo "ROLLED BACK: repository restored to pre-migration state." >&2
+      else
+        echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+        MIG_ROLLBACK_OK="false"
+      fi
+      mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+      mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
+      exit 1
+    fi
+    if [[ -e "${src}" ]]; then
+      MIG_FAIL_REASON="destination appeared during apply: ${dst#"${TARGET_PATH}/"} (publish declined; another writer's data left untouched)"
       echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
       MIG_TX_ACTIVE="false"
       if mig_rollback; then
@@ -1427,13 +1595,61 @@ ${PLAN_BODY}"
   # Decision-091: deterministic corpus transformation runs INSIDE the transaction
   # window (after the moves, before the residue gate) so the gate scans the final
   # content and any failure rolls corpus rows back to their original bytes.
+  # D091-R2 (P2-4): BEFORE transforming, the ORIGINAL bytes are persisted at the
+  # archive address (.sdlc/legacy/.specify/…) from the phase-1 backup, so the
+  # report's provenance claim holds without trusting git history or temp dirs.
   MIG_CORPUS_COUNT=0
-  MIG_CORPUS_DSTS=()
   MIG_TRANSFORM_LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-log.XXXXXX")"
+  MIG_ARCHIVE_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-archive.XXXXXX")"
   for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
     IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
     case "${dst}" in
       "${SDLC_DIR}/memory/"*|"${SDLC_DIR}/coding_guide/"*)
+        src_rel="${src#"${TARGET_PATH}/"}"
+        # .specify/memory/X -> .sdlc/legacy/.specify/memory/X (src_rel already
+        # carries the leading dot of the legacy root)
+        arch_rel=".sdlc/legacy/${src_rel}"
+        arch_abs="${TARGET_PATH}/${arch_rel}"
+        if [[ -e "${arch_abs}" || -L "${arch_abs}" ]]; then
+          if ! cmp -s "${MIG_BACKUP_DIR}/${src_rel}" "${arch_abs}"; then
+            MIG_FAIL_REASON="original archive already exists with different content: ${arch_rel}"
+            echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
+            MIG_TX_ACTIVE="false"
+            if mig_rollback; then
+              echo "ROLLED BACK: repository restored to pre-migration state." >&2
+            else
+              echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+              MIG_ROLLBACK_OK="false"
+            fi
+            for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+              rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+            done
+            mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+            mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
+            exit 1
+          fi
+        else
+          mkdir -p "$(dirname "${arch_abs}")"
+          if ! cp -p "${MIG_BACKUP_DIR}/${src_rel}" "${arch_abs}"; then
+            MIG_FAIL_REASON="original archive write failed: ${arch_rel}"
+            echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
+            MIG_TX_ACTIVE="false"
+            if mig_rollback; then
+              echo "ROLLED BACK: repository restored to pre-migration state." >&2
+            else
+              echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+              MIG_ROLLBACK_OK="false"
+            fi
+            for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+              rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+            done
+            mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+            mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
+            exit 1
+          fi
+          MIG_ARCHIVE_CREATED+=("${arch_rel}")
+        fi
+        printf '%s\t%s\t%s\n' "${dst#"${TARGET_PATH}/"}" "${arch_rel}" "${src_rel}" >> "${MIG_ARCHIVE_TSV_FILE}"
         if corpus_transform_file "${dst}" "${dst}" "${dst#"${TARGET_PATH}/"}" "${MIG_TRANSFORM_LOG_FILE}" > /dev/null; then
           MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
           MIG_CORPUS_DSTS+=("${dst#"${TARGET_PATH}/"}")
@@ -1447,6 +1663,10 @@ ${PLAN_BODY}"
             echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
             MIG_ROLLBACK_OK="false"
           fi
+          for ((c = 0; c < ${#MIG_ARCHIVE_CREATED[@]}; c++)); do
+            rm -f "${TARGET_PATH}/${MIG_ARCHIVE_CREATED[${c}]}"
+          done
+          rm -f "${MIG_TRANSFORM_LOG_FILE}" "${MIG_ARCHIVE_TSV_FILE}"
           mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
           mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
           exit 1
@@ -1677,9 +1897,12 @@ render_corpus_template() { # $1 = template abs path ; stdout: rendered content
   ruby -e '
     tmpl = ARGV[0]
     c = File.read(tmpl)
-    c = c.gsub("{{PROJECT_NAME}}", ENV["PROJECT_NAME"])
-         .gsub("{{DOC_DATE}}", ENV["DOC_DATE"])
-         .gsub("{{AUTHOR}}", ENV["AUTHOR"])
+    # D091-R2 (S3): block-form replacement keeps project-supplied values LITERAL —
+    # a string-form replacement would interpret backslashes/`\&` in values like
+    # 'A\&B' as backreferences and re-insert placeholders.
+    c = c.gsub("{{PROJECT_NAME}}") { ENV["PROJECT_NAME"] }
+         .gsub("{{DOC_DATE}}") { ENV["DOC_DATE"] }
+         .gsub("{{AUTHOR}}") { ENV["AUTHOR"] }
     unresolved = c.scan(/\{\{[A-Z0-9_]+\}\}/).uniq
     unless unresolved.empty?
       warn "unresolved corpus template placeholders in #{tmpl}: #{unresolved.join(", ")}"
@@ -1705,10 +1928,17 @@ stage_corpus_skeleton() { # $1 = rel under .sdlc (staging-relative too)
   local rel="$1" tmpl="${CORPUS_TEMPLATE_DIR}/${1}"
   if corpus_adoption_source_present "${rel}"; then
     NOTICE_LINES+=("corpus skeleton not generated; adoption source still present (use --adopt-governance-corpus): .specify/${rel}")
+    CORPUS_SKIPPED_RELS+=("${rel}")
     return 0
   fi
   if [[ ! -f "${tmpl}" ]]; then
     NOTICE_LINES+=("corpus template missing; skeleton skipped: ${tmpl#"${STANDARD_PACKAGE}/"}")
+    CORPUS_SKIPPED_RELS+=("${rel}")
+    return 0
+  fi
+  if [[ -n "${CORPUS_DEST_BLOCKED}" ]]; then
+    NOTICE_LINES+=("corpus skeleton not generated; destination root unsafe: ${CORPUS_DEST_BLOCKED}")
+    CORPUS_SKIPPED_RELS+=("${rel}")
     return 0
   fi
   render_corpus_template "${tmpl}" | write_staging_file "${rel}"
@@ -2138,6 +2368,10 @@ if [[ "${MODE}" == "audit" ]]; then
     local tmpl="${CORPUS_TEMPLATE_DIR}/${rel}"
     local tmp_content
     [[ -e "${target_file}" ]] && return 0
+    if [[ -n "${CORPUS_DEST_BLOCKED}" ]]; then
+      echo "CORPUS SKIP (destination root unsafe): ${CORPUS_DEST_BLOCKED}"
+      return 0
+    fi
     if corpus_adoption_source_present "${rel}"; then
       echo "CORPUS SKIP (adoption source still present; use --adopt-governance-corpus): .specify/${rel}"
       return 0
@@ -2366,7 +2600,7 @@ end
 #   - semantic-clause binding: only the clause containing the hit may exempt it
 #     (its own clause must carry a negation); a negation in a sibling clause of
 #     the same line or in an adjacent line never releases another hit.
-RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!legacy\/)\.specify/]
+RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!\.sdlc\/legacy\/)\.specify/]
 NEGATION_RE = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|don't|prohibit\w*|forbidden|retired)/i
 MACHINE_FIELD_RE = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
 residue_lines = []
@@ -3050,6 +3284,14 @@ for PAIR in \
   "memory/InteractionProtocol.md:${SDLC_DIR}/memory/InteractionProtocol.md" \
   "coding_guide/CodingGuide.md:${SDLC_DIR}/coding_guide/CodingGuide.md"; do
   REL="${PAIR%%:*}"
+  # D091-R2 (P1-1): a skeleton skipped at staging (adoption source present,
+  # template missing, unsafe destination root) must never be planned as "create" —
+  # the staged file does not exist and the execution copy would fail halfway
+  # through initialization. The staging-time notice already explains the skip.
+  case "${REL}" in
+    memory/*|coding_guide/*)
+      corpus_skip_recorded "${REL}" && continue ;;
+  esac
   TARGET_FILE="${PAIR#*:}"
   STAGED="${STAGING_DIR}/${REL}"
   if [[ ! -e "${TARGET_FILE}" ]]; then

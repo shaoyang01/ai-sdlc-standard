@@ -1370,22 +1370,23 @@ assert_exit 1 $?
 [[ "${S59_SRC}" == "$(digest_file "${D}/.specify/memory/constitution.md")" ]] && pass || fail "59: blocked run disturbed source"
 [[ "${S59_DST}" == "${H59}" ]] && pass || fail "59: blocked run disturbed destination"
 
-# --- 60: identical-after-transform destination archives the redundant source -------
-CASE_NAME="60. D091: identical-after-transform adoption archives the redundant source, destination untouched"
+# --- 60: redundant re-adoption (source identical to persisted archive) is a no-op --
+CASE_NAME="60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched"
 D="${WORK_ROOT}/t55"
 bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > /dev/null 2>&1
 mkdir -p "${D}/.specify/memory"
 cp "${WORK_ROOT}/t55.orig" "${D}/.specify/memory/InteractionProtocol.md"
 DST60="$(digest_file "${D}/.sdlc/memory/InteractionProtocol.md")"
+ARCH60="$(digest_file "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md")"
 OUT60="${WORK_ROOT}/t60.out"
 bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT60}" 2>&1
-grep -q "already adopted" "${OUT60}" && pass || fail "60: identical-after-transform not detected"
-grep -q "RETIRE" "${OUT60}" && pass || fail "60: redundant source not routed to archive"
+grep -q "already adopted and archived" "${OUT60}" && pass || fail "60: redundant source not detected as already archived"
+grep -q "nothing to do" "${OUT60}" && pass || fail "60: redundant re-adoption not a no-op"
 PLAN60="$(grep '^PLAN_SHA256=' "${OUT60}" | cut -d= -f2)"
 bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN60}" > /dev/null 2>&1
 assert_exit 0 $?
-[[ -f "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md" ]] && pass || fail "60: redundant source not archived"
 [[ "${DST60}" == "$(digest_file "${D}/.sdlc/memory/InteractionProtocol.md")" ]] && pass || fail "60: adopted destination modified"
+[[ "${ARCH60}" == "$(digest_file "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md")" ]] && pass || fail "60: archive modified"
 
 # --- 61: source drift and wrong digest reject with zero writes ----------------------
 CASE_NAME="61. D091: drifted source or wrong plan digest reject DP1 with zero writes"
@@ -1451,6 +1452,184 @@ bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migrati
 assert_exit 1 $?
 bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --domain-map /dev/null > /dev/null 2>&1
 assert_exit 2 $?
+
+# ===========================================================================
+# D091-R2 fix-round matrix (R1 review blockers 1-7 + S3)
+# ===========================================================================
+
+# --- 65: P1-1 skipped corpus skeletons never planned as create; no partial init ---
+CASE_NAME="65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes"
+D="${WORK_ROOT}/t65"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+FH65="${WORK_ROOT}/t65-home"; mkdir -p "${FH65}/scripts"
+[[ -f "${STANDARD_HOME}/scripts/audit-entry-coverage.rb" ]] && cp "${STANDARD_HOME}/scripts/audit-entry-coverage.rb" "${FH65}/scripts/" || true
+OUT65="${WORK_ROOT}/t65.out"
+AI_SDLC_STANDARD_HOME="${FH65}" bash "${INITIALIZER}" "${D}" --dry-run > "${OUT65}" 2>&1
+assert_exit 0 $?
+grep -q "corpus template missing" "${OUT65}" && pass || fail "65: template-missing notice absent in dry-run"
+if grep -qE "^  create +memory/" "${OUT65}"; then fail "65: skipped skeleton planned as create in dry-run"; else pass; fi
+AI_SDLC_STANDARD_HOME="${FH65}" bash "${INITIALIZER}" "${D}" > "${OUT65}" 2>&1
+assert_exit 0 $?
+[[ -d "${D}/.sdlc/memory" || -d "${D}/.sdlc/coding_guide" ]] && fail "65: corpus dirs created despite missing templates" || pass
+[[ -f "${D}/.sdlc/business_domain/knowledge-target.yaml" ]] && pass || fail "65: init aborted halfway (partial state)"
+[[ "$(grep -c 'corpus template missing' "${OUT65}")" -eq 7 ]] && pass || fail "65: expected 7 skip notices"
+
+# --- 66: P1-2 path containment (ancestor link, dest-root link, source link, root) --
+CASE_NAME="66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed"
+D="${WORK_ROOT}/t66"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+OUT66="${WORK_ROOT}/t66.out"
+mkdir -p "${WORK_ROOT}/t66-outside/memory"
+printf 'outside\n' > "${WORK_ROOT}/t66-outside/memory/x.md"
+mv "${D}/.specify" "${WORK_ROOT}/t66-outside/specify-real"
+ln -s "${WORK_ROOT}/t66-outside/specify-real" "${D}/.specify"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT66}" 2>&1
+assert_exit 1 $?
+grep -qE "does not resolve|escapes target repository" "${OUT66}" && pass || fail "66: ancestor-symlink root not blocked"
+[[ -f "${WORK_ROOT}/t66-outside/memory/x.md" ]] && pass || fail "66: out-of-repo file disturbed"
+# destination-root symlink blocks adoption at plan level
+D66B="${WORK_ROOT}/t66b"; build_matrix_fixture "${D66B}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D66B}" > /dev/null 2>&1
+mkdir -p "${D66B}/.specify/memory"
+printf 'legacy\n' > "${D66B}/.specify/memory/RoleAtlas.md"
+rm -rf "${D66B}/.sdlc/memory"
+mkdir -p "${WORK_ROOT}/t66b-outside"
+ln -s "${WORK_ROOT}/t66b-outside" "${D66B}/.sdlc/memory"
+OUT66B="${WORK_ROOT}/t66b.out"
+bash "${INITIALIZER}" "${D66B}" --adopt-governance-corpus --plan > "${OUT66B}" 2>&1
+assert_exit 1 $?
+grep -q "corpus-destination" "${OUT66B}" && pass || fail "66: destination-root symlink not blocked"
+[[ ! -e "${WORK_ROOT}/t66b-outside/RoleAtlas.md" ]] && pass || fail "66: adopted file written through destination symlink"
+# in-repo symlink source is C10 (transformer must not follow it)
+D66C="${WORK_ROOT}/t66c"; build_matrix_fixture "${D66C}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D66C}" > /dev/null 2>&1
+rm -f "${D66C}/.sdlc/memory/RoleAtlas.md"
+mkdir -p "${D66C}/.specify/memory"
+printf 'real content\n' > "${D66C}/.sdlc/business_domain/00BusinessLandscape.md"
+ln -s "${D66C}/.sdlc/business_domain/00BusinessLandscape.md" "${D66C}/.specify/memory/RoleAtlas.md"
+OUT66C="${WORK_ROOT}/t66c.out"
+bash "${INITIALIZER}" "${D66C}" --adopt-governance-corpus --plan > "${OUT66C}" 2>&1
+assert_exit 1 $?
+grep -q "regular file" "${OUT66C}" && pass || fail "66: in-repo symlink corpus source not classified C10"
+grep -q "real content" "${D66C}/.sdlc/business_domain/00BusinessLandscape.md" && pass || fail "66: link target rewritten at plan time"
+
+# --- 67: P1-3 archive collision, dangling destination, dst-appears-after-plan ------
+CASE_NAME="67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes"
+D="${WORK_ROOT}/t67"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+rm -f "${D}/.sdlc/memory/InteractionProtocol.md"
+mkdir -p "${D}/.specify/memory" "${D}/.sdlc/legacy/.specify/memory"
+printf 'legacy rules: `/.specify/memory/**`\n' > "${D}/.specify/memory/InteractionProtocol.md"
+printf 'HISTORICAL OWNER DATA\n' > "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md"
+OUT67="${WORK_ROOT}/t67.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT67}" 2>&1
+assert_exit 1 $?
+grep -q "archive already exists with different content" "${OUT67}" && pass || fail "67: differing historical archive not protected"
+H67="$(digest_file "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md")"
+PLAN67="$(grep '^PLAN_SHA256=' "${OUT67}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN67}" > /dev/null 2>&1
+assert_exit 1 $?
+[[ "${H67}" == "$(digest_file "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md")" ]] && pass || fail "67: historical archive overwritten"
+# dangling destination symlink counts as existing
+rm -f "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md"
+ln -s /tmp/kt-dangling-67 "${D}/.sdlc/memory/InteractionProtocol.md"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT67}" 2>&1
+assert_exit 1 $?
+grep -q "COLLISION" "${OUT67}" && pass || fail "67: dangling destination symlink treated as absent"
+rm -f "${D}/.sdlc/memory/InteractionProtocol.md"
+# dst appears after plan: apply aborts before any move, source intact
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT67}" 2>&1
+PLAN67B="$(grep '^PLAN_SHA256=' "${OUT67}" | cut -d= -f2)"
+S67_SRC="$(digest_file "${D}/.specify/memory/InteractionProtocol.md")"
+printf 'late writer\n' > "${D}/.sdlc/memory/InteractionProtocol.md"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN67B}" > /dev/null 2>&1
+assert_exit 1 $?
+[[ "${S67_SRC}" == "$(digest_file "${D}/.specify/memory/InteractionProtocol.md")" ]] && pass || fail "67: source disturbed by late-destination abort"
+printf 'late writer\n' | digest_file > /dev/null 2>&1 # no-op keep helper warm
+grep -q "late writer" "${D}/.sdlc/memory/InteractionProtocol.md" && pass || fail "67: another writer's destination data destroyed"
+
+# --- 68: P2-4 original bytes persisted at archive address + report binding ---------
+CASE_NAME="68. R2-P2-4: first-time adoption persists ORIGINAL bytes at the archive address and binds them in the report"
+D="${WORK_ROOT}/t68"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+mkdir -p "${D}/.specify/memory"
+printf 'original interaction rules: `/.specify/memory/**`\n' > "${D}/.specify/memory/InteractionProtocol.md"
+ORIG68="$(digest_file "${D}/.specify/memory/InteractionProtocol.md")"
+PLAN68="$(bash "${INITIALIZER}" "${D}" --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN68}" > /dev/null 2>&1
+assert_exit 0 $?
+[[ -f "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md" ]] && pass || fail "68: original bytes not persisted at archive address"
+[[ "${ORIG68}" == "$(digest_file "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md")" ]] && pass || fail "68: archived original differs from source bytes"
+MIG68="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+ruby -rjson -e '
+  d = JSON.parse(File.read(ARGV[0]))
+  row = d["files"].find { |f| f["rule"] == "C11" }
+  exit(1) if row.nil? || row["original_archive"].nil? || row["original_archive"] !~ %r{\.sdlc/legacy/\.specify/memory/}
+' "${MIG68}" && pass || fail "68: report does not bind original_archive"
+
+# --- 69: P2-5 archive addresses survive the transformer ----------------------------
+CASE_NAME="69. R2-P2-5: transformer never remaps .sdlc/legacy/.specify/** addresses (mixed live+archive content)"
+D="${WORK_ROOT}/t69"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+mkdir -p "${D}/.specify/memory"
+printf 'archived: .sdlc/legacy/.specify/memory/item.md\nlive: /.specify/coding_guide/**\n' > "${D}/.specify/memory/x.md"
+PLAN69="$(bash "${INITIALIZER}" "${D}" --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN69}" > /dev/null 2>&1
+assert_exit 0 $?
+grep -qF 'archived: .sdlc/legacy/.specify/memory/item.md' "${D}/.sdlc/memory/x.md" && pass || fail "69: archive address remapped"
+grep -qF 'live: /.sdlc/coding_guide/**' "${D}/.sdlc/memory/x.md" && pass || fail "69: live reference not transformed"
+BEFORE69="$(cat "${D}/.sdlc/memory/x.md")"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > /dev/null 2>&1
+[[ "${BEFORE69}" == "$(cat "${D}/.sdlc/memory/x.md")" ]] && pass || fail "69: transform not idempotent"
+
+# --- 70: P2-6 only the full archive prefix grants the gate exemption ---------------
+# (observable on a NON-corpus active surface — corpus content has live refs mapped
+# by the transformer before the gate ever runs)
+CASE_NAME="70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back"
+D="${WORK_ROOT}/t70"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+mkdir -p "${D}/.specify/memory"
+printf 'archive addr: .sdlc/legacy/.specify/memory/old.md\n' > "${D}/.specify/memory/ok.md"
+PLAN70="$(bash "${INITIALIZER}" "${D}" --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN70}" > /dev/null 2>&1
+assert_exit 0 $?
+rm -f "${D}/.sdlc/coding_guide/CodingGuide.md"
+printf 'pointer: .sdlc/business_domain/legacy/.specify/active.md\n' >> "${D}/.sdlc/business_domain/00BusinessLandscape.md"
+mkdir -p "${D}/.specify/coding_guide"
+printf 'guide: `.specify/coding_guide/**`\n' > "${D}/.specify/coding_guide/CodingGuide.md"
+S70_SRC="$(digest_file "${D}/.specify/coding_guide/CodingGuide.md")"
+PLAN70B="$(bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+OUT70="${WORK_ROOT}/t70.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN70B}" > "${OUT70}" 2>&1
+assert_exit 1 $?
+grep -q "RESIDUE GATE FAILED" "${OUT70}" && pass || fail "70: non-archive legacy/ prefix did not fire the gate"
+grep -q "00BusinessLandscape.md" "${OUT70}" && pass || fail "70: violation does not name the active doc"
+[[ "${S70_SRC}" == "$(digest_file "${D}/.specify/coding_guide/CodingGuide.md")" ]] && pass || fail "70: source not restored"
+
+# --- 71: P2-7 pending scan covers stage chains and role-matrix rows ----------------
+CASE_NAME="71. R2-P2-7: pending list captures the stage chain body and role-matrix rows with exact line numbers"
+D="${WORK_ROOT}/t71"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+mkdir -p "${D}/.specify/memory"
+printf 'intro line, unrelated\n' > "${D}/.specify/memory/RoleAtlas.md"
+printf 'Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync\n' >> "${D}/.specify/memory/RoleAtlas.md"
+printf '| Specify | Owner A | duties | gate |\n' >> "${D}/.specify/memory/RoleAtlas.md"
+printf '| Clarify | Owner B | duties | gate |\n' >> "${D}/.specify/memory/RoleAtlas.md"
+printf 'trailer unrelated\n' >> "${D}/.specify/memory/RoleAtlas.md"
+PLAN71="$(bash "${INITIALIZER}" "${D}" --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN71}" > /dev/null 2>&1
+assert_exit 0 $?
+MIG71="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+ruby -rjson -e '
+  d = JSON.parse(File.read(ARGV[0]))
+  pend = d["pending_confirmation"].select { |p| p["file"] == ".sdlc/memory/RoleAtlas.md" }
+  lines = pend.map { |p| p["line"].to_i }
+  exit(1) unless lines.include?(2)   # stage chain body
+  exit(2) unless lines.include?(3) && lines.include?(4)  # role-matrix rows
+  exit(3) if pend.any? { |p| p["excerpt"].include?("intro line") || p["excerpt"].include?("trailer") }
+' "${MIG71}" && pass || fail "71: pending list misses stage-chain/role-matrix body or lists unrelated lines"
+
+# --- 72: S3 template values are substituted literally -------------------------------
+CASE_NAME="72. R2-S3: hostile --project-name values are inserted literally (no backreference interpretation)"
+D="${WORK_ROOT}/t72"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+OUT72="${WORK_ROOT}/t72.out"
+bash "${INITIALIZER}" "${D}" --project-name 'A\&B' > "${OUT72}" 2>&1
+assert_exit 0 $?
+grep -qF 'A\&B' "${D}/.sdlc/memory/constitution.md" && pass || fail "72: project name not inserted literally"
 
 
 echo ""

@@ -3,8 +3,10 @@
 ## 状态
 
 Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺失生成"两条需求均已明确）；
-实现与回归已在 `codex/d088-governance-corpus` 分支完成（626 passed 0 failed），
-独立复审待开。本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
+实现与回归已在 `codex/d088-governance-corpus` 分支完成（首轮 626 passed 0 failed）。
+独立复审 D091-R1 判定 FAIL（7 阻塞：3×P1 + 4×P2），R2 修复轮已逐项关闭并追加回归
+场景 65-72（668 passed 0 failed，2026-09-07）；等待 D091-R2 复审确认。
+本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
 
 ## 背景
 
@@ -77,13 +79,32 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
 ## 实现状态
 
 - 已实现并回归通过（2026-09-07，worktree `ai-sdlc-standard-governance-corpus-worktree`，
-  分支 `codex/d088-governance-corpus`，基线 9e6e0c7）：回归 626 passed 0 failed
-  （新增场景 52-64 覆盖：NEW_EMPTY/ECNK 生成、AUDIT 补缺、人工内容保护、幂等、
-  存量收编溯源、C8 兼容、同名冲突、转换后一致归档、源漂移与错误摘要零写入、
-  plan/dry-run 零写入、门失败回滚恢复源字节、C10 不安全项、标志互斥）。
+  分支 `codex/d088-governance-corpus`，基线 9e6e0c7）：首轮回归 626 passed 0 failed
+  （场景 52-64）。
+- **D091-R1 复审 FAIL（7 阻塞）→ R2 修复轮（2026-09-07，全部关闭）**：
+  1. INIT 跳过骨架不再进入计划/执行（CORPUS_SKIPPED_RELS 贯通 staging/PAIR/执行，
+     消除半途 cp 失败的部分初始化）；
+  2. 路径包容性硬化：walk 根一律 realpath 包含性校验（覆盖祖先符号链接）+ 可读性检查、
+     find 遍历错误升级为计划级阻塞、语料源仅接受普通文件（链接一律 C10）、语料目的地根
+     （.sdlc/memory、.sdlc/coding_guide）符号链接/越界在 adoption 与 LEGACY 计划级阻塞、
+     生成路径跳过并提示；
+  3. 最终落点冲突保护：目的地存在性含悬空链接（-L）、RETIRE 归档重定向独立冲突检查
+     （一致→源归档；归档已有不同内容→计划级阻塞）、发布前全量复验 + `mv -n` + 源残留
+     后置校验（后来者数据不被覆盖、不被回滚误删）；
+  4. 首次收编的原始字节在事务窗口内持久归档至 `.sdlc/legacy/.specify/…`（冲突保护、
+     失败回滚清理），报告逐文件绑定 `original_archive`；
+  5. 转换器规则 1-6/9 加 `(?<!\.sdlc\/legacy\/)` 完整前缀负向断言，归档地址不再被重映射
+     （修复 `.sdlc/legacy/.specify/memory/x` → `.sdlc/legacy/.sdlc/memory/x` 损坏）；
+  6. 门与审计扫描的 `.specify` 豁免收紧为完整归档前缀（`.sdlc/business_domain/legacy/.specify/*`
+     正确触发）；
+  7. pending_confirmation 补齐阶段链（两个阶段词 + 箭头）与角色矩阵表行（阶段词首列）
+     两类上下文，精确行号；
+  附带：S1 转换日志失败路径清理、S2 usage 文本同步、S3 模板占位符块替换（字面值）。
+  回归 668 passed 0 failed（新增场景 65-72 对应 R1 各阻塞项矩阵）；真实语料重放
+  9/9 收编 + 9/9 原件归档 + 28 行待确认。
 - 真实仓只读预演与正式收编执行留给 Owner 审阅后进行（logistics-master 补生成、
-  logistics-center/wms-monitor/±wms-portal 收编）。
-- 独立复审：未进行，本文件不自证通过。
+  logistics-center/wms-monitor 收编）。
+- 独立复审：D091-R1 FAIL 已修复，等待 D091-R2 复审确认；本文件不自证通过。
 
 ## 依据
 
