@@ -77,6 +77,7 @@
 | [Decision-084](Decision-084-node-template-closure-wave.md) | 2026-09-02 | Accepted / P-L node-template closure wave (urgent) | sdlc-* skills 为现役手动驱动主干，模板缺口升级为紧急生产漏洞：P-L 收口波立项。templates/ 新增四份 canonical 文档模板（task-plan / implementation-record / knowledge-sync / finding-ledger），各节点 SKILL.md 增补引用，旧 specs/** 迁移模板废弃标注，00-需求资料 模板适用性评估。验证口径=对照 node-capability-contract 4.1~4.7 + artifact-flow；不涉 runtime/E3/H1。P-K-d 现场冻结保留。 |
 
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
+| [Decision-091](Decision-091-governance-corpus-adoption.md) | 2026-09-07 | Accepted / 实现与回归完成，独立复审待开 | 治理语料（memory/coding_guide）收编与生成：迁移分类新增 C11/C12 确定性转换收编（报告记录逐规则替换数与 pending_confirmation 待确认清单）、INIT/AUDIT 生成 7 份语料骨架（pending 槽位、零退役词汇）、`--adopt-governance-corpus` 显式收编入口（复用 PLAN_SHA/DP1/两阶段事务/回滚）、同名冲突确定性（转换后一致→源归档；不一致→阻塞）、残留门 `.specify` 模式加 `legacy/` 前缀负向断言（归档地址引用不触发）；语料效力边界不变（非事实源/非写目标/非标准源）；正式收掉 Decision-089 推迟项。 |
 
 ## 新增流程
 

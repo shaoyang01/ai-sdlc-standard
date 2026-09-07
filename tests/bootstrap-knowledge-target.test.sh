@@ -1242,6 +1242,216 @@ else
   fail "51: failure migration report not written"
 fi
 
+# ===========================================================================
+# Decision-091 governance-corpus matrix: skeleton generation + legacy adoption
+# ===========================================================================
+
+# --- 52: NEW_EMPTY generates the full corpus skeleton set -------------------------
+CASE_NAME="52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)"
+D="${WORK_ROOT}/t52"; build_matrix_fixture "${D}" "none" "no" "0" "absent"
+OUT52="${WORK_ROOT}/t52.out"
+bash "${INITIALIZER}" "${D}" > "${OUT52}" 2>&1
+assert_exit 0 $?
+for cf in memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md; do
+  [[ -f "${D}/.sdlc/${cf}" ]] && pass || fail "52: corpus skeleton missing: ${cf}"
+done
+scan_banned "${D}/.sdlc/memory" "${OUT52}" "52-memory"
+scan_banned "${D}/.sdlc/coding_guide" "${OUT52}" "52-coding-guide"
+grep -q "pending-owner-confirmation" "${D}/.sdlc/memory/constitution.md" && pass || fail "52: skeleton lacks pending-confirmation slots"
+grep -q "sdlc-knowledge-sync" "${D}/.sdlc/memory/AiGovernance.md" && pass || fail "52: AiGovernance skeleton lacks current-standard reference"
+grep -q "^status: \"candidate_pending_confirmation\"" "${D}/.sdlc/business_domain/knowledge-target.yaml" && pass || fail "52: declaration not candidate"
+S52_SNAP="$(snapshot "${D}/.sdlc/memory")"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+assert_exit 0 $?
+[[ "${S52_SNAP}" == "$(snapshot "${D}/.sdlc/memory")" ]] && pass || fail "52: corpus rerun not idempotent"
+
+# --- 53: EXISTING_CODE_NO_KNOWLEDGE also generates corpus -------------------------
+CASE_NAME="53. D091: EXISTING_CODE_NO_KNOWLEDGE generates corpus skeletons alongside the candidate scan"
+D="${WORK_ROOT}/t53"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+assert_exit 0 $?
+[[ -f "${D}/.sdlc/memory/EngineeringStandard.md" ]] && pass || fail "53: memory skeleton missing"
+[[ -f "${D}/.sdlc/coding_guide/CodingGuide.md" ]] && pass || fail "53: coding_guide skeleton missing"
+[[ -f "${D}/.sdlc/business_domain/knowledge-target.yaml" ]] && pass || fail "53: declaration missing alongside corpus generation"
+
+# --- 54: AUDIT refills deleted skeleton; human content untouched ------------------
+CASE_NAME="54. D091: AUDIT refills a deleted corpus skeleton and never touches human content"
+D="${WORK_ROOT}/t54"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+rm -f "${D}/.sdlc/memory/RoleAtlas.md"
+printf 'human-authored project note, must survive\n' > "${D}/.sdlc/memory/constitution.md"
+H54="$(digest_file "${D}/.sdlc/memory/constitution.md")"
+OUT54="${WORK_ROOT}/t54.out"
+bash "${INITIALIZER}" "${D}" > "${OUT54}" 2>&1
+assert_exit 0 $?
+[[ -f "${D}/.sdlc/memory/RoleAtlas.md" ]] && pass || fail "54: AUDIT did not refill deleted skeleton"
+grep -q "memory/RoleAtlas.md" "${OUT54}" && pass || fail "54: AUDIT_FILLED does not report corpus refill"
+[[ "${H54}" == "$(digest_file "${D}/.sdlc/memory/constitution.md")" ]] && pass || fail "54: human content overwritten"
+
+# --- 55: anti-occupation guard -----------------------------------------------------
+CASE_NAME="55. D091: un-adopted legacy corpus source blocks skeleton occupation"
+D="${WORK_ROOT}/t55"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+rm -f "${D}/.sdlc/memory/InteractionProtocol.md"
+mkdir -p "${D}/.specify/memory"
+printf '规则源：`/.specify/memory/**`；回填用 $speckit-sync。\n' > "${D}/.specify/memory/InteractionProtocol.md"
+OUT55="${WORK_ROOT}/t55.out"
+bash "${INITIALIZER}" "${D}" > "${OUT55}" 2>&1
+assert_exit 0 $?
+[[ ! -e "${D}/.sdlc/memory/InteractionProtocol.md" ]] && pass || fail "55: skeleton occupied the adoption destination"
+grep -q "CORPUS SKIP" "${OUT55}" && pass || fail "55: anti-occupation skip not reported"
+
+# --- 56: without the flag, C8-compatible behavior holds ----------------------------
+CASE_NAME="56. D091: without --adopt-governance-corpus the legacy corpus stays C8-in-place"
+OUT56="${WORK_ROOT}/t56.out"
+bash "${INITIALIZER}" "${D}" --plan > "${OUT56}" 2>&1
+assert_exit 0 $?
+grep -q "C11" "${OUT56}" && fail "56: plain plan claims corpus rows without the flag" || pass
+[[ -f "${D}/.specify/memory/InteractionProtocol.md" ]] && pass || fail "56: legacy source disturbed without the flag"
+cp "${D}/.specify/memory/InteractionProtocol.md" "${WORK_ROOT}/t55.orig"
+
+# --- 57: adoption via the flag: plan, DP1 apply, transformation, provenance --------
+CASE_NAME="57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance"
+OUT57="${WORK_ROOT}/t57.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT57}" 2>&1
+assert_exit 0 $?
+grep -q "TRANSFORM" "${OUT57}" && grep -q "C11" "${OUT57}" && pass || fail "57: adoption plan lacks C11 TRANSFORM row"
+PLAN57="$(grep '^PLAN_SHA256=' "${OUT57}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN57}" > "${OUT57}" 2>&1
+assert_exit 0 $?
+[[ -f "${D}/.sdlc/memory/InteractionProtocol.md" ]] && pass || fail "57: adopted file missing at destination"
+grep -qF '.sdlc/memory/**' "${D}/.sdlc/memory/InteractionProtocol.md" && pass || fail "57: path token not transformed"
+grep -qF '$sdlc-knowledge-sync' "${D}/.sdlc/memory/InteractionProtocol.md" && pass || fail "57: retired command not mapped to successor"
+grep -qF '$speckit-sync' "${D}/.sdlc/memory/InteractionProtocol.md" && fail "57: retired command survived transformation" || pass
+[[ ! -e "${D}/.specify/memory/InteractionProtocol.md" ]] && pass || fail "57: legacy source not moved"
+MIG57="$(ls "${D}"/.sdlc/reports/migration_report.*.json* 2>/dev/null | head -1)"
+if [[ -n "${MIG57}" ]]; then
+  ruby -rjson -e '
+    d = JSON.parse(File.read(ARGV[0]))
+    exit(1) if d["corpus_transformations"].nil? || d["corpus_transformations"].empty?
+    exit(2) unless d["pending_confirmation"].is_a?(Array)
+  ' "${MIG57}" && pass || fail "57: report lacks corpus transformation provenance"
+else
+  fail "57: migration report missing"
+fi
+
+# --- 58: full LEGACY migration adopts corpus in the same one-stop run --------------
+CASE_NAME="58. D091: LEGACY migration adopts coding_guide corpus one-stop (C12)"
+D="${WORK_ROOT}/t58"; build_matrix_fixture "${D}" "sdd" "yes" "0" "absent"
+mkdir -p "${D}/.specify/coding_guide"
+printf '# 编码指南\n使用 `$speckit-sync` 回填 `/.specify/coding_guide/**`。\n' > "${D}/.specify/coding_guide/CodingGuide.md"
+OUT58="${WORK_ROOT}/t58.out"
+bash "${INITIALIZER}" "${D}" --plan > "${OUT58}" 2>&1
+grep -q "C12" "${OUT58}" && pass || fail "58: legacy plan lacks C12 row"
+PLAN58="$(grep '^PLAN_SHA256=' "${OUT58}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --apply --confirm-migration-plan "${PLAN58}" > "${OUT58}" 2>&1
+assert_exit 0 $?
+grep -qF '$sdlc-knowledge-sync' "${D}/.sdlc/coding_guide/CodingGuide.md" && pass || fail "58: coding_guide content not transformed"
+grep -qF '$speckit-sync' "${D}/.sdlc/coding_guide/CodingGuide.md" && fail "58: retired command survived" || pass
+
+# --- 59: same-name destination with different content blocks -----------------------
+CASE_NAME="59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)"
+D="${WORK_ROOT}/t59"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+printf 'human-authored constitution, different from any legacy source\n' > "${D}/.sdlc/memory/constitution.md"
+H59="$(digest_file "${D}/.sdlc/memory/constitution.md")"
+mkdir -p "${D}/.specify/memory"
+printf 'different legacy constitution: `.specify/memory/**`\n' > "${D}/.specify/memory/constitution.md"
+OUT59="${WORK_ROOT}/t59.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT59}" 2>&1
+assert_exit 1 $?
+grep -q "COLLISION" "${OUT59}" && pass || fail "59: differing destination not blocked"
+grep -q "owner adjudication" "${OUT59}" && pass || fail "59: collision lacks adjudication reason"
+S59_SRC="$(digest_file "${D}/.specify/memory/constitution.md")"
+S59_DST="$(digest_file "${D}/.sdlc/memory/constitution.md")"
+PLAN59="$(grep '^PLAN_SHA256=' "${OUT59}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN59}" > /dev/null 2>&1
+assert_exit 1 $?
+[[ "${S59_SRC}" == "$(digest_file "${D}/.specify/memory/constitution.md")" ]] && pass || fail "59: blocked run disturbed source"
+[[ "${S59_DST}" == "${H59}" ]] && pass || fail "59: blocked run disturbed destination"
+
+# --- 60: identical-after-transform destination archives the redundant source -------
+CASE_NAME="60. D091: identical-after-transform adoption archives the redundant source, destination untouched"
+D="${WORK_ROOT}/t55"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > /dev/null 2>&1
+mkdir -p "${D}/.specify/memory"
+cp "${WORK_ROOT}/t55.orig" "${D}/.specify/memory/InteractionProtocol.md"
+DST60="$(digest_file "${D}/.sdlc/memory/InteractionProtocol.md")"
+OUT60="${WORK_ROOT}/t60.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT60}" 2>&1
+grep -q "already adopted" "${OUT60}" && pass || fail "60: identical-after-transform not detected"
+grep -q "RETIRE" "${OUT60}" && pass || fail "60: redundant source not routed to archive"
+PLAN60="$(grep '^PLAN_SHA256=' "${OUT60}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN60}" > /dev/null 2>&1
+assert_exit 0 $?
+[[ -f "${D}/.sdlc/legacy/.specify/memory/InteractionProtocol.md" ]] && pass || fail "60: redundant source not archived"
+[[ "${DST60}" == "$(digest_file "${D}/.sdlc/memory/InteractionProtocol.md")" ]] && pass || fail "60: adopted destination modified"
+
+# --- 61: source drift and wrong digest reject with zero writes ----------------------
+CASE_NAME="61. D091: drifted source or wrong plan digest reject DP1 with zero writes"
+D="${WORK_ROOT}/t61"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+rm -f "${D}/.sdlc/memory/AiGovernance.md"
+mkdir -p "${D}/.specify/memory"
+printf 'legacy governance: `/.specify/memory/**`\n' > "${D}/.specify/memory/AiGovernance.md"
+PLAN61="$(bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+printf 'drift appended\n' >> "${D}/.specify/memory/AiGovernance.md"
+S61_SNAP="$(snapshot "${D}/.specify")"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN61}" > /dev/null 2>&1
+assert_exit 1 $?
+[[ "${S61_SNAP}" == "$(snapshot "${D}/.specify")" ]] && pass || fail "61: drifted-source rejection wrote something"
+PLAN61B="$(bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "0000000000000000000000000000000000000000000000000000000000000000" > /dev/null 2>&1
+assert_exit 1 $?
+[[ "${S61_SNAP}" == "$(snapshot "${D}/.specify")" ]] && pass || fail "61: wrong-digest rejection wrote something"
+
+# --- 62: adoption plan/dry-run are zero-write ----------------------------------------
+CASE_NAME="62. D091: adoption --plan and --dry-run write nothing"
+D="${WORK_ROOT}/t61"
+S62_A="$(snapshot "${D}/.specify")"
+S62_B="$(snapshot "${D}/.sdlc")"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > /dev/null 2>&1
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --dry-run > /dev/null 2>&1
+[[ "${S62_A}" == "$(snapshot "${D}/.specify")" && "${S62_B}" == "$(snapshot "${D}/.sdlc")" ]] && pass || fail "62: plan/dry-run wrote to the repository"
+
+# --- 63: residue-gate failure rolls corpus rows back to original bytes ---------------
+CASE_NAME="63. D091: gate failure during adoption restores corpus source bytes and removes the destination"
+D="${WORK_ROOT}/t63"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+printf 'legacy old-root pointer: .specify/business_domain/legacy.md\n' >> "${D}/.sdlc/business_domain/00BusinessLandscape.md"
+rm -f "${D}/.sdlc/memory/InteractionProtocol.md"
+mkdir -p "${D}/.specify/memory"
+printf 'legacy interaction rules: `/.specify/memory/**`\n' > "${D}/.specify/memory/InteractionProtocol.md"
+S63_SRC="$(digest_file "${D}/.specify/memory/InteractionProtocol.md")"
+PLAN63="$(bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan 2>/dev/null | grep '^PLAN_SHA256=' | cut -d= -f2)"
+OUT63="${WORK_ROOT}/t63.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN63}" > "${OUT63}" 2>&1
+assert_exit 1 $?
+grep -q "RESIDUE GATE FAILED" "${OUT63}" && pass || fail "63: gate failure not reported"
+[[ "${S63_SRC}" == "$(digest_file "${D}/.specify/memory/InteractionProtocol.md")" ]] && pass || fail "63: corpus source not restored byte-identical"
+[[ ! -e "${D}/.sdlc/memory/InteractionProtocol.md" ]] && pass || fail "63: transformed destination left behind"
+ls "${D}"/.sdlc/reports/migration_report.* > /dev/null 2>&1 && pass || fail "63: failure report missing"
+
+# --- 64: unsafe corpus entries and flag conflicts ------------------------------------
+CASE_NAME="64. D091: escaping symlink and unreadable corpus file classify C10; flag+map conflict exits 2"
+D="${WORK_ROOT}/t64"; build_matrix_fixture "${D}" "none" "yes" "0" "absent"
+bash "${INITIALIZER}" "${D}" > /dev/null 2>&1
+rm -f "${D}/.sdlc/memory/RoleAtlas.md"
+mkdir -p "${D}/.specify/memory" /tmp/kt-outside-64
+printf 'outside\n' > /tmp/kt-outside-64/target.md
+ln -s /tmp/kt-outside-64/target.md "${D}/.specify/memory/RoleAtlas.md"
+printf 'locked\n' > "${D}/.specify/memory/EngineeringStandard.md"
+chmod 000 "${D}/.specify/memory/EngineeringStandard.md"
+OUT64="${WORK_ROOT}/t64.out"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --plan > "${OUT64}" 2>&1
+assert_exit 1 $?
+grep -q "C10" "${OUT64}" && pass || fail "64: unsafe corpus entry not classified C10"
+PLAN64="$(grep '^PLAN_SHA256=' "${OUT64}" | cut -d= -f2)"
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --apply --confirm-migration-plan "${PLAN64}" > /dev/null 2>&1
+assert_exit 1 $?
+bash "${INITIALIZER}" "${D}" --adopt-governance-corpus --domain-map /dev/null > /dev/null 2>&1
+assert_exit 2 $?
+
 
 echo ""
 echo "==== regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="

@@ -75,6 +75,15 @@ Options:
   --update-declaration         Controlled override: replace an existing
                                knowledge-target.yaml that differs from both the
                                candidate and routed declaration for this run.
+  --adopt-governance-corpus    Decision-091: adopt legacy governance corpus
+                               (.specify/memory, .specify/coding_guide) into
+                               .sdlc/memory + .sdlc/coding_guide with a
+                               deterministic path/vocabulary transformation.
+                               On LEGACY targets the corpus is adopted by the
+                               regular migration walk automatically; this flag
+                               is for already-initialized (EXISTING*) repos.
+                               Plan/apply use the same DP1 confirmation,
+                               two-phase transaction and rollback as migration.
   --dry-run                    Print the action plan and file previews; write nothing.
   -h, --help                   Show this help.
 
@@ -89,6 +98,9 @@ Layout created under .sdlc/ (create-if-missing only):
                                                 scripts/bootstrap-entry-coverage-profile.sh)
   business-domain-map.yaml                     (template; owner-confirmed map enables routed)
   scripts/bash/audit-entry-coverage.sh         (gate wrapper to the standard audit)
+  memory/...                                   (project governance corpus; adopted from
+                                                legacy roots or generated as skeletons)
+  coding_guide/...                             (project coding-guide corpus; same rule)
   reports/knowledge_target_bootstrap_report.<ts>.md   (INIT; timestamped, never overwrites)
   reports/knowledge_target_audit_report.<ts>.md       (AUDIT; timestamped, never overwrites)
 
@@ -123,6 +135,7 @@ FORCE_AUDIT="false"
 DETECT_MODE="false"
 PLAN_ONLY="false"
 APPLY_MODE="false"
+ADOPT_CORPUS="false"
 CONFIRM_DIGEST=""
 
 while [[ $# -gt 0 ]]; do
@@ -149,6 +162,8 @@ while [[ $# -gt 0 ]]; do
       PROFILE_OVERRIDE="${2}"; shift 2 ;;
     --update-declaration)
       UPDATE_DECLARATION="true"; shift ;;
+    --adopt-governance-corpus)
+      ADOPT_CORPUS="true"; shift ;;
     --dry-run)
       DRY_RUN="true"; shift ;;
     -h|--help)
@@ -175,6 +190,11 @@ mode_flags=0
 [[ "${mode_flags}" -le 1 ]] || { echo "--detect/--plan/--apply are mutually exclusive." >&2; exit 2; }
 if [[ "${CONFIRM_DIGEST}" != "" && "${APPLY_MODE}" != "true" ]]; then
   echo "--confirm-migration-plan requires --apply." >&2; exit 2
+fi
+# Decision-091: corpus adoption and routed generation are separate one-stop runs;
+# mixing them would interleave a content-bearing move with a routed regeneration.
+if [[ "${ADOPT_CORPUS}" == "true" && -n "${DOMAIN_MAP}" ]]; then
+  echo "--adopt-governance-corpus cannot be combined with --domain-map; run adoption first, then confirm the map." >&2; exit 2
 fi
 
 case "${PROFILE_OVERRIDE}" in
@@ -222,6 +242,18 @@ ECP_PROFILE="${SDLC_DIR}/entry-coverage-profile.yaml"
 MAP_TEMPLATE="${SDLC_DIR}/business-domain-map.yaml"
 AUDIT_WRAPPER="${SDLC_DIR}/scripts/bash/audit-entry-coverage.sh"
 LEGACY_BD_ROOT="${TARGET_PATH}/.specify/business_domain"
+# Decision-091: governance corpus (project memory + coding guide). Adopted from
+# legacy roots into .sdlc/memory + .sdlc/coding_guide, or generated as skeletons
+# when no legacy source exists. Templates live in the standard package.
+CORPUS_SKELETONS=(
+  "memory/constitution.md"
+  "memory/AiGovernance.md"
+  "memory/RoleAtlas.md"
+  "memory/EngineeringStandard.md"
+  "memory/DocumentationStandard.md"
+  "memory/InteractionProtocol.md"
+  "coding_guide/CodingGuide.md"
+)
 
 # D088-R2-H1: single legacy-root presence test (-d || -L, symlink target never
 # read) shared by mode selection and the migration advisory, so a dangling
@@ -230,6 +262,8 @@ legacy_root_present() {
   [[ -d "${LEGACY_BD_ROOT}" || -L "${LEGACY_BD_ROOT}" ]]
 }
 STANDARD_PACKAGE="${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE_DEFAULT}}"
+# Decision-091: corpus template home (after STANDARD_PACKAGE resolution on purpose)
+CORPUS_TEMPLATE_DIR="${STANDARD_PACKAGE}/templates/governance-corpus"
 RUN_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 DOC_DATE="$(date '+%Y-%m-%d')"
 
@@ -278,6 +312,7 @@ script_exit_guard() {
       crel="${CREATED_FILES[${c}]}"
       case "${crel}" in
         project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${crel}" ;;
+        memory/*|coding_guide/*) rm -f "${SDLC_DIR}/${crel}" ;;
         *) rm -f "${BD_DIR}/${crel}" ;;
       esac
     done
@@ -461,7 +496,10 @@ mig_finalize() {
   GATE_RC="$(ruby -e '
     sdlc = ARGV[0]; target = ARGV[1]; out = ARGV[2]
     skip_prefixes = ["#{sdlc}/legacy/", "#{sdlc}/reports/", "#{sdlc}/migration/"]
-    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+    # Decision-091: a `.specify` mention immediately preceded by `legacy/` is a
+    # reference INTO the archive (.sdlc/legacy/.specify/...) — the archive address
+    # itself, not a live retired-root reference — and must not fire the gate.
+    patterns = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!legacy\/)\.specify/]
     apos = 39.chr
     negation = Regexp.new("(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\\s+not|do\\s+not|don" + apos + "t|prohibit\\w*|forbidden|retired)", Regexp::IGNORECASE)
     machine_re = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
@@ -521,6 +559,7 @@ mig_finalize() {
       rel="${CREATED_FILES[${c}]}"
       case "${rel}" in
         project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh) rm -f "${SDLC_DIR}/${rel}" ;;
+        memory/*|coding_guide/*) rm -f "${SDLC_DIR}/${rel}" ;;
         *) rm -f "${BD_DIR}/${rel}" ;;
       esac
     done
@@ -561,6 +600,17 @@ mig_finalize() {
   for ((b = 0; b < ${#MIG_BLOCKED[@]}; b += 2)); do
     printf '%s\t%s\n' "${MIG_BLOCKED[${b}]}" "${MIG_BLOCKED[${b} + 1]}" >> "${MIG_BLOCK_TSV_FILE}"
   done
+
+  # Decision-091 corpus provenance: per-rule replacement counts (from the in-window
+  # transform pass) plus retired-era markers that legitimately remain in the adopted
+  # content (archived-location references, retired workflow docs/stage chain) —
+  # reported for owner adjudication, never silently rewritten away.
+  MIG_PENDING_TSV_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-pending.XXXXXX")"
+  if [[ "${#MIG_CORPUS_DSTS[@]}" -gt 0 ]]; then
+    corpus_pending_scan "${MIG_PENDING_TSV_FILE}" "${MIG_CORPUS_DSTS[@]}"
+  else
+    : > "${MIG_PENDING_TSV_FILE}"
+  fi
 
   MIG_CONFIRM_REQUIRED="false"; MIG_CONFIRM_PROVIDED="false"
   if [[ "${MIG_ADD_ONLY}" != "true" ]]; then MIG_CONFIRM_REQUIRED="true"; MIG_CONFIRM_PROVIDED="true"; fi
@@ -609,7 +659,7 @@ mig_finalize() {
   M_MOVED="${MIG_MOVED}" M_PLAN_SHA="${PLAN_SHA}" M_SIGNALS="${M_SIGNALS_CSV}" \
   M_ADD_ONLY="${MIG_ADD_ONLY}" M_CONFIRM_REQUIRED="${MIG_CONFIRM_REQUIRED}" M_CONFIRM_PROVIDED="${MIG_CONFIRM_PROVIDED}" \
   ruby -rjson -rdigest -e '
-    tsv_file, map_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
+    tsv_file, map_file, xform_file, pend_file, json_out, md_out = ARGV[0], ARGV[1], ARGV[2], ARGV[3], ARGV[4], ARGV[5]
     target = ENV["M_TARGET"]
     files = File.readlines(tsv_file).map(&:chomp).reject(&:empty?).map do |l|
       verb, rel, dst, rule, pre, rationale = l.split("\t")
@@ -624,6 +674,14 @@ mig_finalize() {
       k, v = l.split("\t", 2)
       { "field" => k, "value" => v }
     end
+    transforms = File.file?(xform_file) ? File.readlines(xform_file).map(&:chomp).reject(&:empty?).map do |l|
+      f, rule, count = l.split("\t")
+      { "file" => f, "rule" => rule.to_i, "replacements" => count.to_i }
+    end : []
+    pending = File.file?(pend_file) ? File.readlines(pend_file).map(&:chomp).reject(&:empty?).map do |l|
+      f, ln, excerpt = l.split("\t", 3)
+      { "file" => f, "line" => ln, "excerpt" => excerpt }
+    end : []
     doc = {
       "run_timestamp" => ENV["M_RUN_TIMESTAMP"],
       "generated_at" => ENV["M_V3_NOW"],
@@ -638,6 +696,8 @@ mig_finalize() {
       "moved_count" => ENV["M_MOVED"].to_i,
       "files" => files,
       "field_mappings" => mappings,
+      "corpus_transformations" => transforms,
+      "pending_confirmation" => pending,
       "residue_gate" => { "scope" => ".sdlc/** minus legacy/, reports/, migration/", "violations_count" => 0 },
       "post_detect_type" => ENV["M_POST_TYPE"],
       "rollback" => { "occurred" => false, "reason" => "" }
@@ -658,10 +718,20 @@ mig_finalize() {
       md << "\n## Field Mappings (spec §4.4)\n\n| Field | Outcome/Value |\n| --- | --- |\n"
       mappings.each { |m| md << "| #{m["field"]} | #{m["value"]} |\n" }
     end
+    unless transforms.empty?
+      md << "\n## Corpus Transformations (Decision-091)\n\n| File | Rule | Replacements |\n| --- | --- | --- |\n"
+      transforms.each { |t| md << "| #{t["file"]} | #{t["rule"]} | #{t["replacements"]} |\n" }
+    end
+    unless pending.empty?
+      md << "\n## Pending Confirmation (Decision-091)\n\n"
+      md << "语料中仍引用归档位置或退役时代词汇的行，原文保留，须由 Owner 判定是否更新：\n\n"
+      md << "| File | Line | Excerpt |\n| --- | --- | --- |\n"
+      pending.each { |p| md << "| #{p["file"]} | #{p["line"]} | #{p["excerpt"]} |\n" }
+    end
     md << "\nRETIRE/TRANSFORM 原件归档于 `.sdlc/legacy/**`（不物理删除）；候选域与稳定事实仍由 sdlc-knowledge-sync 依 routed 声明写入。\n"
     File.write(md_out, md)
-  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
-  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}"
+  ' "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_JSON}" "${MIG_REPORT_FILE}"
+  rm -f "${MIG_TSV_FILE}" "${MIG_MAP_TSV_FILE}" "${MIG_BLOCK_TSV_FILE}" "${MIG_PENDING_TSV_FILE}" "${MIG_TRANSFORM_LOG_FILE}"
 
   # transaction complete: reports finalized, disarm the EXIT guard (H3)
   trap - EXIT
@@ -674,6 +744,89 @@ mig_finalize() {
 }
 V3_NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 mig_digest() { ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$1" 2>/dev/null || true; }
+
+# --- governance corpus deterministic transformer (Decision-091) ----------------------
+# Ordered longest-first path/vocabulary mapping applied to adopted corpus files
+# (rules C11/C12). Content semantics are never rewritten: only retired-path and
+# retired-command tokens are mapped to their unique current counterparts; un-
+# mappable retired-era text stays verbatim and is surfaced by the pending-
+# confirmation scan. Per-rule replacement counts are appended to the run log so
+# the migration report carries before/after provenance.
+corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; stdout: replacement count
+  ruby -e '
+    src, dst, label, logf = ARGV[0], ARGV[1], ARGV[2], ARGV[3]
+    rules = [
+      [/\.specify\/scripts\/bash\/audit-entry-coverage\.sh/, ".sdlc/scripts/bash/audit-entry-coverage.sh"],
+      [/\.specify\/business_domain/, ".sdlc/business_domain"],
+      [/\.specify\/memory/, ".sdlc/memory"],
+      [/\.specify\/coding_guide/, ".sdlc/coding_guide"],
+      [/\.specify\/workflow/, ".sdlc/legacy/.specify/workflow"],
+      [/\.specify\/templates/, ".sdlc/legacy/.specify/templates"],
+      [/([\s\x28\x60\u{2018}\u{FF08}])\/?specs\//, :specs_block],
+      [/\$speckit-sync/, "$sdlc-knowledge-sync"],
+      [/(?<!legacy\/)\.specify\//, ".sdlc/"]
+    ]
+    begin
+      content = File.read(src)
+    rescue StandardError => e
+      warn "corpus transform read failed: #{src} (#{e.class})"
+      exit 1
+    end
+    total = 0
+    log = []
+    rules.each_with_index do |(re, rep), i|
+      cnt = 0
+      if rep == :specs_block
+        # block form keeps the captured boundary character verbatim (string-form
+        # backreference \\1 is ambiguous across shell/ruby quoting layers)
+        content = content.gsub(re) { cnt += 1; "#{Regexp.last_match(1)}.sdlc/legacy/specs/" }
+      else
+        content = content.gsub(re) { cnt += 1; rep }
+      end
+      next if cnt.zero?
+      total += cnt
+      log << "#{label}\t#{i + 1}\t#{cnt}"
+    end
+    begin
+      File.write(dst, content)
+    rescue StandardError => e
+      warn "corpus transform write failed: #{dst} (#{e.class})"
+      exit 1
+    end
+    File.open(logf, "a") { |f| log.each { |l| f.puts(l) } } if logf != "-"
+    puts total
+  ' "$1" "$2" "$3" "$4"
+}
+
+# pending-confirmation scan (Decision-091): ADOPTED corpus files that still carry
+# retired-era markers (references into the archive, retired workflow documents or
+# the retired stage chain) are listed file:line for owner adjudication. This is a
+# REPORT surface only — the content is preserved, never rewritten or blocked.
+# Scope is the files adopted by THIS run (generated skeletons use new-face
+# vocabulary by construction and are regression-scanned instead).
+corpus_pending_scan() { # $1 = output tsv file; $2.. = rel paths of adopted files
+  ruby -e '
+    target, out = ARGV[0], ARGV[1]
+    files = ARGV[2..] || []
+    marker = /\.sdlc\/legacy\/|SDDWorkflow|\bSDD\b|Domain Route|\.\.\/workflow\/|\.\.\/templates\//
+    entries = []
+    files.sort.each do |rel|
+      path = File.join(target, rel)
+      next unless File.file?(path)
+      begin
+        File.readlines(path).each_with_index do |line, idx|
+          next unless line.match?(marker)
+          entries << "#{rel}\t#{idx + 1}\t#{line.strip[0, 120]}"
+          break if entries.size >= 50
+        end
+      rescue StandardError
+        entries << "#{rel}\t-\tunreadable"
+      end
+      break if entries.size >= 50
+    end
+    File.write(out, entries.join("\n") + (entries.empty? ? "" : "\n"))
+  ' "${TARGET_PATH}" "$@" 2>/dev/null || true
+}
 
 # --- signal collection (spec §2.1) --------------------------------------------------
 HAS_S1="false"; HAS_S4="false"; HAS_S5="false"; HAS_S6="false"; HAS_S7="false"
@@ -873,8 +1026,19 @@ fi
 # =====================================================================================
 # --- v3: legacy migration plan / transactional apply ---------------------------------
 # =====================================================================================
-if [[ "${V3_TYPE}" == LEGACY_* && "${FORCE_AUDIT}" != "true" ]]; then
-  # --- classification walk (spec §4.2 rules C1-C10; metadata + safety only) ---------
+# Decision-091: besides full LEGACY migrations, the classification walk also runs
+# in ADOPTION mode — an already-initialized (EXISTING*) repo whose legacy corpus
+# (.specify/memory, .specify/coding_guide) was left in place by an earlier
+# migration (C8 at the time). Adoption restricts the walk to the two corpus dirs
+# and otherwise uses the identical plan/DP1/transaction/rollback machinery.
+MIG_ADOPTION_MODE="false"
+if [[ "${V3_TYPE}" == LEGACY_* ]]; then
+  :
+elif [[ "${ADOPT_CORPUS}" == "true" && ( "${V3_TYPE}" == "EXISTING" || "${V3_TYPE}" == "EXISTING_CODE_NO_KNOWLEDGE" ) && "${FORCE_AUDIT}" != "true" ]]; then
+  MIG_ADOPTION_MODE="true"
+fi
+if [[ "${V3_TYPE}" == LEGACY_* || "${MIG_ADOPTION_MODE}" == "true" ]] && [[ "${FORCE_AUDIT}" != "true" ]]; then
+  # --- classification walk (spec §4.2 rules C1-C12; metadata + safety only) ---------
   MIG_PLAN_LINES=()      # canonical plan text lines (sorted before digest)
   MIG_TSV=()             # verb<tab>rel<tab>dst<tab>rule<tab>pre_digest
   MIG_MOVES=()           # src<tab>dst
@@ -883,8 +1047,16 @@ if [[ "${V3_TYPE}" == LEGACY_* && "${FORCE_AUDIT}" != "true" ]]; then
   MIG_ADD_ONLY="true"
 
   LEGACY_ROOTS=()
-  if [[ "${HAS_S5}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/.specify"); fi
-  if [[ "${HAS_S12}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/specs"); fi
+  if [[ "${MIG_ADOPTION_MODE}" == "true" ]]; then
+    # adoption scope: exactly the two corpus directories (brief §四.B)
+    [[ -d "${TARGET_PATH}/.specify/memory" || -L "${TARGET_PATH}/.specify/memory" ]] \
+      && LEGACY_ROOTS+=("${TARGET_PATH}/.specify/memory")
+    [[ -d "${TARGET_PATH}/.specify/coding_guide" || -L "${TARGET_PATH}/.specify/coding_guide" ]] \
+      && LEGACY_ROOTS+=("${TARGET_PATH}/.specify/coding_guide")
+  else
+    if [[ "${HAS_S5}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/.specify"); fi
+    if [[ "${HAS_S12}" == "true" ]]; then LEGACY_ROOTS+=("${TARGET_PATH}/specs"); fi
+  fi
 
   # C10 root containment (G1-R1-H1): a legacy root that is itself a symlink must
   # resolve inside the target repository before it is walked at all; otherwise the
@@ -940,6 +1112,8 @@ ${part}"
       C6) echo "active specs/ rail retired into archive (old rail must not persist)" ;;
       C7) echo "legacy run artifact archived with its era, not imported as knowledge" ;;
       C8) echo "not legacy-workflow owned; left untouched in place" ;;
+      C11) echo "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)" ;;
+      C12) echo "project coding-guide corpus adopted into .sdlc/coding_guide via deterministic path/vocabulary transformation (Decision-091)" ;;
       C9) echo "structurally mixed knowledge file without a mechanical separation rule" ;;
       C10) echo "unsafe entry: symlink/unreadable/out-of-repo (R12/R13)" ;;
       COLLISION) echo "migration destination already exists; refusing overwrite (I1)" ;;
@@ -981,6 +1155,10 @@ ${part}"
           rule="C6" ;;
         .specify/reports/*)
           rule="C7" ;;
+        .specify/memory/*)
+          rule="C11" ;;
+        .specify/coding_guide/*)
+          rule="C12" ;;
         *)
           rule="C8" ;;
       esac
@@ -992,6 +1170,10 @@ ${part}"
         dst_rel=".sdlc/legacy/${rel}"; verb="TRANSFORM" ;;
       C3|C4|C5|C6|C7)
         dst_rel=".sdlc/legacy/${rel}"; verb="RETIRE" ;;
+      C11)
+        dst_rel=".sdlc/memory/${rel#.specify/memory/}"; verb="TRANSFORM" ;;
+      C12)
+        dst_rel=".sdlc/coding_guide/${rel#.specify/coding_guide/}"; verb="TRANSFORM" ;;
       C9|C10)
         verb="BLOCKED_AMBIGUOUS" ;;
       *)
@@ -1010,9 +1192,33 @@ ${part}"
       MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	-	${rule}		${reason}")
     else
       if [[ -e "${TARGET_PATH}/${dst_rel}" ]]; then
-        MIG_BLOCKED+=("${rel}" "destination already exists: ${dst_rel}")
-        MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	COLLISION	$(mig_rule_rationale "COLLISION")")
-        MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION		$(mig_rule_rationale "COLLISION")")
+        if [[ "${rule}" == "C11" || "${rule}" == "C12" ]]; then
+          # Decision-091 corpus collision policy: the destination is human-owned
+          # content and is NEVER overwritten or merged. If the transformed source
+          # is byte-identical to the destination, the adoption already happened —
+          # archive the redundant source under .sdlc/legacy. Otherwise the
+          # difference needs owner adjudication (blocked, source stays in place).
+          CORPUS_CMP="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-cmp.XXXXXX")"
+          if corpus_transform_file "${src_abs}" "${CORPUS_CMP}" "${rel}" "-" > /dev/null \
+            && cmp -s "${CORPUS_CMP}" "${TARGET_PATH}/${dst_rel}"; then
+            rm -f "${CORPUS_CMP}"
+            dst_rel=".sdlc/legacy/${rel}"
+            pre="$(mig_digest "${src_abs}")"
+            MIG_MOVES+=("${src_abs}	${TARGET_PATH}/${dst_rel}")
+            MIG_PLAN_LINES+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+            MIG_TSV+=("RETIRE	${rel}	${dst_rel}	${rule}	${pre}	already adopted (identical after deterministic transformation); redundant source archived")
+            MIG_ADD_ONLY="false"
+          else
+            rm -f "${CORPUS_CMP}"
+            MIG_BLOCKED+=("${rel}" "destination exists and differs from the transformed source; owner adjudication required: ${dst_rel}")
+            MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	COLLISION	destination exists and differs from the transformed source (Decision-091)")
+            MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION		destination exists and differs from the transformed source (Decision-091)")
+          fi
+        else
+          MIG_BLOCKED+=("${rel}" "destination already exists: ${dst_rel}")
+          MIG_PLAN_LINES+=("BLOCKED	${rel}	${dst_rel}	COLLISION	$(mig_rule_rationale "COLLISION")")
+          MIG_TSV+=("BLOCKED_AMBIGUOUS	${rel}	${dst_rel}	COLLISION		$(mig_rule_rationale "COLLISION")")
+        fi
       else
         # H2: the confirmed plan binds each file's pre-digest, so any content or
         # file-set drift between plan and apply invalidates the confirmation.
@@ -1099,8 +1305,19 @@ ${PLAN_BODY}"
       IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
       brel="${src#"${TARGET_PATH}/"}"
       if [[ -f "${dst}" ]]; then
-        mkdir -p "$(dirname "${src}")"
-        if ! mv "${dst}" "${src}"; then rc=1; continue; fi
+        case "${dst}" in
+          "${SDLC_DIR}/memory/"*|"${SDLC_DIR}/coding_guide/"*)
+            # Decision-091: corpus rows are transformed in place after the move,
+            # so a plain reverse move would land transformed bytes at the source.
+            # Restore the ORIGINAL bytes from the backup and drop the
+            # transformed destination; the cmp below then proves the restore.
+            rm -f "${dst}"
+            mkdir -p "$(dirname "${src}")"
+            cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}" ;;
+          *)
+            mkdir -p "$(dirname "${src}")"
+            if ! mv "${dst}" "${src}"; then rc=1; continue; fi ;;
+        esac
       fi
       if [[ -f "${MIG_BACKUP_DIR}/${brel}" ]] && ! cmp -s "${src}" "${MIG_BACKUP_DIR}/${brel}"; then
         rc=1
@@ -1207,7 +1424,40 @@ ${PLAN_BODY}"
     find "${root}/" -depth -type d -empty -delete 2>/dev/null || true
   done
 
+  # Decision-091: deterministic corpus transformation runs INSIDE the transaction
+  # window (after the moves, before the residue gate) so the gate scans the final
+  # content and any failure rolls corpus rows back to their original bytes.
+  MIG_CORPUS_COUNT=0
+  MIG_CORPUS_DSTS=()
+  MIG_TRANSFORM_LOG_FILE="$(mktemp "${TMPDIR:-/tmp}/knowledge-target-corpus-log.XXXXXX")"
+  for ((m = 0; m < ${#MIG_MOVES[@]}; m++)); do
+    IFS=$'	' read -r src dst <<< "${MIG_MOVES[${m}]}"
+    case "${dst}" in
+      "${SDLC_DIR}/memory/"*|"${SDLC_DIR}/coding_guide/"*)
+        if corpus_transform_file "${dst}" "${dst}" "${dst#"${TARGET_PATH}/"}" "${MIG_TRANSFORM_LOG_FILE}" > /dev/null; then
+          MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
+          MIG_CORPUS_DSTS+=("${dst#"${TARGET_PATH}/"}")
+        else
+          MIG_FAIL_REASON="corpus transformation failed: ${dst#"${TARGET_PATH}/"}"
+          echo "MIGRATION FAILED: ${MIG_FAIL_REASON}; rolling back..." >&2
+          MIG_TX_ACTIVE="false"
+          if mig_rollback; then
+            echo "ROLLED BACK: repository restored to pre-migration state." >&2
+          else
+            echo "ROLLBACK INCOMPLETE: manual recovery required; backup kept at ${MIG_BACKUP_DIR}" >&2
+            MIG_ROLLBACK_OK="false"
+          fi
+          mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+          mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
+          exit 1
+        fi ;;
+    esac
+  done
+
   echo "== migration applied: ${MIG_MOVED} file(s) moved; ADD_ONLY=${MIG_ADD_ONLY}; PLAN_SHA256=${PLAN_SHA} =="
+  if [[ "${MIG_CORPUS_COUNT}" -gt 0 ]]; then
+    echo "== corpus adopted: ${MIG_CORPUS_COUNT} file(s) transformed into .sdlc (Decision-091) =="
+  fi
   MIG_PENDING="true"
 fi
 
@@ -1414,6 +1664,54 @@ elif [[ ! -d "\${1}" ]]; then
 fi
 exec ruby "\${SDLC_HOME}/scripts/audit-entry-coverage.rb" "\${@}"
 EOF
+}
+
+# --- governance corpus skeleton generation (Decision-091) ----------------------------
+# Render a corpus template from the standard package with project placeholders.
+# Generated skeletons are project governance REFERENCE material: they never claim
+# standard-package authority and carry pending-owner-confirmation slots instead of
+# invented facts. Templates must be free of retired roots/vocabulary (regression
+# matrix scans every generated file).
+render_corpus_template() { # $1 = template abs path ; stdout: rendered content
+  PROJECT_NAME="${PROJECT_NAME}" DOC_DATE="${DOC_DATE}" AUTHOR="${AUTHOR}" \
+  ruby -e '
+    tmpl = ARGV[0]
+    c = File.read(tmpl)
+    c = c.gsub("{{PROJECT_NAME}}", ENV["PROJECT_NAME"])
+         .gsub("{{DOC_DATE}}", ENV["DOC_DATE"])
+         .gsub("{{AUTHOR}}", ENV["AUTHOR"])
+    unresolved = c.scan(/\{\{[A-Z0-9_]+\}\}/).uniq
+    unless unresolved.empty?
+      warn "unresolved corpus template placeholders in #{tmpl}: #{unresolved.join(", ")}"
+      exit 1
+    end
+    print c
+  ' "$1"
+}
+
+# Anti-occupation guard (Decision-091 §四.B): when a legacy corpus source file
+# still exists and adoption has not run, the matching skeleton MUST NOT be
+# generated — occupying the adoption destination would force a collision later.
+corpus_adoption_source_present() { # $1 = rel under .sdlc ; exit 0 when source exists
+  local base="${1#*/}"
+  case "${1}" in
+    memory/*) [[ -e "${TARGET_PATH}/.specify/memory/${base}" || -L "${TARGET_PATH}/.specify/memory/${base}" ]] ;;
+    coding_guide/*) [[ -e "${TARGET_PATH}/.specify/coding_guide/${base}" || -L "${TARGET_PATH}/.specify/coding_guide/${base}" ]] ;;
+    *) return 1 ;;
+  esac
+}
+
+stage_corpus_skeleton() { # $1 = rel under .sdlc (staging-relative too)
+  local rel="$1" tmpl="${CORPUS_TEMPLATE_DIR}/${1}"
+  if corpus_adoption_source_present "${rel}"; then
+    NOTICE_LINES+=("corpus skeleton not generated; adoption source still present (use --adopt-governance-corpus): .specify/${rel}")
+    return 0
+  fi
+  if [[ ! -f "${tmpl}" ]]; then
+    NOTICE_LINES+=("corpus template missing; skeleton skipped: ${tmpl#"${STANDARD_PACKAGE}/"}")
+    return 0
+  fi
+  render_corpus_template "${tmpl}" | write_staging_file "${rel}"
 }
 
 generate_landscape() {
@@ -1832,6 +2130,39 @@ if [[ "${MODE}" == "audit" ]]; then
   fill_audit_artifact "entry-coverage-profile.yaml" generate_entry_coverage_profile
   fill_audit_artifact "business-domain-map.yaml" generate_map_template
   fill_audit_artifact "scripts/bash/audit-entry-coverage.sh" generate_audit_wrapper
+  # Decision-091: governance-corpus skeletons are part of the fill-if-missing set;
+  # existing files (human-authored or adopted) are never touched.
+  fill_corpus_artifact() { # $1 = rel under .sdlc (memory/... | coding_guide/...)
+    local rel="$1"
+    local target_file="${SDLC_DIR}/${rel}"
+    local tmpl="${CORPUS_TEMPLATE_DIR}/${rel}"
+    local tmp_content
+    [[ -e "${target_file}" ]] && return 0
+    if corpus_adoption_source_present "${rel}"; then
+      echo "CORPUS SKIP (adoption source still present; use --adopt-governance-corpus): .specify/${rel}"
+      return 0
+    fi
+    if [[ ! -f "${tmpl}" ]]; then
+      echo "CORPUS SKIP (template missing): ${tmpl#"${STANDARD_PACKAGE}/"}"
+      return 0
+    fi
+    tmp_content="$(mktemp "${TMPDIR:-/tmp}/kt-fill.XXXXXX")"
+    if ! render_corpus_template "${tmpl}" > "${tmp_content}"; then
+      rm -f "${tmp_content}"
+      return 1
+    fi
+    AUDIT_FILLED+=("${rel}")
+    if [[ "${DRY_RUN}" != "true" ]]; then
+      if [[ "${MIG_PENDING}" == "true" ]]; then MIG_AUDIT_CREATED+=("${rel}"); fi
+      mkdir -p "$(dirname "${target_file}")"
+      cp "${tmp_content}" "${target_file}"
+    fi
+    rm -f "${tmp_content}"
+    return 0
+  }
+  for CORPUS_REL in "${CORPUS_SKELETONS[@]}"; do
+    fill_corpus_artifact "${CORPUS_REL}"
+  done
 
   # 2) read-only checks
   AUDIT_REPORT="$(mktemp "${TMPDIR:-/tmp}/kt-audit.XXXXXX")"
@@ -2035,7 +2366,7 @@ end
 #   - semantic-clause binding: only the clause containing the hit may exempt it
 #     (its own clause must carry a negation); a negation in a sibling clause of
 #     the same line or in an adjacent line never releases another hit.
-RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /\.specify/]
+RESIDUE_PATTERNS = [/speckit/i, /99PendingConfirmation/i, /dual rail/i, /legacy rail/i, /(?<!legacy\/)\.specify/]
 NEGATION_RE = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|don't|prohibit\w*|forbidden|retired)/i
 MACHINE_FIELD_RE = /\A(\s*)(forbidden_write_paths|legacy_runtime_inputs)\s*:/
 residue_lines = []
@@ -2463,6 +2794,12 @@ generate_map_template | write_staging_file "business-domain-map.yaml"
 generate_audit_wrapper | write_staging_file "scripts/bash/audit-entry-coverage.sh"
 chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
 
+# Decision-091: governance corpus skeletons (create-if-missing; anti-occupation
+# guard inside stage_corpus_skeleton keeps un-adopted legacy sources collision-free)
+for CORPUS_REL in "${CORPUS_SKELETONS[@]}"; do
+  stage_corpus_skeleton "${CORPUS_REL}"
+done
+
 # --- managed root-doc provenance and upgrade decision (D088-R1-H4) ----------------
 ROOT_DOCS=(00BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md)
 
@@ -2704,7 +3041,14 @@ for PAIR in \
   "project-governance-profile.yaml:${SDLC_DIR}/project-governance-profile.yaml" \
   "entry-coverage-profile.yaml:${SDLC_DIR}/entry-coverage-profile.yaml" \
   "business-domain-map.yaml:${SDLC_DIR}/business-domain-map.yaml" \
-  "scripts/bash/audit-entry-coverage.sh:${AUDIT_WRAPPER}"; do
+  "scripts/bash/audit-entry-coverage.sh:${AUDIT_WRAPPER}" \
+  "memory/constitution.md:${SDLC_DIR}/memory/constitution.md" \
+  "memory/AiGovernance.md:${SDLC_DIR}/memory/AiGovernance.md" \
+  "memory/RoleAtlas.md:${SDLC_DIR}/memory/RoleAtlas.md" \
+  "memory/EngineeringStandard.md:${SDLC_DIR}/memory/EngineeringStandard.md" \
+  "memory/DocumentationStandard.md:${SDLC_DIR}/memory/DocumentationStandard.md" \
+  "memory/InteractionProtocol.md:${SDLC_DIR}/memory/InteractionProtocol.md" \
+  "coding_guide/CodingGuide.md:${SDLC_DIR}/coding_guide/CodingGuide.md"; do
   REL="${PAIR%%:*}"
   TARGET_FILE="${PAIR#*:}"
   STAGED="${STAGING_DIR}/${REL}"
@@ -2758,6 +3102,9 @@ for REL in "${CREATED_FILES[@]:-}" "${UPDATED_FILES[@]:-}"; do
   [[ -z "${REL}" ]] && continue
   case "${REL}" in
     project-governance-profile.yaml|entry-coverage-profile.yaml|business-domain-map.yaml|scripts/bash/audit-entry-coverage.sh)
+      SRC="${STAGING_DIR}/${REL}"
+      DEST="${SDLC_DIR}/${REL}" ;;
+    memory/*|coding_guide/*)
       SRC="${STAGING_DIR}/${REL}"
       DEST="${SDLC_DIR}/${REL}" ;;
     *)
