@@ -345,6 +345,9 @@ script_exit_guard() {
     rm -f "${REPORT_FILE:-}"
     rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    # D091-R5 (B1): an unresolved corpus residue makes a "complete rollback"
+    # claim impossible — the report must say INCOMPLETE.
+    [[ "${MIG_UNRESOLVED_RESIDUE:-false}" == "true" ]] && mig_rb="INCOMPLETE"
     mig_write_failure_report "unexpected exit in transaction window" "${mig_rb}"
   fi
   rm -rf "${STAGING_DIR:-}" 2>/dev/null || true
@@ -605,6 +608,9 @@ mig_finalize() {
     done
     rm -f "${MIG_TRANSFORM_LOG_FILE:-}" "${MIG_ARCHIVE_TSV_FILE:-}"
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    # D091-R5 (B1): an unresolved corpus residue makes a "complete rollback"
+    # claim impossible — the report must say INCOMPLETE.
+    [[ "${MIG_UNRESOLVED_RESIDUE:-false}" == "true" ]] && mig_rb="INCOMPLETE"
     mig_write_failure_report "residue gate violation" "${mig_rb}" "${GATE_OUT}"
     rm -f "${GATE_OUT}"
     exit 1
@@ -845,12 +851,19 @@ corpus_transform_file() { # $1=src(abs) $2=dst(abs) $3=label $4=log_tsv_file ; s
       warn "corpus transform write failed: #{dst} (#{e.class})"
       exit 1
     end
-    File.open(logf, "a") { |f| log.each { |l| f.puts(l) } } if logf != "-"
-    # D091-R4 (F2): the digest of the EXACT bytes this process wrote is computed
-    # in memory and returned with the count — callers must treat it as the
-    # expected output of the transformation instead of re-reading the mutable
-    # destination (a later writer there is an ownership conflict, not our bytes).
+    # D091-R5 (B1): the receipt is emitted IMMEDIATELY after the destination write
+    # succeeds — before any post-write step that can fail (rule-log append). The
+    # shell registers ownership from this receipt even when the exit status ends
+    # up non-zero, so a failure after the write can never leave our own
+    # transformed output unregistered and misclassified at rollback.
     puts "#{total}\t#{Digest::SHA256.hexdigest(content)}"
+    STDOUT.flush
+    begin
+      File.open(logf, "a") { |f| log.each { |l| f.puts(l) } } if logf != "-"
+    rescue StandardError => e
+      warn "corpus transform log append failed: #{logf} (#{e.class})"
+      exit 1
+    end
   ' "$1" "$2" "$3" "$4"
 }
 
@@ -921,12 +934,25 @@ corpus_output_path_unsafe() { # $1 = abs output path under SDLC_DIR ; exit 0 = u
 # left completely alone (source is still restored from the backup).
 MIG_MOVE_META=()
 MIG_CORPUS_TRANSFORM_DIGESTS=()
+# D091-R5 (B1): corpus rows whose transformer returned NO trustworthy receipt —
+# the destination write may still have happened, so ownership of whatever sits at
+# the destination is unprovable. Rollback must not delete such objects and the
+# failure report must be INCOMPLETE unless their original bytes are proven intact.
+MIG_CORPUS_TRANSFORM_UNRESOLVED=()
+MIG_UNRESOLVED_RESIDUE="false"
 MIG_ROLLBACK_CONFLICTS=()
 MIG_ARCHIVE_TMP_FILES=()
 corpus_transform_digest_of() { # $1 = abs dst ; stdout: recorded post-transform digest
   local e
   for e in "${MIG_CORPUS_TRANSFORM_DIGESTS[@]:-}"; do
     [[ "${e}" == "$1"$'\t'* ]] && { printf '%s' "${e#*$'\t'}"; return 0; }
+  done
+  return 1
+}
+mig_transform_unresolved() { # $1 = abs dst ; exit 0 when the row has no trustworthy receipt
+  local e
+  for e in "${MIG_CORPUS_TRANSFORM_UNRESOLVED[@]:-}"; do
+    [[ "${e}" == "$1" ]] && return 0
   done
   return 1
 }
@@ -1614,7 +1640,16 @@ ${PLAN_BODY}"
               cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
             else
               cp -p "${MIG_BACKUP_DIR}/${brel}" "${src}"
-              MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"}")
+              if mig_transform_unresolved "${dst}"; then
+                # D091-R5 (B1): the transformer left no trustworthy receipt, so
+                # this residue cannot be proven to be ours — never deleted,
+                # reported as an unresolved conflict, and the failure report
+                # degrades honestly to INCOMPLETE.
+                MIG_UNRESOLVED_RESIDUE="true"
+                MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"} (transform receipt missing; recovery not provably complete)")
+              else
+                MIG_ROLLBACK_CONFLICTS+=("${dst#"${TARGET_PATH}/"}")
+              fi
             fi ;;
           *)
             if [[ "${owned}" == "true" ]]; then
@@ -1718,6 +1753,9 @@ ${PLAN_BODY}"
       [[ -e "${t}" ]] && rm -f "${t}"
     done
     mig_rb="INCOMPLETE"; [[ "${MIG_ROLLBACK_OK}" == "true" ]] && mig_rb="ROLLED_BACK"
+    # D091-R5 (B1): an unresolved corpus residue makes a "complete rollback"
+    # claim impossible — the report must say INCOMPLETE.
+    [[ "${MIG_UNRESOLVED_RESIDUE:-false}" == "true" ]] && mig_rb="INCOMPLETE"
     mig_write_failure_report "${MIG_FAIL_REASON}" "${mig_rb}"
     exit 1
   }
@@ -1905,29 +1943,45 @@ ${PLAN_BODY}"
           fi
         fi
         printf '%s\t%s\t%s\n' "${dst_label}" "${published_archive}" "${src_rel}" >> "${MIG_ARCHIVE_TSV_FILE}"
-        transform_out="$(corpus_transform_file "${dst}" "${dst}" "${dst_label}" "${MIG_TRANSFORM_LOG_FILE}")"
-        transform_rc=$?
+        # D091-R5 (B1): `|| transform_rc=$?` keeps this assignment off the errexit
+        # path — a transformer failure after the destination write must reach the
+        # ownership registration below instead of dying into the EXIT rollback
+        # with unregistered (misclassified) output.
+        transform_rc=0
+        transform_out="$(corpus_transform_file "${dst}" "${dst}" "${dst_label}" "${MIG_TRANSFORM_LOG_FILE}")" || transform_rc=$?
         t_total="${transform_out%%$'\t'*}"
         t_digest="${transform_out##*$'\t'}"
-        t_ok="true"
-        [[ "${transform_rc}" -eq 0 ]] || t_ok="false"
-        case "${t_total}" in ""|*[!0-9]*) t_ok="false" ;; esac
-        case "${t_digest}" in ""|*[!0-9a-f]*) t_ok="false" ;; esac
-        [[ "${#t_digest}" -eq 64 ]] || t_ok="false"
-        if [[ "${t_ok}" == "true" ]]; then
+        receipt_ok="true"
+        case "${t_total}" in ""|*[!0-9]*) receipt_ok="false" ;; esac
+        case "${t_digest}" in ""|*[!0-9a-f]*) receipt_ok="false" ;; esac
+        [[ "${#t_digest}" -eq 64 ]] || receipt_ok="false"
+        if [[ "${receipt_ok}" == "true" ]]; then
+          # D091-R5 (B1): ownership is registered from the receipt BEFORE the
+          # success/failure decision, and INDEPENDENTLY of the exit status — the
+          # receipt is the digest of the exact bytes this run wrote (computed in
+          # memory, never a re-read of the mutable destination), so a failure
+          # after the write (rule-log append and the like) still leaves the
+          # transformed output owned by this transaction and rollback removes it
+          # as its own object.
+          MIG_CORPUS_TRANSFORM_DIGESTS+=("${dst}	${t_digest}")
           # D091-R4 test hook (KT_TEST_PAUSE_FILE precedent): deterministic
-          # post-transform / pre-registration window for ownership regressions.
+          # post-transform window for ownership regressions.
           if [[ -n "${KT_TEST_TRANSFORM_PAUSE_FILE:-}" && -e "${KT_TEST_TRANSFORM_PAUSE_FILE}" ]]; then
             while [[ -e "${KT_TEST_TRANSFORM_PAUSE_FILE}" ]]; do sleep 0.02; done
           fi
-          # D091-R4 (F2): the expected post-transform digest is the digest of the
-          # bytes THIS run generated (returned by the transformer from memory) —
-          # never a re-read of the mutable destination, which a later writer may
-          # have taken over between the transform and this registration.
-          MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
-          MIG_CORPUS_DSTS+=("${dst_label}")
-          MIG_CORPUS_TRANSFORM_DIGESTS+=("${dst}	${t_digest}")
+          if [[ "${transform_rc}" -eq 0 ]]; then
+            MIG_CORPUS_COUNT=$((MIG_CORPUS_COUNT + 1))
+            MIG_CORPUS_DSTS+=("${dst_label}")
+          else
+            mig_fail_rollback "corpus transformation failed: ${dst_label}"
+          fi
         else
+          # D091-R5 (B1): no trustworthy receipt while the destination write MAY
+          # still have happened (partial write, polluted stdout). The destination
+          # is tracked as unresolved: rollback keeps it untouched (no re-sampling,
+          # no unconditional delete) and reports it — recovery is INCOMPLETE
+          # unless the ownership check proves the original bytes are intact.
+          MIG_CORPUS_TRANSFORM_UNRESOLVED+=("${dst}")
           mig_fail_rollback "corpus transformation failed: ${dst_label}"
         fi ;;
     esac
@@ -2986,8 +3040,8 @@ File.write(report_path, <<~MD)
 
   ## Write Boundary
 
-  本次体检唯一允许的写入 = 补缺失机器件（create-if-missing）。
-  知识文档与既有文件一律不改写。
+  本次体检唯一允许的写入 = 补缺失机器件与语料骨架（create-if-missing）。
+  知识文档与既有对象一律不改写（含悬空链接叶子，按已存在对象跳过并记录）。
 MD
 
 puts "AUDIT_RESULT=#{verdict} missing=#{missing} diffs=#{diffs} residue=#{residues}"

@@ -3,11 +3,14 @@
 ## 状态
 
 Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺失生成"两条需求均已明确）。
-独立复审三轮：D091-R1 FAIL（7 阻塞）→ R2 修复（626→668）；D091-R2 FAIL（5 合并根因
-阻塞 B1-B5）→ R3 修复（668→714，B4/B5 获复审 CLOSED）；**D091-R3 FAIL（3 组合并根因
-阻塞 F1-F3：语料归档分支路径守卫缺口 + `.sdlc` 根本体链接、转换后摘要采样可变目的地、
-归档生命周期入口/暂存/撤销未统一保护）→ R4 修复轮已按复审给定修复边界逐项关闭**
-（回归 778 passed 0 failed，双 bash 3.2 全量，2026-09-07）；等待 D091-R4 复审确认。
+独立复审四轮：D091-R1 FAIL（7 阻塞）→ R2 修复（626→668）；D091-R2 FAIL（5 合并根因
+阻塞 B1-B5）→ R3 修复（668→714，B4/B5 获复审 CLOSED）；D091-R3 FAIL（3 组合并根因
+阻塞 F1-F3）→ R4 修复（714→778，F3/S1/S4 获复审 CLOSED）；**D091-R4 FAIL（1 项 P2
+阻塞 B1：转换器在目的地写入成功后于收执前失败时（规则日志追加等），调用方因 errexit
+未登记所有权——自有转换产物被错报为后来者冲突、残留未撤而报告称完整回滚）→ R5 修复
+轮已按复审给定修复边界关闭（转换回执前置 + 调用方不吞错捕获 + 凭回执独立于退出码登记
+所有权 + 回执缺失的未决残留如实降级 INCOMPLETE；回归 800 passed 0 failed，双 bash 3.2
+全量，2026-09-08）**；等待 D091-R5 复审确认。
 本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
 
 ## 背景
@@ -100,7 +103,7 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
      （修复 `.sdlc/legacy/.specify/memory/x` → `.sdlc/legacy/.sdlc/memory/x` 损坏）；
   6. 门与审计扫描的 `.specify` 豁免收紧为完整归档前缀（仅 `.sdlc/legacy/.specify/**`
      归档地址引用豁免；`.sdlc/business_domain/legacy/.specify/*` 等其余任何
-     `legacy/` 目录段照常触发，正确触发）；
+     `legacy/` 目录段照常触发）；
   7. pending_confirmation 补齐阶段链（两个阶段词 + 箭头）与角色矩阵表行（阶段词首列）
      两类上下文，精确行号；
   附带：S1 转换日志失败路径清理、S2 usage 文本同步、S3 模板占位符块替换（字面值）。
@@ -128,7 +131,34 @@ Decision-089 背景节已记录：markdown 治理规则曾被三份机器可读 
   复审方 R3 反例脚本（retire-escape、sdlc-root、late-before-stage、temp-owner×2、
   archive×5、post-transform-owner）与边界矩阵（32 非普通条目、24 空集合、6 所有权）
   在修复后代码上全部复跑为安全结果；真实仓只读预演零写入。
-- 独立复审：D091-R3 复审 FAIL 已修复，等待 D091-R4 复审确认；本文件不自证通过。
+- **D091-R4 复审 FAIL（1 项 P2 阻塞 B1）→ R5 修复轮（2026-09-08，按复审给定修复边界
+  关闭，限定在转换回执、失败结果捕获、所有权登记与回滚判定）**：
+  1. B1 根因：transformer 的回执（`total\tsha256`）原在规则日志追加之后输出——写盘成功
+     后日志追加失败时 ruby 以非零退出且无回执；调用方 `set -e` 下命令替换赋值直接进入
+     EXIT 回滚，所有权未登记，自有转换产物被错报为后来者冲突、残留未撤而报告称
+     FAILED_ROLLED_BACK。复审方复现器仅将临时规则日志置只读，4/4 组合（adoption/LEGACY
+     × memory/coding_guide）复现；
+  2. 修复：回执在目的地写入成功后**立即**输出（`STDOUT.flush`），规则日志追加改入
+     begin/rescue（失败告警并退出）；调用方以 `|| rc=$?` 使失败捕获脱离 errexit 路径，
+     **凭回执独立于退出码先行登记所有权**，再判定成败——写后失败经回滚按自有对象撤销，
+     报告保持如实的 FAILED_ROLLED_BACK 且冲突清单为空；不重采样可变目的地、不无条件删除；
+  3. 回执缺失或不可信（部分写/输出污染）时，目的地列入未决残留集合：回滚保留该对象，
+     可证明原始字节完好则完整回滚，否则失败报告如实降级 FAILED_ROLLBACK_INCOMPLETE
+     并注明「recovery not provably complete」（新增 `MIG_CORPUS_TRANSFORM_UNRESOLVED` /
+     `MIG_UNRESOLVED_RESIDUE`，三处回滚状态计算点统一覆盖）；
+  4. S2 残留清理（复审非阻塞项）：行为规格页首 Version 字段 1.2.0 → 1.4.0；R2 注记
+     第 6 项「照常触发，正确触发）；」合并句清除；AUDIT 报告 Write Boundary 声明更正为
+     「补缺失机器件与语料骨架（create-if-missing）；既有对象一律不改写（含悬空链接叶子）」；
+     场景 81 补 else 断言（消除条件不成立时的静默跳过）；
+  5. 已知边界（复审列为非阻塞基线，据实记录）：`.sdlc` 根为普通文件（非目录）时，
+     INIT 仍经既有机器件 mkdir 路径报错退出——零写入、不产生语料 skip 报告；不扩
+     机器件写保护（维持 R3 范围裁断）。
+  回归 778 → 800 passed 0 failed（场景 89：写后失败凭回执自有回滚；场景 90：回执
+  缺失/污染 × garble/empty → 保留 + INCOMPLETE）；复审方 B1 复现器在修复后代码上
+  原样断言点失效，四组合（adoption/LEGACY × memory/coding_guide）按固定语义改造版
+  全部闭合（`evidence/r5-b1-closure-*`）；R3 反例套件 11/11 复跑安全
+  （`evidence/r5-r3probe-rerun.json`）。
+- 独立复审：D091-R4 复审 FAIL 已修复，等待 D091-R5 复审确认；本文件不自证通过。
 
 ## 依据
 
