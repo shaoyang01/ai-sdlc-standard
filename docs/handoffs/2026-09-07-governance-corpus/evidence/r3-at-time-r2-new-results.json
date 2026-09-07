@@ -1,0 +1,280 @@
+{
+  "nested-dest": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=35ddfee0f51295d6b90775f2a94102a4e0c26378c303a8c18e224324b609a7bc\nFILES:\n  BLOCKED\t.specify/memory/sub/a.md\t.sdlc/memory/sub/a.md\tC10\tcorpus output path contains a symlink component (Decision-091 R3)\nBLOCKED_FILES:\n  - .specify/memory/sub/a.md: corpus output path contains a symlink component: .sdlc/memory/sub/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/sub/a.md: corpus output path contains a symlink component: .sdlc/memory/sub/a.md\n",
+    "outside_files": {},
+    "reports": [],
+    "source_files": [
+      ".specify/memory",
+      ".specify/memory/sub",
+      ".specify/memory/sub/a.md"
+    ]
+  },
+  "archive-root": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=33e5909fc6304f1aa3c13d3445c3ddadb7829b34cd45f85be387ad912ebef533\nFILES:\n  BLOCKED\t.specify/memory/a.md\t.sdlc/legacy/.specify/memory/a.md\tC10\tcorpus output path contains a symlink component (Decision-091 R3)\nBLOCKED_FILES:\n  - .specify/memory/a.md: corpus output path contains a symlink component: .sdlc/legacy/.specify/memory/a.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/a.md: corpus output path contains a symlink component: .sdlc/legacy/.specify/memory/a.md\n",
+    "outside_files": {},
+    "reports": [],
+    "source_files": [
+      ".specify/memory",
+      ".specify/memory/a.md"
+    ]
+  },
+  "fifo": {
+    "rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=c04aeba8da47026f1178fc5ec2fde08a95baf1184c3b98894b8aed91ba0b41a5\nFILES:\n  BLOCKED\t.specify/memory/data.pipe\t-\tC10\tcorpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED_FILES:\n  - .specify/memory/data.pipe: corpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n"
+  },
+  "leaf-True": {
+    "rc": 0,
+    "tail": "== knowledge-target applicability audit ==\nCORPUS SKIP (destination leaf is a symlink): memory/constitution.md\nAUDIT_RESULT=FINDINGS missing=0 diffs=12 residue=0\nAUDIT_FILLED: business_domain/knowledge-target.yaml project-governance-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-190044.12701.8Nqjoo\n",
+    "link_preserved": true,
+    "outside_created": false
+  },
+  "leaf-False": {
+    "rc": 0,
+    "tail": "0BusinessLandscape.md 00UbiquitousLanguage.md 01DomainCatalog.md project-governance-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nUPDATED: \nPRESERVED: \nNOTICES:\n  - corpus skeleton not generated; destination leaf/ancestor is a symlink or path unsafe: memory/constitution.md\nREPORT=.sdlc/reports/knowledge_target_bootstrap_report.20260907-190046.13048.yvrH5O\nREMAINING_CONFIRMATION: owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n",
+    "link_preserved": true,
+    "outside_created": false
+  },
+  "late-directory": {
+    "rc": 1,
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-190046.13853.json.iYoJa2\nMIGRATION FAILED: destination is not a regular file: .sdlc/memory/z.md (directory target; nested move undone); rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "nested_source_exists": false,
+    "reports": [
+      {
+        "run_timestamp": "20260907-190046",
+        "generated_at": "2026-09-07T11:00:47Z",
+        "target_repository": "/tmp/d091-r3-review/r2-late-directory",
+        "git_author": "<failed run>",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [],
+          "skeleton_state": "absent"
+        },
+        "plan_sha256": "afbdea6d67620d0f8ff6eb22113e2ed8555259679a3078c94b406c73325ca781",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "afbdea6d67620d0f8ff6eb22113e2ed8555259679a3078c94b406c73325ca781"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [],
+        "field_mappings": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0,
+          "violations": []
+        },
+        "post_detect_type": "",
+        "rollback": {
+          "occurred": true,
+          "status": "ROLLED_BACK",
+          "reason": "destination is not a regular file: .sdlc/memory/z.md (directory target; nested move undone)",
+          "ownership_conflicts": []
+        },
+        "status": "FAILED_ROLLED_BACK",
+        "migration_completed_at": null
+      }
+    ],
+    "source_files": [
+      ".specify/memory",
+      ".specify/memory/z.md",
+      ".specify/memory/a.md"
+    ]
+  },
+  "late-prefix": {
+    "rc": 1,
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-190048.14501.json.P8rvJK\nMIGRATION FAILED: destination appeared during apply: .sdlc/memory/z.md (publish declined; another writer's data left untouched); rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "later_prefix_exists": true,
+    "current_data": "LATER CURRENT OWNER\n",
+    "reports": [
+      {
+        "run_timestamp": "20260907-190048",
+        "generated_at": "2026-09-07T11:00:49Z",
+        "target_repository": "/tmp/d091-r3-review/r2-late-prefix",
+        "git_author": "<failed run>",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [],
+          "skeleton_state": "absent"
+        },
+        "plan_sha256": "afbdea6d67620d0f8ff6eb22113e2ed8555259679a3078c94b406c73325ca781",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "afbdea6d67620d0f8ff6eb22113e2ed8555259679a3078c94b406c73325ca781"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [],
+        "field_mappings": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0,
+          "violations": []
+        },
+        "post_detect_type": "",
+        "rollback": {
+          "occurred": true,
+          "status": "ROLLED_BACK",
+          "reason": "destination appeared during apply: .sdlc/memory/z.md (publish declined; another writer's data left untouched)",
+          "ownership_conflicts": [
+            ".sdlc/memory/a.md"
+          ]
+        },
+        "status": "FAILED_ROLLED_BACK",
+        "migration_completed_at": null
+      }
+    ],
+    "source_files": [
+      ".specify/memory",
+      ".specify/memory/z.md",
+      ".specify/memory/a.md"
+    ]
+  },
+  "archive-cp-False": {
+    "rc": 0,
+    "output": "== migration applied: 1 file(s) moved; ADD_ONLY=false; PLAN_SHA256=7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3 ==\n== corpus adopted: 1 file(s) transformed into .sdlc (Decision-091) ==\n== knowledge-target applicability audit ==\nAUDIT_RESULT=FINDINGS missing=0 diffs=12 residue=0\nAUDIT_FILLED: business_domain/knowledge-target.yaml project-governance-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-190052.15078.XCpKFj\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-190050.15078.md.xeDerd\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-190050.15078.json.XMgbxM\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "archive": "ORIGINAL A\n",
+    "temp_files": [
+      "knowledge-target-mig-gate.6HALFl",
+      "knowledge-target-mig-backup.XFdh2l",
+      "knowledge-target-staging.bSlKxL"
+    ],
+    "reports": [
+      {
+        "run_timestamp": "20260907-190050",
+        "generated_at": "2026-09-07T11:00:50Z",
+        "migration_completed_at": "2026-09-07T11:00:52Z",
+        "status": "COMPLETED",
+        "target_repository": "/tmp/d091-r3-review/r2-archive-cp-False",
+        "git_author": "Review Runner",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [
+            "S1 .sdlc root present",
+            "S2 .sdlc skeleton root docs = 3/3",
+            "S4 code tree present",
+            "S5 .specify legacy root present",
+            "S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate"
+          ],
+          "skeleton_state": "complete"
+        },
+        "plan_sha256": "7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [
+          {
+            "verb": "TRANSFORM",
+            "path": ".specify/memory/a.md",
+            "target": ".sdlc/memory/a.md",
+            "rule": "C11",
+            "pre_digest": "3eebf8595f064ee2e3b9296f3cb0bada6bd5183dc240a7e10c07659d4cdab5e0",
+            "post_digest": "3eebf8595f064ee2e3b9296f3cb0bada6bd5183dc240a7e10c07659d4cdab5e0",
+            "rationale": "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)",
+            "original_archive": ".sdlc/legacy/.specify/memory/a.md"
+          }
+        ],
+        "field_mappings": [],
+        "corpus_transformations": [],
+        "pending_confirmation": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0
+        },
+        "post_detect_type": "EXISTING",
+        "rollback": {
+          "occurred": false,
+          "reason": ""
+        }
+      }
+    ],
+    "source_files": []
+  },
+  "archive-cp-True": {
+    "rc": 0,
+    "output": "== migration applied: 1 file(s) moved; ADD_ONLY=false; PLAN_SHA256=7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3 ==\n== corpus adopted: 1 file(s) transformed into .sdlc (Decision-091) ==\n== knowledge-target applicability audit ==\nAUDIT_RESULT=FINDINGS missing=0 diffs=12 residue=0\nAUDIT_FILLED: business_domain/knowledge-target.yaml project-governance-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-190054.16255.p4RH6U\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-190052.16255.md.CKJp6k\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-190052.16255.json.m9wLgX\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "archive": "ORIGINAL A\n",
+    "temp_files": [
+      "knowledge-target-mig-gate.PIxUYy",
+      "knowledge-target-staging.4tVij4",
+      "knowledge-target-mig-backup.cJ0WyX"
+    ],
+    "reports": [
+      {
+        "run_timestamp": "20260907-190052",
+        "generated_at": "2026-09-07T11:00:52Z",
+        "migration_completed_at": "2026-09-07T11:00:55Z",
+        "status": "COMPLETED",
+        "target_repository": "/tmp/d091-r3-review/r2-archive-cp-True",
+        "git_author": "Review Runner",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [
+            "S1 .sdlc root present",
+            "S2 .sdlc skeleton root docs = 3/3",
+            "S4 code tree present",
+            "S5 .specify legacy root present",
+            "S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate"
+          ],
+          "skeleton_state": "complete"
+        },
+        "plan_sha256": "7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "7df184ecea70812b29e28f46b7427a687a2215d9fc1598bf272cc9c5c413b2b3"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [
+          {
+            "verb": "TRANSFORM",
+            "path": ".specify/memory/a.md",
+            "target": ".sdlc/memory/a.md",
+            "rule": "C11",
+            "pre_digest": "3eebf8595f064ee2e3b9296f3cb0bada6bd5183dc240a7e10c07659d4cdab5e0",
+            "post_digest": "3eebf8595f064ee2e3b9296f3cb0bada6bd5183dc240a7e10c07659d4cdab5e0",
+            "rationale": "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)",
+            "original_archive": ".sdlc/legacy/.specify/memory/a.md"
+          }
+        ],
+        "field_mappings": [],
+        "corpus_transformations": [],
+        "pending_confirmation": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0
+        },
+        "post_detect_type": "EXISTING",
+        "rollback": {
+          "occurred": false,
+          "reason": ""
+        }
+      }
+    ],
+    "source_files": []
+  },
+  "gate-bare": {
+    "plan_rc": 0,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=1e5dd7d0b84ed83ffc6b4117e344520f350b347e49414a440bf0f8e5219e5b51\nFILES:\n  TRANSFORM\t.specify/memory/a.md\t.sdlc/memory/a.md\tC11\tbe4706c0822552abcdbcd9224949e59610d5f4b0932c9eeda54dac82ffadd984\n",
+    "output_tail": "aml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-190057.17383.py6IAc\nMIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-190055.17383.json.oc4O9I\nRESIDUE GATE FAILED: rolled back migration to pre-migration state.\nBLOCKED: migration rolled back (residue gate violations); see stderr list. Violations:\n  - .sdlc/memory/a.md:1\n"
+  },
+  "gate-uppercase": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=f3954bce14ed66f9ce997ac797289599733b2ae3a50a4c72bc8a561b25b39c42\nFILES:\n  TRANSFORM\t.specify/memory/a.md\t.sdlc/memory/a.md\tC11\teb4c4093e81a0f25fda12b119723cf52049bc49eb89bd167e22fdebad3a093a2\n",
+    "output_tail": "-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-190100.18272.XqQ6Ti\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-190057.18272.md.A3Jjmk\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-190057.18272.json.YaqY5C\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n"
+  }
+}
