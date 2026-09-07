@@ -15,9 +15,9 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { mkdtempSync, mkdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import {
   INITIAL_BINDING_REGISTRY,
@@ -874,9 +874,21 @@ export async function run(
       // whose downstream tail currents are missing is the NORMAL pre-tail
       // state (the tail has not produced its products yet) and must not
       // deadlock the tail's own admission.
+      // G4-R8-F3: the blocking scope follows §5.2, the same rework-target
+      // semantics as A1 — an OPEN finding whose earliest node IS
+      // knowledge-sync names the tail as the rework target itself and must
+      // stay dispatchable to produce its own repair evidence; only strictly
+      // upstream OPEN findings block the tail. This predicate is SHARED with
+      // the direct entry/claim admission boundary (loop-capability-entry).
+      const knowledgeSyncNodeIdx = NODE_CAPABILITY_IDS.indexOf("knowledge-sync");
       if (
         next!.capability === "knowledge-sync" && journalRunId !== null &&
-        recovery !== undefined && recovery.openFindings.length > 0
+        recovery !== undefined &&
+        recovery.openFindings.some(
+          (finding) =>
+            (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+            knowledgeSyncNodeIdx,
+        )
       ) {
         return Object.freeze({
           requirement_id: requirementId,
@@ -1155,7 +1167,8 @@ export type ProductionRunErrorCode =
   | "PRODUCTION_ENTRY_INVALID_INPUT"
   | "PRODUCTION_REAL_NOT_AUTHORIZED"
   | "PRODUCTION_BASE_DRIFT"
-  | "PRODUCTION_DIRTY_SOURCE";
+  | "PRODUCTION_DIRTY_SOURCE"
+  | "PRODUCTION_ISOLATION_VIOLATED";
 
 export class ProductionRunError extends Error {
   constructor(
@@ -1165,6 +1178,70 @@ export class ProductionRunError extends Error {
     super(message);
     this.name = "ProductionRunError";
   }
+}
+
+/**
+ * G4-R8-F4: the durable fail-closed anchor for a CONFIRMED production
+ * isolation violation. The journal block (run_blocked) is the primary
+ * persistent fact, but the journal itself can be the failing component — a
+ * block write that fails must never be reported as "already durably
+ * blocked". The marker lives under the SAME controlRoot as the journal
+ * (no second control plane), is bound to the requirement identity, and
+ * every later real invocation of that requirement treats its presence as
+ * an un-discharged containment that keeps the run fail-closed with zero
+ * dispatches.
+ */
+const PRODUCTION_CONTAINMENT_MARKER_DIR = "production-containment";
+
+function productionContainmentMarkerPath(identity: LoopRunIdentity): string {
+  return join(identity.controlRoot, PRODUCTION_CONTAINMENT_MARKER_DIR, `${identity.requirementId}.json`);
+}
+
+function writeProductionContainmentMarker(identity: LoopRunIdentity): void {
+  const path = productionContainmentMarkerPath(identity);
+  if (existsSync(path)) return;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(
+    path,
+    JSON.stringify({
+      reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+      requirementId: identity.requirementId,
+      discoveredAt: new Date().toISOString(),
+    }),
+  );
+}
+
+function readProductionContainmentMarker(identity: LoopRunIdentity): boolean {
+  try {
+    const marker = JSON.parse(readFileSync(productionContainmentMarkerPath(identity), "utf8")) as {
+      reasonCode?: unknown;
+    };
+    return marker?.reasonCode === "PRODUCTION_ISOLATION_VIOLATED";
+  } catch {
+    return false;
+  }
+}
+
+/** The persisted isolation block event, shared by the terminal verification and the marker-driven re-entry guard. */
+function appendProductionIsolationBlockEvent(runStore: LoopRunStore, runId: string, lastSequence: number): void {
+  runStore.appendEvent(Object.freeze({
+    eventId: `${runId}:${lastSequence + 1}:run_blocked`,
+    runId,
+    sequence: lastSequence + 1,
+    kind: "run_blocked" as const,
+    stage: null,
+    attempt: 0,
+    createdAt: new Date().toISOString(),
+    inputDigest: null,
+    outputArtifactRef: null,
+    outputDigest: null,
+    errorCode: null,
+    retryable: null,
+    reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
+  }));
 }
 
 export interface ProductionRunDeps {
@@ -1317,14 +1394,23 @@ export async function runProduction(
         "the prepared attempt workspace path is not a directory",
       );
     }
-    // G4-R7-B6: the business-root comparison is by PHYSICAL identity —
-    // realpath, not lexically resolved spelling. A symlink alias pointing
-    // back at the repository root previously passed `resolve()` equality
-    // and received real dispatches with the adapter cwd physically at the
-    // business root. Both paths exist at this point (statSync above).
-    if (
-      realpathSync(attemptWorkspaceRoot) === realpathSync(identity.repositoryPath)
-    ) {
+  // G4-R7-B6: the business-root comparison is by PHYSICAL identity —
+  // realpath, not lexically resolved spelling. A symlink alias pointing
+  // back at the repository root previously passed `resolve()` equality
+  // and received real dispatches with the adapter cwd physically at the
+  // business root. Both paths exist at this point (statSync above).
+  // S1 (G4-R8): a missing repositoryPath surfaces as the production entry
+  // error class instead of a raw filesystem ENOENT.
+  let repositoryRealPath: string;
+  try {
+    repositoryRealPath = realpathSync(identity.repositoryPath);
+  } catch {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      `the repository path does not exist: ${identity.repositoryPath}`,
+    );
+  }
+  if (realpathSync(attemptWorkspaceRoot) === repositoryRealPath) {
       throw new ProductionRunError(
         "PRODUCTION_ENTRY_INVALID_INPUT",
         "the prepared attempt workspace must not be the business repository root",
@@ -1350,6 +1436,45 @@ export async function runProduction(
   }
 
   // (4) Delegate to the single chain kernel with the real identity — no copy.
+  // G4-R8-F4: BEFORE any dispatch, an un-discharged containment marker from a
+  // previous invocation of this requirement keeps this call fail-closed with
+  // zero dispatches: the journal block is re-attempted (idempotent heal) and
+  // the invocation returns BLOCKED. This is what prevents the write-failure
+  // scenario from leaking: the first invocation propagated its persistence
+  // error, and the marker stops the next call from re-taking the polluted
+  // source state as a clean baseline and reusing the unverified outputs.
+  if (source === "real" && deps.inspectWorkspace !== undefined && readProductionContainmentMarker(identity)) {
+    let runIdForBlock: string | null = null;
+    try {
+      const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+      if (runState !== undefined) {
+        runIdForBlock = runState.identity.runId;
+        if (
+          runState.status === "running" &&
+          (runState.blockingReasonCode === null || runState.blockingReasonCode === undefined)
+        ) {
+          appendProductionIsolationBlockEvent(runStore, runState.identity.runId, runState.lastSequence);
+        }
+      }
+    } catch {
+      // The marker is the fail-closed anchor; a journal heal that fails
+      // again changes nothing about the BLOCKED outcome below.
+    }
+    return Object.freeze({
+      requirement_id: identity.requirementId,
+      run_id: runIdForBlock ?? identity.runId,
+      final_status: "failed" as const,
+      chain_status: "BLOCKED" as const,
+      blocking_reason_code: "PRODUCTION_ISOLATION_VIOLATED" as const,
+      execution_trace: Object.freeze([]),
+      next_execution_point: null,
+      workspace_root: identity.controlRoot,
+      journal_path: deps.runStore === undefined
+        ? join(identity.controlRoot, "journal.db")
+        : runStore.databaseFilePath,
+      completed_at: new Date().toISOString(),
+    });
+  }
   // G4-R5-H7: the real-chain attempt workspace is BOUND to the prepared
   // worktree for this identity when one was prepared — a caller-supplied
   // resolver pointing at the business root can no longer bypass the
@@ -1385,39 +1510,39 @@ export async function runProduction(
   // so a later resume of the same run cannot treat the polluted source state
   // as the new clean baseline and reuse the run's outputs as a success. The
   // preflight has inspected once; this is the second and final inspection.
+  // G4-R8-F4: the containment marker is written BEFORE the journal block is
+  // attempted, so even a journal write failure leaves a durable fail-closed
+  // anchor for this requirement. A failing block write is NEVER reported as
+  // "already durably blocked": the persisted facts are re-read, and only a
+  // confirmed durable block allows the BLOCKED return — otherwise the
+  // persistence error propagates and the caller sees the real failure.
   if (source === "real" && deps.inspectWorkspace !== undefined && preflightSnapshot !== null) {
     const post = await deps.inspectWorkspace(identity);
     const rootSideEffects =
       post.baseDrifted || post.sourceWipDigestSha256 !== preflightSnapshot.sourceWipDigestSha256;
     if (rootSideEffects) {
+      writeProductionContainmentMarker(identity);
       try {
         const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
         if (
           runState !== undefined && runState.status === "running" &&
           (runState.blockingReasonCode === null || runState.blockingReasonCode === undefined)
         ) {
-          runStore.appendEvent(Object.freeze({
-            eventId: `${runState.identity.runId}:${runState.lastSequence + 1}:run_blocked`,
-            runId: runState.identity.runId,
-            sequence: runState.lastSequence + 1,
-            kind: "run_blocked" as const,
-            stage: null,
-            attempt: 0,
-            createdAt: new Date().toISOString(),
-            inputDigest: null,
-            outputArtifactRef: null,
-            outputDigest: null,
-            errorCode: null,
-            retryable: null,
-            reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
-            bindingId: null,
-            bindingVersion: null,
-            inputArtifactRef: null,
-          }));
+          appendProductionIsolationBlockEvent(runStore, runState.identity.runId, runState.lastSequence);
         }
-      } catch {
-        // A run already durably blocked keeps its own block; the returned
-        // failure below still names the isolation violation either way.
+      } catch (error) {
+        const persisted = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+        const durablyBlocked =
+          persisted !== undefined && persisted.status !== "running" &&
+          persisted.blockingReasonCode === "PRODUCTION_ISOLATION_VIOLATED";
+        if (!durablyBlocked) {
+          throw new ProductionRunError(
+            "PRODUCTION_ISOLATION_VIOLATED",
+            `production isolation violation confirmed at terminal verification, but persisting its durable run block failed: ` +
+              `${(error as Error).message}. The containment marker under controlRoot keeps every later invocation of ` +
+              `this requirement fail-closed; the polluted state must be discharged before this run can proceed.`,
+          );
+        }
       }
       return Object.freeze({
         ...result,

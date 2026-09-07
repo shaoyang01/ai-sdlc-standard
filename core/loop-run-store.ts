@@ -128,6 +128,24 @@ export function isLoopRunStoreBoundToArtifactStore(
 
 const DEFAULT_BUSY_TIMEOUT_MS = 2000;
 const MAX_BUSY_TIMEOUT_MS = 5000;
+
+/**
+ * G4-R8-F1: canonical problem layer a finding falls back to when its source
+ * omits the root-cause category. Mirrors the gateway's
+ * DEFAULT_FINDING_CATEGORY_BY_CAPABILITY exactly — the registration
+ * content-binding recomputes the same derivation the gateway applied when it
+ * built the drafts, so a mutated draft cannot hide behind the fallback.
+ */
+const DEFAULT_FINDING_CATEGORY_BY_CAPABILITY: Record<NodeCapabilityId, string> = {
+  "requirement-intake": "REQUIREMENT",
+  "solution-design": "SOLUTION",
+  "solution-gate": "SOLUTION",
+  "task-planning": "PLANNING",
+  "implementation": "IMPLEMENTATION",
+  "code-review": "REVIEW",
+  "knowledge-sync": "KNOWLEDGE",
+};
+
 // v2 journal format (C02-WP3.5-B, D3): the store supports exactly v8. Known
 // historical formats 1..7 are rejected with UNSUPPORTED_HISTORICAL_FORMAT —
 // they are never semantically migrated. A declared version above 8 is
@@ -2225,11 +2243,17 @@ export class LoopRunStore {
     ) {
       drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
     }
+    // G4-R8-F1: replay ownership is the registration RECEIPT — the rows this
+    // very terminal transaction wrote carry the terminal's own createdAt.
+    // Capability+blob identity alone also matches content-equal rows other
+    // rounds registered from later ledgers, which made exact replays of
+    // same-content cross-round terminals conflict-fail.
     const registeredByThisTerminal = findings.filter(
       (finding) =>
         finding.sourceCapability === event.capability &&
         finding.evidenceRef === expectedEvidenceRef &&
-        finding.evidenceDigest === expectedEvidenceDigest,
+        finding.evidenceDigest === expectedEvidenceDigest &&
+        finding.createdAt === event.createdAt,
     );
     if (registeredByThisTerminal.length !== drafts.length) {
       throw new LoopRunJournalError(
@@ -2262,12 +2286,9 @@ export class LoopRunStore {
       // Content-equal ledgers from later rounds and foreign borrowed rows
       // are neither members nor replay conflicts.
       const executions = this.readCapabilityExecutionsInTransaction(db, event.runId);
-      const producerScan = executions.find((item) =>
-        item.status === "succeeded" &&
-        item.capability === "solution-gate" &&
-        item.executionRole === "adversarial_scan" &&
-        item.unresolvedFindingsRef === event.consumedFindingsRef &&
-        item.unresolvedFindingsDigest === event.consumedFindingsDigest,
+      const producerScan = this.consumedProducerScanInTransaction(
+        executions, event.inputArtifactRef, event.inputArtifactVersion,
+        event.consumedFindingsRef, event.consumedFindingsDigest,
       );
       if (producerScan === undefined) {
         throw new LoopRunJournalError(
@@ -2279,12 +2300,9 @@ export class LoopRunStore {
         producerScan.unresolvedFindingsRef!,
         producerScan.unresolvedFindingsDigest!,
       );
-      const snapshot = this.readRunSnapshotInTransaction(db, event.runId)!;
-      const revisions = this.readArtifactRevisionsInTransaction(db, event.runId, snapshot.state.identity.requirementId);
-      const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
       const ledgerFindings = findings.filter(
         (finding) =>
-          this.isRegisteredScanMember(finding, producerScan, producerExaminedRevisionId),
+          this.isRegisteredScanMember(finding, producerScan),
       );
       if (expectedMemberCount !== null && ledgerFindings.length !== expectedMemberCount) {
         throw new LoopRunJournalError(
@@ -2375,12 +2393,59 @@ export class LoopRunStore {
     ) {
       drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
     }
+    // G4-R8-F1: a canonical loop-capability-findings:v1 evidence blob IS the
+    // terminal's registration content — the drafts registered from it must
+    // BE that content, derived exactly the way the gateway derives them.
+    // Re-typing a draft at the public call boundary (a real HIGH ledger row
+    // registered as MEDIUM, CRITICAL downgraded to HIGH, same-count content
+    // swaps) would persist a mutated risk fact under an unchanged evidence
+    // identity and is refused. Opaque/legacy blobs stay tolerated (their
+    // content is undecidable; membership identity is carried by the
+    // producer-createdAt receipt instead).
+    const ledgerContent = this.readScanLedgerContent(registration.evidenceRef, registration.evidenceDigest);
+    if (ledgerContent !== null) {
+      if (ledgerContent.length !== drafts.length) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "finding registration must match the evidence blob's own finding membership",
+        );
+      }
+      for (let index = 0; index < drafts.length; index += 1) {
+        const draft = drafts[index]!;
+        const blob = ledgerContent[index]!;
+        const blobSeverity = typeof blob["severity"] === "string" ? blob["severity"] : "";
+        const blobCategory = typeof blob["category"] === "string"
+          ? blob["category"]
+          : DEFAULT_FINDING_CATEGORY_BY_CAPABILITY[event.capability];
+        const blobCause = typeof blob["cause"] === "string"
+          ? blob["cause"]
+          : typeof blob["causeKind"] === "string" ? blob["causeKind"] : null;
+        if (
+          draft.severity !== blobSeverity ||
+          draft.category !== blobCategory ||
+          draft.causeKind !== (blobCause === "REGRESSION" ? "REGRESSION" : "IMPROVEMENT")
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "finding registration content must match the evidence blob's own findings",
+          );
+        }
+      }
+    }
     const invalidationInsert = db.prepare(
       `INSERT INTO loop_finding_invalidations (
         finding_id, invalidation_index, revision_id, node_id
       ) VALUES (?, ?, ?, ?)`,
     );
     const registeredFindingIds: string[] = [];
+    // G4-R8-F2: the in-transaction stale set spans the WHOLE draft batch.
+    // Declaring it per finding re-created an empty set for every draft, so
+    // the second overlapping finding re-read the transaction-start ACTIVE
+    // snapshot, the guarded re-mark reported zero changes, and the entire
+    // atomic registration was rejected as phantom drift. Batch-scoped, a
+    // revision is physically staled once; every finding still records its
+    // full canonical scope edge set.
+    const staledInTransaction = new Set<string>();
     for (const draft of drafts) {
       if (
         typeof draft !== "object" || draft === null ||
@@ -2441,7 +2506,6 @@ export class LoopRunStore {
         // as phantom drift). Each finding still records its full canonical
         // scope evidence (one edge per overlapped revision), matching the
         // appendFinding rule that already-STALE revisions stay STALE.
-        const staledInTransaction = new Set<string>();
         for (const nodeId of downstreamNodeIds(record.earliestAffectedNodeId)) {
           const pointer = db.prepare(
             "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
@@ -2502,12 +2566,9 @@ export class LoopRunStore {
       // are acceptable. A foreign finding borrowing the ledger reference is
       // refused, not accepted.
       const executions = this.readCapabilityExecutionsInTransaction(db, event.runId);
-      const producerScan = executions.find((item) =>
-        item.status === "succeeded" &&
-        item.capability === "solution-gate" &&
-        item.executionRole === "adversarial_scan" &&
-        item.unresolvedFindingsRef === event.consumedFindingsRef &&
-        item.unresolvedFindingsDigest === event.consumedFindingsDigest,
+      const producerScan = this.consumedProducerScanInTransaction(
+        executions, event.inputArtifactRef, event.inputArtifactVersion,
+        event.consumedFindingsRef, event.consumedFindingsDigest,
       );
       if (producerScan === undefined) {
         throw new LoopRunJournalError(
@@ -2515,20 +2576,27 @@ export class LoopRunStore {
           "ledger acceptance requires a real producing adversarial_scan round for the consumed Finding Ledger",
         );
       }
-      const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
-      for (const target of current) {
+      // G4-R8-F1: the acceptable set is EXACTLY the producing scan round's
+      // registered membership, count-conserved against its own Finding
+      // Ledger blob — the same verification as the manual acceptFindingRisk
+      // path. A later row that borrows the ledger blob identity (even with
+      // identical content) is not a member, and membership-count drift
+      // refuses fail-closed instead of accepting a foreign row. Opaque and
+      // legacy ledgers keep the producer-createdAt receipt as the binding.
+      const expectedMemberCount = this.readScanLedgerMemberCount(
+        producerScan.unresolvedFindingsRef!,
+        producerScan.unresolvedFindingsDigest!,
+      );
+      const members = current.filter((item) => this.isRegisteredScanMember(item, producerScan));
+      if (expectedMemberCount !== null && members.length !== expectedMemberCount) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "ledger membership does not match the producing scan's Finding Ledger",
+        );
+      }
+      for (const target of members) {
         if (target.status !== "OPEN") continue;
-        if (target.sourceCapability !== "solution-gate") continue;
         if (target.severity === "CRITICAL") continue;
-        if (
-          target.evidenceRef !== event.consumedFindingsRef ||
-          target.evidenceDigest !== event.consumedFindingsDigest
-        ) continue;
-        // G4-R7-B2: membership identity — an acceptable finding is one the
-        // producing scan round actually REGISTERED (bound to the producer
-        // terminal's createdAt or to the revision that round examined),
-        // never a later row that merely borrows the ledger blob identity.
-        if (!this.isRegisteredScanMember(target, producerScan, producerExaminedRevisionId)) continue;
         const acceptance = validateLoopFindingRiskAcceptance({
           riskAcceptedBy: "formal_verdict",
           riskAcceptanceEvidenceRef: event.outputArtifactRef!,
@@ -3283,8 +3351,20 @@ export class LoopRunStore {
    * digest-verified blob is corruption, fail-closed.
    */
   private readScanLedgerMemberCount(ref: string, digest: string): number | null {
+    return this.readScanLedgerContent(ref, digest)?.length ?? null;
+  }
+
+  /**
+   * G4-R8-F1: the parsed member array of a canonical
+   * loop-capability-findings:v1 ledger blob, or null when membership content
+   * is undecidable. Parity with verifyFindingEvidenceBlob: an unbound
+   * artifact store (legacy in-memory test constructions) and opaque
+   * (legacy/fixture) ledger payloads fall back to null — production gateway
+   * rounds always write the canonical envelope.
+   */
+  private readScanLedgerContent(ref: string, digest: string): Array<Record<string, unknown>> | null {
     // Parity with verifyFindingEvidenceBlob: an unbound artifact store
-    // (legacy in-memory test constructions) cannot derive the blob count —
+    // (legacy in-memory test constructions) cannot derive the blob content —
     // membership falls back to the producer-createdAt binding alone.
     if (this.artifactStore === null) return null;
     let raw: Buffer;
@@ -3301,57 +3381,84 @@ export class LoopRunStore {
     try {
       parsed = JSON.parse(raw.toString("utf8"));
     } catch {
-      // Opaque (legacy/fixture) ledger payload — count undecidable, binding
+      // Opaque (legacy/fixture) ledger payload — content undecidable, binding
       // falls back to the producer-identity predicates.
       return null;
     }
     const record = parsed as { schema?: unknown; findings?: unknown };
     if (
       record === null || typeof record !== "object" ||
-      record.schema !== "loop-capability-findings:v1" || !Array.isArray(record.findings)
+      record.schema !== "loop-capability-findings:v1" || !Array.isArray(record.findings) ||
+      record.findings.some((item) => item === null || typeof item !== "object")
     ) {
       // Legacy/fixture ledgers are opaque strings, not canonical envelopes —
-      // membership count stays undecidable there and the binding falls back
+      // membership content stays undecidable there and the binding falls back
       // to the producer-identity predicates. Production gateway rounds always
       // write the canonical envelope.
       return null;
     }
-    return (record.findings as unknown[]).length;
+    return record.findings as Array<Record<string, unknown>>;
   }
 
   /**
-   * G4-R7-B2: the membership identity of findings REGISTERED by a scan
-   * round. The producer-terminal createdAt binding is the gateway-era
-   * receipt; the examined-revision binding is the structural identity both
-   * share (the registration anchors each finding to the revision the round
-   * examined). A row matching the ledger blob identity but neither binding
-   * is a foreign borrower.
+   * G4-R7-B2, tightened by G4-R8-F1: the membership identity of findings
+   * REGISTERED by a scan round is the gateway-era receipt — the finding row
+   * was written by the producer terminal's own registration transaction, so
+   * its createdAt IS the producer terminal's createdAt. A row matching the
+   * ledger blob identity but carrying any other timestamp is a later foreign
+   * borrower (the examined-revision reference alone is borrowable through
+   * the public appendFinding API and never grants membership).
    */
   private isRegisteredScanMember(
-    finding: { sourceCapability: string; evidenceRef: string; evidenceDigest: string; createdAt: string; sourceRevisionId: string | null },
+    finding: { sourceCapability: string; evidenceRef: string; evidenceDigest: string; createdAt: string },
     producerScan: LoopCapabilityExecutionEvent,
-    producerExaminedRevisionId: string | null,
   ): boolean {
     return (
       finding.sourceCapability === "solution-gate" &&
       finding.evidenceRef === (producerScan.unresolvedFindingsRef ?? "") &&
       finding.evidenceDigest === (producerScan.unresolvedFindingsDigest ?? "") &&
-      (finding.createdAt === producerScan.createdAt ||
-        (producerExaminedRevisionId !== null && finding.sourceRevisionId === producerExaminedRevisionId))
+      finding.createdAt === producerScan.createdAt
     );
   }
 
-  /** The revision identity the producer scan round examined (its input triple). */
-  private producerExaminedRevisionId(
-    producerScan: LoopCapabilityExecutionEvent,
-    revisions: readonly Readonly<{ revisionId: string; artifactRef: string; semver: string }>[],
-  ): string | null {
-    if (producerScan.inputArtifactRef === null || producerScan.inputArtifactVersion === null) return null;
-    return revisions.find(
-      (revision) =>
-        revision.artifactRef === producerScan.inputArtifactRef &&
-        revision.semver === producerScan.inputArtifactVersion,
-    )?.revisionId ?? null;
+  /**
+   * G4-R8-F1: the producing scan round of a PWR ruling is the scan execution
+   * the verdict ACTUALLY CONSUMED — the dispatch chain binds each point's
+   * input triple to its predecessor's effective output triple, so the
+   * verdict's own input triple IS its producer scan's output triple. Ledger
+   * blob identity alone cannot select the producer: content-equal ledgers
+   * from earlier rounds (the same findings against a different design
+   * revision) share ref+digest, and journal-order-first selection accepted
+   * the wrong round's rows. `findLast` keeps the most recent matching round
+   * when several are structurally identical (e.g. re-scans of the same
+   * design within one attempt lineage).
+   */
+  private consumedProducerScanInTransaction(
+    executions: readonly LoopCapabilityExecutionEvent[],
+    inputArtifactRef: string | null,
+    inputArtifactVersion: string | null,
+    consumedFindingsRef: string | null,
+    consumedFindingsDigest: string | null,
+  ): LoopCapabilityExecutionEvent | undefined {
+    // Reverse journal order: the most recent matching round wins when several
+    // are structurally identical.
+    for (let index = executions.length - 1; index >= 0; index -= 1) {
+      const item = executions[index]!;
+      if (
+        item.status === "succeeded" &&
+        item.capability === "solution-gate" &&
+        item.executionRole === "adversarial_scan" &&
+        item.unresolvedFindingsRef === consumedFindingsRef &&
+        item.unresolvedFindingsDigest === consumedFindingsDigest &&
+        (inputArtifactRef === null || (
+          item.outputArtifactRef === inputArtifactRef &&
+          item.outputArtifactVersion === inputArtifactVersion
+        ))
+      ) {
+        return item;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -4571,12 +4678,9 @@ export class LoopRunStore {
             "only scan-source findings adjudicated by the ruling's Finding Ledger may be risk-accepted",
           );
         }
-        const producerScan = executions.find((event) =>
-          event.status === "succeeded" &&
-          event.capability === "solution-gate" &&
-          event.executionRole === "adversarial_scan" &&
-          event.unresolvedFindingsRef === ruling.consumedFindingsRef &&
-          event.unresolvedFindingsDigest === ruling.consumedFindingsDigest,
+        const producerScan = this.consumedProducerScanInTransaction(
+          executions, ruling.inputArtifactRef, ruling.inputArtifactVersion,
+          ruling.consumedFindingsRef, ruling.consumedFindingsDigest,
         );
         if (producerScan === undefined) {
           throw new LoopRunJournalError(
@@ -4584,18 +4688,16 @@ export class LoopRunStore {
             "the ruling's consumed Finding Ledger has no producing adversarial_scan round in this run",
           );
         }
-        // G4-R7-B2: membership identity + integrity. The acceptable set is
-        // exactly what the producing scan round REGISTERED — rows bound to
-        // the producer terminal's createdAt, in a count equal to the scan's
-        // own Finding Ledger membership. A later row that borrows the ledger
-        // blob identity (even with the right source capability) is not a
-        // member; a membership count drift refuses fail-closed instead of
-        // accepting an unverifiable set.
-        const requirementId = this.readRunSnapshotInTransaction(db, runId)!.state.identity.requirementId;
-        const revisions = this.readArtifactRevisionsInTransaction(db, runId, requirementId);
-        const producerExaminedRevisionId = this.producerExaminedRevisionId(producerScan, revisions);
+        // G4-R7-B2, tightened by G4-R8-F1: membership identity + integrity.
+        // The acceptable set is exactly what the producing scan round
+        // REGISTERED — rows carrying the producer terminal's own createdAt
+        // (the registration receipt), in a count equal to the scan's own
+        // Finding Ledger membership. A later row that borrows the ledger
+        // blob identity or the examined-revision reference (even with the
+        // right source capability) is not a member; a membership count drift
+        // refuses fail-closed instead of accepting an unverifiable set.
         const members = findings.filter((item) =>
-          this.isRegisteredScanMember(item, producerScan, producerExaminedRevisionId),
+          this.isRegisteredScanMember(item, producerScan),
         );
         const expectedMemberCount = this.readScanLedgerMemberCount(
           producerScan.unresolvedFindingsRef!,

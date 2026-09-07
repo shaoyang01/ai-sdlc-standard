@@ -421,6 +421,27 @@ export class LoopCapabilityEntry {
         );
       }
     }
+    // G4-R8-F3 (§7.3 A4): knowledge-sync admission follows the SAME public
+    // execution precondition on EVERY dispatch boundary — the run loop
+    // (runtime) and this direct entry/claim boundary alike. The blocking
+    // scope is §5.2: an OPEN finding whose earliest node IS knowledge-sync
+    // names the tail as the rework target itself and stays dispatchable;
+    // only strictly-upstream OPEN findings (still un-resolved) block the
+    // tail until the discovery node closes them per-item.
+    if (request.capability === "knowledge-sync") {
+      const knowledgeSyncNodeIdx = NODE_CAPABILITY_IDS.indexOf("knowledge-sync");
+      const blocking = recovery.openFindings.filter(
+        (finding) =>
+          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+          knowledgeSyncNodeIdx,
+      );
+      if (blocking.length > 0) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          `knowledge-sync admission (A4) is blocked by OPEN findings: ${blocking.map((item) => item.findingId).join(", ")}`,
+        );
+      }
+    }
     // v2 dispatch-time role firewall (A2/G1): before dispatching the
     // formal_verdict role, the enabled binding's agent must differ from the
     // adversarial_scan agent of the same solution-gate round. The store
