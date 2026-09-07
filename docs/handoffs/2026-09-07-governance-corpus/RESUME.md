@@ -10,10 +10,10 @@
 | --- | --- |
 | 工作目录（worktree，**本机 = 家用机 eric**） | `/Users/eric/meicai/projects/ai-sdlc-standard-governance-corpus-worktree`（公司机路径为 `/Users/eric_shaoooo/...`，两机分支同名） |
 | 分支 | `codex/d088-governance-corpus`（基线 `9e6e0c7e2b3384a83337c90b86863493b2c1c206`，即 D087 G4-R6 rework 后主仓 HEAD） |
-| 提交链 | `9e6e0c7` → `cc10bbb`（首轮）→ `f3faac8`（R2 修复）→ `eb4bb23`（R3 修复）→ `792f377`（R3 交接 docs）→ `8454834`（R4 修复）→ `cb8bc21`/`7d3ad3d`（R4 交接 docs）→ R5 修复提交（代码+决策+规格）→ R5 交接 docs 提交（本文件所在） |
+| 提交链 | `9e6e0c7` → `cc10bbb`（首轮）→ `f3faac8`（R2 修复）→ `eb4bb23`（R3 修复）→ `792f377`（R3 交接 docs）→ `8454834`（R4 修复）→ `cb8bc21`/`7d3ad3d`（R4 交接 docs）→ `3b167eb`（R5 修复）→ `41dd8da`/`5ea628e`（R5 交接 + PASS 归档）→ `2ec9875`（Owner 指示的措辞提交，**本地未推送**） |
 | 最新独立复审覆盖的精确 SHA | `41dd8dad99ac1f600bb6fea92223f0b8191ccf9e`（对象 `7d3ad3d..3b167eb`，D091-R5，结论 **PASS**） |
 | R5 修复轮提交 | `3b167eb7426ab609493c8668652cf27f5a249afe`（代码+决策+规格）；交接 docs `41dd8da…`；**R5 复审 PASS**（报告入仓 `D091-R5-review.md`，独立证据 `evidence/r5-independent-*`）；R5 复审请求由实施会话在会话中提供（Owner 偏好不落盘） |
-| 远端 | `origin/codex/d088-governance-corpus`（R5 提交后已推送） |
+| 远端 | `origin/codex/d088-governance-corpus` = `5ea628e`；本地措辞提交 `2ec9875` 未推送（Owner 消息未授权 push，2026-09-08） |
 | 主工作区（勿动） | 家用机 `/Users/eric/meicai/projects/ai-sdlc-standard` @ `feature/c03-e5-autonomous-acceptance`，归 D087 会话；本线全部工作只在上述 worktree |
 
 ## 2. 需求、授权范围与排除项
@@ -66,8 +66,10 @@ CLOSED。R5 复审独立证据：29 项探针 + 流式回执探针（FIFO 无读
 不依赖退出冲刷）+ 双 bash 800/0 + 边界矩阵 + 真实仓只读预演，全部入仓
 `evidence/r5-independent-*`。
 
-**当前唯一未关闭层：Current User 收口裁决（D091 状态改注终值、四仓正式收编执行授权、
-合并策略）。复审 PASS 不代行该授权。**
+**当前唯一未关闭层：Current User 收口裁决的剩余事项**——四个业务仓正式收编执行授权、
+Decision-091 状态终值改注、本地措辞提交 `2ec9875` 的推送授权。**集成策略已裁决为
+方案 B**（暂缓合入 loop-v1，待 D087 收口并获准集成后再核对拓扑/依赖/diff 并另行提出
+方案，见 §8.2）。复审 PASS 不代行这些授权。
 
 ## 5. R5 修复的复现条件、代码位置与回归矩阵
 
@@ -135,13 +137,24 @@ bash tests/bootstrap-knowledge-target.test.sh          # 期望 800 passed 0 fai
 bash scripts/bootstrap-knowledge-target.sh /Users/eric/meicai/projects/logistics-center --adopt-governance-corpus --plan   # 只读预演
 ```
 
-## 8. 恢复后的第一步与建议顺序
+## 8. Owner 收口裁决记录与当前状态（2026-09-08）
 
-1. **D091-R5 已 PASS（2026-09-08），实现线收工**。下一步在 Owner：收口裁决
-   （Decision-091 状态终值改注、四个业务仓正式收编执行授权、合并策略、非阻塞措辞
-   建议是否采纳）。授权下达后再按 §2 排除清单以外的范围推进四仓执行。
-2. 若 Owner 要求处理非阻塞措辞建议（脚本 L1742 附近"完整恢复"提示与 Markdown 引导句
-   对未决对象的措辞），按最小修订走一轮即可，不需要新复审（复审已判定不重开 B1，
-   但任何代码变更后建议自行评估是否需要知会复审方）。
-3. 始终：不使用 SDLC/DocFlow 治理；不动 G4/D087 工作线与其主工作区；不消费收口或
-   发布授权；不合并、不 rebase、不改 Control Plane；不自证 PASS。
+1. **非阻塞措辞建议已落实**（Owner 指示）：本地提交 `2ec9875`——两处 "ROLLED BACK"
+   提示区分未决残留态、失败报告 Markdown 引导句不再将回执缺失对象笼统称为后来者；
+   双 bash 800/0 复跑。**未推送**（Owner 消息未授权 push）；PASS 认证基线 `41dd8da`
+   不受影响，`2ec9875` 为其后的纯措辞增量。
+2. **集成裁决 = 方案 B（暂缓合入）**：D091 暂不合入 `feature/loop-runtime-v1`；
+   D087 按原授权继续推进，不因 D091 集成修改或暂停其工作区，不阻塞其后续复审。
+   保留 D091 独立分支、认证基线 `41dd8da` 与本地措辞提交 `2ec9875`。
+   **待 D087 收口并获准集成至 LOOP 主线后**，再核对最新提交拓扑、依赖覆盖与最终
+   diff，优先以普通 merge 保留历史，并在独立集成 worktree 补充适当验证；届时另行
+   提出具体集成范围与合并方案，不预先保证无冲突。
+   核查结论的记录措辞（Owner 修正）：
+   - 未**找到覆盖继承历史的集成授权**——不断言历史授权严格为空；
+   - d088-01 初始化器谱系 16 提交为**候选依赖集**，依赖闭合未证明；
+   - 初始化器脚本/测试/模板在 loop-v1(9990b04) 上不存在这一事实维持不变，
+     它只支持"D091 的 11 个提交无法脱离基础谱系独立落地"，不外推其他结论。
+3. **剩余 Owner 事项**：四个业务仓正式收编执行授权；Decision-091 状态终值改注；
+   本地措辞提交的推送授权；D087 收口后的集成核对启动。
+4. 始终：不使用 SDLC/DocFlow 治理；不动 G4/D087 工作线与其主工作区；不消费收口或
+   发布授权；不合并、不 rebase、不 cherry-pick、不改 Control Plane；不自证 PASS。
