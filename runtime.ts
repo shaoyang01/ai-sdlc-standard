@@ -15,7 +15,7 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { mkdtempSync, mkdirSync, statSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -1228,7 +1228,14 @@ export async function runProduction(
         "the prepared attempt workspace path is not a directory",
       );
     }
-    if (resolve(attemptWorkspaceRoot) === resolve(identity.repositoryPath)) {
+    // G4-R7-B6: the business-root comparison is by PHYSICAL identity —
+    // realpath, not lexically resolved spelling. A symlink alias pointing
+    // back at the repository root previously passed `resolve()` equality
+    // and received real dispatches with the adapter cwd physically at the
+    // business root. Both paths exist at this point (statSync above).
+    if (
+      realpathSync(attemptWorkspaceRoot) === realpathSync(identity.repositoryPath)
+    ) {
       throw new ProductionRunError(
         "PRODUCTION_ENTRY_INVALID_INPUT",
         "the prepared attempt workspace must not be the business repository root",

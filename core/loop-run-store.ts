@@ -2377,6 +2377,14 @@ export class LoopRunStore {
       // scan rounds defer to the verdict's adjudication.
       const edges: LoopFindingInvalidation[] = [];
       if (registration.runInvalidation === true) {
+        // G4-R7-B3: invalidation state is synchronized WITHIN the batch —
+        // a revision this same transaction already staled is not re-read as
+        // ACTIVE from the transaction-start snapshot (the guarded re-mark
+        // would report zero changes and fail the whole atomic registration
+        // as phantom drift). Each finding still records its full canonical
+        // scope evidence (one edge per overlapped revision), matching the
+        // appendFinding rule that already-STALE revisions stay STALE.
+        const staledInTransaction = new Set<string>();
         for (const nodeId of downstreamNodeIds(record.earliestAffectedNodeId)) {
           const pointer = db.prepare(
             "SELECT revision_id FROM loop_artifact_current WHERE run_id = ? AND node_id = ?",
@@ -2386,8 +2394,11 @@ export class LoopRunStore {
           if (revision === undefined) {
             corrupt("current artifact pointer target is missing");
           }
-          if (revision.validity !== "ACTIVE") continue;
-          markRevisionStaleRowInTransaction(db, revision);
+          if (revision.validity !== "ACTIVE" && !staledInTransaction.has(revision.revisionId)) continue;
+          if (!staledInTransaction.has(revision.revisionId)) {
+            markRevisionStaleRowInTransaction(db, revision);
+            staledInTransaction.add(revision.revisionId);
+          }
           edges.push(Object.freeze({
             findingId: record.findingId,
             invalidationIndex: edges.length,
@@ -2801,6 +2812,14 @@ export class LoopRunStore {
         }
         const failed: LoopCapabilityExecutionEvent = Object.freeze({
           ...active,
+          // G4-R7-B1: the interrupt terminal is a NEW fact authored now — it
+          // is written at the CURRENT schema version even when it closes a
+          // legacy (v4) started claim. Spreading `...active` alone inherited
+          // the historical version and INSERTed a fresh v4 row past the
+          // append-path version gate. Historical rows stay untouched (their
+          // canonical form and replay are preserved); only new writes are
+          // stamped to the active version.
+          schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
           executionEventId: `${runId}:capability:${active.sequence + 1}:failed`,
           sequence: active.sequence + 1,
           status: "failed",
