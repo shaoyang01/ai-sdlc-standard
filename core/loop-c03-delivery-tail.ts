@@ -97,8 +97,14 @@ export interface ManualHandoffChecklist {
  * - gateResult must be PASS or PASS_WITH_RISK (FAIL → blocked)
  * - decisionStatus must be DECIDED (BLOCKED_UNKNOWN → blocked, must return to earliest affected node)
  * - depth must be non-null (LIGHT/STANDARD/DEEP)
- * - PASS_WITH_RISK requires at least one riskAcceptanceRef
  * - blockingFindings must be empty
+ *
+ * G4-R6-M2: PASS_WITH_RISK no longer requires non-empty riskAcceptanceRefs.
+ * Decision-086 PWR auto-proceed is carried by the verdict's own §4.3
+ * ruling; the risk references ride in the persisted decision delta for
+ * downstream traceability. The former non-empty gate here only ever
+ * enforced a fabricated placeholder — a shared guard must not manufacture
+ * proof obligations the admission authority does not carry.
  */
 export function developmentPathEntryGuard(verdict: SolutionGateVerdict): DevelopmentPathEntryDecision {
   // FAIL → blocked
@@ -134,15 +140,6 @@ export function developmentPathEntryGuard(verdict: SolutionGateVerdict): Develop
       allowed: false,
       reason: `${verdict.blockingFindings.length} unresolved blocking finding(s); cannot enter implementation`,
       blockingFindings: verdict.blockingFindings,
-    };
-  }
-
-  // PASS_WITH_RISK requires risk acceptance
-  if (verdict.gateResult === "PASS_WITH_RISK" && verdict.riskAcceptanceRefs.length === 0) {
-    return {
-      allowed: false,
-      reason: "PASS_WITH_RISK requires at least one risk acceptance reference; none provided",
-      blockingFindings: [],
     };
   }
 

@@ -92,7 +92,17 @@ function main(): void {
 
   const tsx = (args: string[]): { stdout: string; stderr: string; status: number } => {
     try {
-      const stdout = execFileSync("node_modules/.bin/tsx", ["scripts/loop-run.ts", ...args], { encoding: "utf8" });
+      // G4-R6-M3: spawn the CURRENT node runtime with `--import tsx` instead
+      // of the nested node_modules/.bin/tsx launcher — the bin wrapper opens
+      // a tsx IPC channel that sandboxed environments refuse (EPERM), which
+      // made this file the one member of the suite that could not reproduce
+      // the reported 156/156 as-is. The loaded module path is identical;
+      // only the second runtime dependency is gone.
+      const stdout = execFileSync(
+        process.execPath,
+        ["--import", "tsx", "scripts/loop-run.ts", ...args],
+        { encoding: "utf8" },
+      );
       return { stdout, stderr: "", status: 0 };
     } catch (error) {
       const e = error as { stdout?: string; stderr?: string; status?: number };

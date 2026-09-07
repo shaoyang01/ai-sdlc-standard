@@ -15,7 +15,7 @@
 //   6 workspace 越界/根仓副作用 → 生产装配绑定 prepared worktree（离线装配等价）
 import Database from "better-sqlite3";
 import { strict as assert } from "node:assert";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -191,14 +191,40 @@ async function main(): Promise<void> {
       ok(finding1 !== undefined && finding1.sourceCapability === "solution-gate" &&
         finding1.earliestAffectedNodeId === "solution-design",
         "the solution finding registered atomically (gate source, design reflow)");
-      ok(first.final_status === "success" && first.chain_status === "COMPLETED",
-        "the reflow wave (design → re-scan → re-verdict PASS) completes within the run");
-      const resolved = h.runStore.listFindings(journalRunId)[0]!;
+      // G4-R6-H3: the rebuilt design + plain PASS verdict does NOT close the
+      // reflow finding — closure is the per-item resolveFinding lifecycle
+      // with real repair evidence; until then the run stops BLOCKED.
+      ok(first.final_status === "failed" && first.chain_status === "BLOCKED",
+        "the reflow finding keeps the run blocked after the rebuilt design (PASS closes nothing)");
+      const stillOpen = h.runStore.listFindings(journalRunId)[0]!;
       const verdict2 = h.runStore.listCapabilityExecutions(journalRunId)
         .filter((e) => e.executionRole === "formal_verdict" && e.attempt === 2).at(-1)!;
-      ok(resolved.status === "RESOLVED" &&
-        resolved.resolutionEvidenceRef === verdict2.outputArtifactRef,
-        "the CONFIRMED PASS re-adjudication closed the reflow finding in its terminal transaction (§5.2)");
+      ok(stillOpen.status === "OPEN",
+        "the reflow finding stays OPEN after the plain PASS re-verdict (no auto batch closure)");
+      // Legal per-item closure (§5.2): the discovering node re-verifies the
+      // item against the rebuilt design; the closure proof binds the
+      // re-adjudicating round's revision and Gate Result blob.
+      const gateCurrentFact = h.runStore.listRegateCurrentFacts(journalRunId)
+        .find((fact) => fact.nodeId === "solution-gate")!;
+      h.runStore.resolveFinding(journalRunId, stillOpen.findingId, {
+        resolvedByNodeId: "solution-gate",
+        resolvedByRevisionId: gateCurrentFact.revisionId,
+        resolutionEvidenceRef: verdict2.outputArtifactRef,
+        resolutionEvidenceDigest: verdict2.outputDigest,
+      });
+      ok(h.runStore.listFindings(journalRunId)[0]!.status === "RESOLVED" &&
+        h.runStore.listFindings(journalRunId)[0]!.resolutionEvidenceRef === verdict2.outputArtifactRef,
+        "the itemized closure with real repair evidence resolves the finding (§5.2 re-verification preserved)");
+      const second = await run("build a retention feature", {
+        requirementId: h.requirementId,
+        workspaceRoot: h.root,
+        runStore: h.runStore,
+        artifactStore: h.artifactStore,
+        capabilitySource: "real",
+        realGatewayDeps: { adapter, attemptWorkspace: () => h.workspace },
+      });
+      ok(second.final_status === "success" && second.chain_status === "COMPLETED",
+        "the run completes only after the itemized closure");
     } finally {
       closeHarness(h);
     }
@@ -363,8 +389,35 @@ async function main(): Promise<void> {
       ok(h.runStore.listRunsByRequirement(h.requirementId).length === 1, "exactly one run for the requirement");
       const seqAfterSecond = h.runStore.listCapabilityExecutions(firstRunId).length;
       ok(seqAfterSecond > seqAfterFirst, `the event sequence strictly continues (${seqAfterFirst} → ${seqAfterSecond})`);
-      ok(second.final_status === "success" && second.chain_status === "COMPLETED",
-        "the ESCALATED reflow (design re-run + DEEP re-verdict) completes on resume");
+      // G4-R6-H3: the ESCALATED reflow finding is not auto-closed by the
+      // later CONFIRMED PASS — the resumed run stops BLOCKED until the
+      // discovering node closes the item with real repair evidence.
+      ok(second.final_status === "failed" && second.chain_status === "BLOCKED",
+        "the resumed run stops BLOCKED on the OPEN reflow finding (PASS closes nothing)");
+      const reflowFinding = h.runStore.listFindings(firstRunId).find((finding) => finding.status === "OPEN")!;
+      ok(reflowFinding !== undefined && reflowFinding.earliestAffectedNodeId === "solution-design",
+        "the synthetic reflow finding is the blocking OPEN fact");
+      const finalVerdict = h.runStore.listCapabilityExecutions(firstRunId)
+        .filter((e) => e.executionRole === "formal_verdict").at(-1)!;
+      const gateCurrentFact5 = h.runStore.listRegateCurrentFacts(firstRunId)
+        .find((fact) => fact.nodeId === "solution-gate")!;
+      h.runStore.resolveFinding(firstRunId, reflowFinding.findingId, {
+        resolvedByNodeId: "solution-gate",
+        resolvedByRevisionId: gateCurrentFact5.revisionId,
+        resolutionEvidenceRef: finalVerdict.outputArtifactRef,
+        resolutionEvidenceDigest: finalVerdict.outputDigest,
+      });
+      const third = await run("build a deep feature", {
+        requirementId: h.requirementId,
+        workspaceRoot: h.root,
+        runStore: h.runStore,
+        artifactStore: h.artifactStore,
+        capabilitySource: "real",
+        realGatewayDeps: { adapter, attemptWorkspace: () => h.workspace },
+      });
+      ok(third.run_id === firstRunId, "the third invocation continues the same run");
+      ok(third.final_status === "success" && third.chain_status === "COMPLETED",
+        "the ESCALATED reflow completes on resume after the itemized closure");
     } finally {
       closeHarness(h);
     }
@@ -399,14 +452,115 @@ async function main(): Promise<void> {
         realGatewayDeps: { adapter, attemptWorkspace: () => h.root },
         runStore: h.runStore,
         artifactStore: h.artifactStore,
-        inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false }),
+        inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
         prepareWorkspace: async () => ({ workspacePath: preparedRoot }),
       });
       ok(result.final_status === "success" && result.chain_status === "COMPLETED",
         "the real chain assembles and completes through the production door (offline)");
       ok(calls.length >= 7, "every chain node dispatched through the assembled real gateway");
       ok(readFileSync(join(h.root, "journal.db")) !== undefined, "the journal persists under the injected store");
+      // G4-R6-M3 (R6-H6): the ADAPTER'S ACTUAL CWD is asserted, not assumed —
+      // the prompt inputs are staged into the effective cwd by the real
+      // gateway, so their landing directory IS the cwd evidence: staged
+      // files live under the PREPARED worktree, and the business root (the
+      // injected resolver's stale answer) received none.
+      ok(existsSync(join(preparedRoot, "prompt-input")) &&
+        readdirSync(join(preparedRoot, "prompt-input")).length >= 7,
+        "every dispatch staged its prompt input inside the prepared attempt worktree (actual cwd pin)");
+      ok(!existsSync(join(h.root, "prompt-input")),
+        "the business root received zero dispatch side effects (no staged inputs leaked to the resolver's stale answer)");
       rmSync(preparedRoot, { recursive: true, force: true });
+
+      // G4-R6-H6 negatives: the prepared workspace is a REQUIRED, VERIFIED
+      // production constraint — omission, a dangling path, the business
+      // root itself, and a post-run root side effect all fail closed.
+      const productionNegatives = async (
+        requirementSuffix: string,
+        overrides: {
+          omitPrepare?: boolean;
+          preparePath?: string;
+          useBusinessRootAsPrepare?: boolean;
+          postRunRootSideEffect?: boolean;
+        },
+      ): Promise<void> => {
+        const hb = makeHarness(`s6-${requirementSuffix}`);
+        try {
+          const parsedB = parseProductionEntryRequest({
+            schema: PRODUCTION_ENTRY_SCHEMA,
+            requirementId: `${h.requirementId}-${requirementSuffix}`,
+            repository: "fixture-repo",
+            repositoryPath: join(hb.root, "repo"),
+            baseBranch: "main",
+            expectedBaseSha: "a".repeat(40),
+            taskBranch: `runtime/${h.requirementId}-${requirementSuffix}`,
+            controlRoot: join(hb.root, "control"),
+            sourceFiles: [],
+            bindingRegistryVersion: createRuntimeBindingRegistry().version,
+            executionProfileVersion: "1.0.0",
+            mode: "real",
+          }, { now: () => new Date().toISOString(), runId: `run-${h.requirementId}-${requirementSuffix}`.toLowerCase() });
+          let inspectCalls = 0;
+          const resultB = await runProduction(parsedB, "isolation probe", {
+            capabilitySource: "real",
+            realGatewayDeps: { adapter, attemptWorkspace: () => hb.root },
+            runStore: hb.runStore,
+            artifactStore: hb.artifactStore,
+            inspectWorkspace: async () => {
+              inspectCalls += 1;
+              // Post-run root side effect: the source WIP digest drifts
+              // between the preflight and the post-run inspection.
+              return {
+                baseDrifted: false,
+                taskHasChanges: false,
+                sourceWipDigestSha256:
+                  overrides.postRunRootSideEffect && inspectCalls >= 2
+                    ? "d".repeat(64)
+                    : "0".repeat(64),
+              };
+            },
+            ...(overrides.omitPrepare ? {} : {
+              prepareWorkspace: async () => ({
+                workspacePath: overrides.useBusinessRootAsPrepare
+                  ? join(hb.root, "repo")
+                  : overrides.preparePath ?? mkdtempSync(join(tmpdir(), "d087-s6-neg-")),
+              }),
+            }),
+          });
+          if (overrides.postRunRootSideEffect) {
+            ok(resultB.final_status === "failed" && resultB.chain_status === "BLOCKED" &&
+              resultB.blocking_reason_code === "PRODUCTION_ISOLATION_VIOLATED",
+              "a post-run root side effect flips COMPLETED to an honest BLOCKED failure");
+          } else {
+            ok(false, "the refusal shape must throw, never complete");
+          }
+        } finally {
+          closeHarness(hb);
+        }
+      };
+      ok(
+        await productionNegatives("n1", { omitPrepare: true }).then(
+          () => false,
+          (error) => (error as { code?: string }).code === "PRODUCTION_ENTRY_INVALID_INPUT",
+        ),
+        "real without a prepared workspace is refused at the door (no business-root fallback)",
+      );
+      ok(
+        await productionNegatives("n2", { preparePath: join(h.root, "does-not-exist") }).then(
+          () => false,
+          (error) => (error as { code?: string }).code === "PRODUCTION_ENTRY_INVALID_INPUT",
+        ),
+        "a prepared workspace path that does not exist is refused",
+      );
+      ok(
+        await productionNegatives("n3", { useBusinessRootAsPrepare: true }).then(
+          () => false,
+          (error) => (error as { code?: string }).code === "PRODUCTION_ENTRY_INVALID_INPUT",
+        ),
+        "a prepared workspace equal to the business repository root is refused",
+      );
+      // n4 resolves (does not throw): the run completes, then the post-run
+      // inspection detects the root side effect and the door reports BLOCKED.
+      await productionNegatives("n4", { postRunRootSideEffect: true });
 
       // Negative: the production door refuses real dispatch WITHOUT the
       // injected assembly surface (authorization/assembly split).

@@ -106,7 +106,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   const agent = o.agent ?? "codex";
   const succeeded = o.status === "succeeded";
   return Object.freeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,

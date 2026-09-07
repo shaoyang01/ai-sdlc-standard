@@ -76,7 +76,8 @@ async function main(): Promise<void> {
   // (1) Happy path: parsed entry + clean read-only preflight + injected stores.
   const s1 = stores(join(root, "c1"), repo);
   mkdirSync(join(root, "c1"), { recursive: true });
-  const clean = async (): Promise<ProductionPreflightSnapshot> => ({ baseDrifted: false, taskHasChanges: false });
+  const clean = async (): Promise<ProductionPreflightSnapshot> =>
+    ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) });
   const okResult = await runProduction(parsed, "build the thing", {
     inspectWorkspace: clean,
     runStore: s1.runStore,
@@ -135,7 +136,7 @@ async function main(): Promise<void> {
     () =>
       runProduction(parsed, "x", {
         runStore: s2.runStore, artifactStore: s2.artifactStore,
-        inspectWorkspace: async () => ({ baseDrifted: true, taskHasChanges: false }),
+        inspectWorkspace: async () => ({ baseDrifted: true, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
       }),
     "PRODUCTION_BASE_DRIFT",
     "a drifted base fails closed before dispatch",
@@ -146,7 +147,7 @@ async function main(): Promise<void> {
     () =>
       runProduction(parsed, "x", {
         runStore: s3.runStore, artifactStore: s3.artifactStore,
-        inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: true }),
+        inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: true, sourceWipDigestSha256: "0".repeat(64) }),
       }),
     "PRODUCTION_DIRTY_SOURCE",
     "a dirty task worktree fails closed before dispatch",

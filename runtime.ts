@@ -15,9 +15,9 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import {
   INITIAL_BINDING_REGISTRY,
@@ -756,6 +756,32 @@ export async function run(
           .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict");
         const lastVerdict = verdictEvents.length > 0 ? verdictEvents[verdictEvents.length - 1]! : null;
         const gateDecision = recovery?.solutionGateDecision ?? null;
+        // G4-R6-M2: the risk references are read back from the ruling's OWN
+        // persisted decision delta (digest-verified artifact read) — never a
+        // fabricated placeholder. Empty refs are legal (Decision-086 PWR
+        // auto-proceed; admission authority is the §4.3 ruling itself, and
+        // the delta artifact stays the durable trace for downstream inputs).
+        let pwrRiskRefs: readonly string[] = [];
+        if (
+          lastVerdict !== null && lastVerdict.decisionDeltaRef !== null &&
+          lastVerdict.decisionDeltaDigest !== null
+        ) {
+          try {
+            const deltaBlob = artifactStore.read(lastVerdict.decisionDeltaRef, lastVerdict.decisionDeltaDigest);
+            const delta = JSON.parse(deltaBlob.toString("utf8")) as {
+              schema?: unknown;
+              riskAcceptanceRefs?: unknown;
+            };
+            if (delta.schema === "loop-decision-delta:v1" && Array.isArray(delta.riskAcceptanceRefs)) {
+              pwrRiskRefs = (delta.riskAcceptanceRefs as unknown[]).filter(
+                (ref): ref is string => typeof ref === "string" && ref.length > 0,
+              );
+            }
+          } catch {
+            // A drifted delta yields EMPTY refs — never a placeholder.
+            pwrRiskRefs = [];
+          }
+        }
         const verdict: SolutionGateVerdict = {
           gateResult: (lastVerdict?.gateResult as SolutionGateVerdict["gateResult"]) ?? "FAIL",
           depth: (lastVerdict?.decisionDepth as DesignDepth | null) ?? null,
@@ -765,7 +791,7 @@ export async function run(
           // must NOT block re-entry into implementation (that is the whole point
           // of a rebuild wave). Only BLOCKED_UNKNOWN carries blocking findings.
           blockingFindings: gateDecision?.status === "DECIDED" ? [] : (recovery?.findingGate.blockingFindingIds ?? []),
-          riskAcceptanceRefs: ["PWR-ACCEPTED"],
+          riskAcceptanceRefs: pwrRiskRefs,
           verdictArtifactRef: gateDecision?.boundVerdictArtifactRef,
         };
         const entryDecision = developmentPathEntryGuard(verdict);
@@ -1030,7 +1056,10 @@ export async function run(
 // E5 real activation) and it does NOT select the real capability source.
 
 /** Read-only slice of the git snapshot the production preflight consumes. */
-export type ProductionPreflightSnapshot = Pick<LoopGitWorkspaceSnapshot, "baseDrifted" | "taskHasChanges">;
+export type ProductionPreflightSnapshot = Pick<
+  LoopGitWorkspaceSnapshot,
+  "baseDrifted" | "taskHasChanges" | "sourceWipDigestSha256"
+>;
 
 export type ProductionRunErrorCode =
   | "PRODUCTION_ENTRY_NOT_PARSED"
@@ -1139,6 +1168,7 @@ export async function runProduction(
   // dispatch. An inspect-only preflight (no prepare) leaves the injected
   // resolver untouched.
   let attemptWorkspaceRoot: string | null = null;
+  let preflightSnapshot: ProductionPreflightSnapshot | null = null;
   if (deps.inspectWorkspace !== undefined) {
     // W-GW-PREP (P-B C1): prepare-then-inspect when the entry wires worktree
     // preparation — a fresh requirement has no task worktree yet. Without the
@@ -1155,6 +1185,7 @@ export async function runProduction(
       }
     }
     const snapshot = await deps.inspectWorkspace(identity);
+    preflightSnapshot = snapshot;
     if (snapshot.baseDrifted) {
       throw new ProductionRunError(
         "PRODUCTION_BASE_DRIFT",
@@ -1165,6 +1196,42 @@ export async function runProduction(
       throw new ProductionRunError(
         "PRODUCTION_DIRTY_SOURCE",
         "task branch/worktree has uncommitted changes; refuse to start a production run",
+      );
+    }
+  }
+  // G4-R6-H6: for the real production door, isolation is an ASSEMBLED
+  // constraint, not an optional hook. The run must hold a verified prepared
+  // attempt workspace BEFORE any dispatch: a missing, non-existent,
+  // non-directory, or business-root workspace is refused here, and the
+  // prepared path PINS the resolver below — a caller-injected resolver that
+  // answers with the business root can no longer fall through.
+  if (source === "real") {
+    if (attemptWorkspaceRoot === null || preflightSnapshot === null) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "capability-source real requires a prepared and inspected attempt workspace " +
+          "(prepareWorkspace + inspectWorkspace); dispatching into the business root is not a fallback",
+      );
+    }
+    let preparedStat: import("node:fs").Stats;
+    try {
+      preparedStat = statSync(attemptWorkspaceRoot);
+    } catch {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        `prepared attempt workspace does not exist: ${attemptWorkspaceRoot}`,
+      );
+    }
+    if (!preparedStat.isDirectory()) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "the prepared attempt workspace path is not a directory",
+      );
+    }
+    if (resolve(attemptWorkspaceRoot) === resolve(identity.repositoryPath)) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "the prepared attempt workspace must not be the business repository root",
       );
     }
   }
@@ -1202,7 +1269,7 @@ export async function runProduction(
             // longer bypass the prepared-worktree isolation.
             attemptWorkspace: () => attemptWorkspaceRoot!,
           };
-  return run(requirementText, {
+  const result = await run(requirementText, {
     requirementId: identity.requirementId,
     workspaceRoot: identity.controlRoot,
     runStore,
@@ -1215,4 +1282,29 @@ export async function runProduction(
     ...(deps.maxDispatches !== undefined ? { maxDispatches: deps.maxDispatches } : {}),
     ...(deps.maxRegateRounds !== undefined ? { maxRegateRounds: deps.maxRegateRounds } : {}),
   });
+  // G4-R6-H6: containment verification AFTER the run. A root-directory side
+  // effect (source-branch WIP appearing at the business root) or base drift
+  // detected post-run flips a would-be COMPLETED result into an honest
+  // BLOCKED failure — isolation violations are never reported as success,
+  // and the preflight's single inspect is no longer the only observation.
+  if (
+    source === "real" && deps.inspectWorkspace !== undefined &&
+    preflightSnapshot !== null &&
+    result.final_status === "success" && result.chain_status === "COMPLETED"
+  ) {
+    const post = await deps.inspectWorkspace(identity);
+    const rootSideEffects =
+      post.baseDrifted || post.sourceWipDigestSha256 !== preflightSnapshot.sourceWipDigestSha256;
+    if (rootSideEffects) {
+      return Object.freeze({
+        ...result,
+        final_status: "failed" as const,
+        chain_status: "BLOCKED" as const,
+        blocking_reason_code: "PRODUCTION_ISOLATION_VIOLATED" as const,
+        next_execution_point: null,
+        completed_at: new Date().toISOString(),
+      });
+    }
+  }
+  return result;
 }

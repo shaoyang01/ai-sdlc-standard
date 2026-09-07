@@ -25,9 +25,10 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
-import { planRegateFromFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
+import { planRegateFromFacts, reduceBlockedPointIndexes, reduceGateRoundFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
 import {
   findPendingRevisionProducerExecution,
+  LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
   type DecisionStatus,
   type LoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionStatus,
@@ -597,12 +598,6 @@ function recoverRunContextInTransaction(
   for (const fact of regateFacts) {
     currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
   }
-  const pointLastAttempts = new Map<string, number>(
-    executionPointStates.map((state) => [
-      `${state.capability}:${state.executionRole}`,
-      state.lastAttempt,
-    ]),
-  );
   // WP4 H3: external feedback re-enters ONLY through a verified WP1
   // FEEDBACK_DRIVEN_CHANGE record; it drives a full new generation
   // regardless of whether any finding exists.
@@ -621,10 +616,25 @@ function recoverRunContextInTransaction(
       : { previousGeneration: latestFeedback.previousGeneration };
   // G4-R5: succeeded execution points whose own terminal blocked their
   // eligibility are the wave's mandatory re-drives (see planRegateFromFacts).
-  const blockedPointIndexes = executionPointStates
-    .map((state, index) =>
-      state.status === "succeeded" && state.nextStepEligibility === "BLOCKED" ? index : -1)
-    .filter((index) => index >= 0);
+  // G4-R6-H5: blocked points and gate-round facts come from the ONE shared
+  // reduction over the journal (latest terminal per execution point) —
+  // byte-identical to the store's chain-context reduction, never a second
+  // diverging fact base.
+  const blockedPointIndexes = reduceBlockedPointIndexes(capabilityExecutions);
+  const designCurrentFact = regateFacts.find((fact) => fact.nodeId === "solution-design") ?? null;
+  const designCurrentRevision = designCurrentFact === null
+    ? undefined
+    : artifactRevisions.find((item) => item.revisionId === designCurrentFact.revisionId);
+  const gateRoundFacts = reduceGateRoundFacts(
+    capabilityExecutions,
+    designCurrentFact !== null && designCurrentRevision !== undefined
+      ? {
+          artifactRef: designCurrentFact.artifactRef,
+          semver: designCurrentRevision.semver,
+          digest: designCurrentFact.digest,
+        }
+      : null,
+  );
   const plan = planRegateFromFacts(
     findings.map((finding) => ({
       findingId: finding.findingId,
@@ -635,7 +645,7 @@ function recoverRunContextInTransaction(
       createdAt: finding.createdAt,
     })),
     currentByNode,
-    pointLastAttempts,
+    gateRoundFacts,
     feedbackChange,
     blockedPointIndexes,
   );
@@ -728,8 +738,15 @@ function recoverRunContextInTransaction(
     // decisionStatus authority) never gain it post hoc. Decision-086 PWR
     // auto-proceed survives as the write-time derivation: a CONFIRMED PWR
     // verdict adjudicated its scan ledger in the same terminal transaction.
+    // G4-R6-H1: the version check is an ENFORCED invariant, not a comment.
+    // A v4 (historical) event's canonical form does not cover
+    // decisionStatus, so its ruling column is unprotected — it must never
+    // satisfy A1, no matter what the column reads. Only a v5 event (whose
+    // decisionStatus is inside the canonical hash) carries admission
+    // authority. There is no default-to-CONFIRMED anywhere.
     const decisionAdmits =
       lastVerdict.status === "succeeded" &&
+      lastVerdict.schemaVersion === LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION &&
       lastVerdict.decisionStatus === "CONFIRMED" &&
       (lastVerdict.gateResult === "PASS" || lastVerdict.gateResult === "PASS_WITH_RISK") &&
       lastVerdict.decisionDepth !== null &&

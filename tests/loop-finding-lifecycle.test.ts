@@ -2678,19 +2678,22 @@ function driveBoundNodes(
       evidenceDigest: verdict.consumedFindingsDigest!,
     }))).record;
     // Round 1 (H1-4): closure coverage rides the ACCEPTED_RISK edge here.
-    const evidence = {
-      artifactRef: verdict.consumedFindingsRef!,
-      digest: verdict.consumedFindingsDigest!,
-    };
+    // G4-R6-H2: the acceptance evidence is the RULING's own Gate Result blob
+    // (never the consumed ledger, never caller-chosen text) — the finding's
+    // OWN evidence stays the ledger blob, whose deletion below still fails
+    // every read path closed.
     const accepted = store.acceptFindingRisk("run-001", finding.findingId, {
       riskAcceptedBy: "formal_verdict",
-      riskAcceptanceEvidenceRef: evidence.artifactRef,
-      riskAcceptanceEvidenceDigest: evidence.digest,
+      riskAcceptanceEvidenceRef: verdict.outputArtifactRef!,
+      riskAcceptanceEvidenceDigest: verdict.outputDigest!,
       decisionScopeId: verdict.decisionScopeId!,
     });
     assert(accepted.record.status === "ACCEPTED_RISK",
-      "risk acceptance with an existing evidence blob succeeds");
-    unlinkSync(findingBlobPath(dir, "capability_findings", evidence.digest));
+      "risk acceptance with the ruling's existing Gate Result blob succeeds");
+    // G4-R6-H2: the acceptance evidence is the RULING's own Gate Result blob,
+    // so the read-back corruption probe deletes THAT blob — deleting it must
+    // fail every read path closed (the acceptance proof re-verifies it).
+    unlinkSync(findingBlobPath(dir, "solution_review", verdict.outputDigest!));
     expectFindingCorruptOnAllReadPaths(store, "evidence blob deleted after risk acceptance fails closed");
   });
   withBoundFindingStore((store, artifactStore, _dir) => {

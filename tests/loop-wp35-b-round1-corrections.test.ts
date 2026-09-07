@@ -96,7 +96,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   seq += 1;
   const agent = o.agent ?? "codex";
   return Object.freeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -407,9 +407,13 @@ async function main(): Promise<void> {
       // R6 (G4-R5-H5): a cross-node anchor is LEGAL when it is the examined
       // ACTIVE current — a design finding may anchor the intake product it
       // examined. It rejects only when that anchor is not the anchor node's
-      // ACTIVE current.
-      expectThrow("INVALID_INPUT", () => store.appendFinding(createLoopFinding({
-        runId: RUN, requirementId: "REQ-R1-002", sequence: 1,
+      // ACTIVE current. G4-R6-M3: the draft keeps the run's REAL requirement
+      // id — the previous draft carried REQ-R1-002 on run REQ-R1-001, so the
+      // identity check rejected it before the anchor premise was ever
+      // exercised. With the identity isolated, the nonexistent source
+      // revision surfaces its real transition guard.
+      expectThrow("ILLEGAL_TRANSITION", () => store.appendFinding(createLoopFinding({
+        runId: RUN, requirementId: "REQ-R1-001", sequence: 1,
         sourceCapability: "solution-design",
         sourceRevisionId: `${RUN}:revision:requirement-intake:9`,
         causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:requirement-intake:9`,

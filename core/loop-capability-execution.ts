@@ -815,6 +815,16 @@ export function validateLoopCapabilityExecutionChain(
               invalid("restart input must match the reused upstream output");
             }
           }
+        } else if (blockedRetryOk) {
+          // G4-R6-H4: the three transition shapes are mutually exclusive
+          // branches. A same-point blocked re-attempt validates ONLY its
+          // unchanged dispatch claim (identical input triple, consumed
+          // ledger and +1 attempt — blockedRetryOk above). The canonical
+          // advance rules in the next branch compare the new input against
+          // the predecessor's blocked OUTPUT — a fact a retry never
+          // consumes — so applying them here rejected every legal blocked
+          // re-drive with "capability input must match the predecessor's
+          // effective output".
         } else {
         // v2 (A2, G1): the formal_verdict dispatch must go to a different
         // agent than the adversarial_scan that produced the consumed ledger.

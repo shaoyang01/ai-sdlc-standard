@@ -200,9 +200,14 @@ async function main(): Promise<number> {
 
   // The agent-CLI dispatch runner: the adapter's CLIs run INSIDE the prepared
   // attempt worktree only (runProduction pins attemptWorkspace to it).
+  // G4-R6-H6: the business root is NOT an allowed cwd root for agent
+  // dispatches — the allowed set is the prepared attempt worktree (prepared
+  // here so the runner can pin it before the production door verifies it)
+  // plus the control root; a stray business-root cwd can never be authorized.
+  const preparedWorkspace = await workspaceManager.prepare(parsed.identity);
   const agentRunner = new LoopPosixProcessRunner({
     executables,
-    allowedCwdRoots: [spruceRoot, control],
+    allowedCwdRoots: [preparedWorkspace.workspacePath, control],
     fixedEnv: {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: process.env.HOME ?? "/tmp",

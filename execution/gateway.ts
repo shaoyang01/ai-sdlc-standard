@@ -640,6 +640,33 @@ export class ExecutionGateway {
     const DECISION_STATUSES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
     let verdictDepth: (typeof DECISION_DEPTHS)[number] | null = null;
     let verdictStatus: (typeof DECISION_STATUSES)[number] | null = null;
+    // G4-R6-M1: role-specific decision fields are validated for EVERY
+    // dispatch before any artifact is recorded. A non-verdict dispatch that
+    // declares decisionStatus/decisionDepth (either key spelling, explicit
+    // null included) is a contract violation: it becomes an explicit failed
+    // terminal — never a silent clear-then-succeed. The same three-state
+    // combination rules as the verdict branch apply (missing ≠ null ≠
+    // illegal), so the envelope, gateway and journal layers enforce one
+    // shared shape instead of letting a lower layer absorb the counterexample.
+    const declaredDecisionKeys = (["decisionStatus", "decision_status", "decisionDepth", "decision_depth"] as const)
+      .filter((key) => key in result.output && result.output[key] !== undefined);
+    if (!isVerdictDispatch && declaredDecisionKeys.length > 0) {
+      this.appendCapabilityFailure(
+        tracing,
+        base,
+        startedSequence + 1,
+        now(),
+        "GATE_DEPTH_INVALID",
+        false,
+        result.processEvidence ?? null,
+      );
+      return Object.freeze({
+        ...result,
+        success: false,
+        agent: binding.agent,
+        error: "only a formal_verdict dispatch may declare decision fields",
+      });
+    }
     if (isVerdictDispatch) {
       const comboFail = (message: string): ExecutionResult => {
         this.appendCapabilityFailure(
@@ -750,10 +777,16 @@ export class ExecutionGateway {
     //     from the blocked terminal itself.
     const verdictAdmits = isVerdictDispatch &&
       verdictStatus === "CONFIRMED" && gateResult !== "FAIL";
-    // Scan rounds defer to the verdict's adjudication; everything else that
-    // registers findings propagates §5.4 invalidation from each finding's
-    // canonical earliest node (blocked terminals register without edges).
-    const runInvalidation = nodeStatus === "SUCCEEDED" && !isScanDispatch;
+    // Scan rounds defer to the verdict's adjudication; every other terminal
+    // that registers findings propagates §5.4 invalidation from each
+    // finding's canonical earliest node. G4-R6-H4: a BLOCKED terminal is
+    // NOT exempt — its implementation-class findings must invalidate their
+    // canonical downstream scope so the recovery plans the rework wave
+    // (e.g. a blocked code-review carrying an implementation finding
+    // re-drives implementation first); the blocked re-attempt itself is
+    // derived from the blocked terminal's unchanged claim and stays
+    // available when no finding points elsewhere.
+    const runInvalidation = !isScanDispatch;
     const registrationDrafts = findings.map((finding) => {
       const record = (finding && typeof finding === "object" ? finding : {}) as Record<string, unknown>;
       const severity = typeof record["severity"] === "string" ? record["severity"] : "";
@@ -768,6 +801,10 @@ export class ExecutionGateway {
       };
     });
     const decisionScopeId = isVerdictDispatch ? `${runId}:decision:${attempt}` : null;
+    // G4-R6-H3: a plain PASS ruling closes nothing in-terminal — findings
+    // close only through the per-item resolveFinding lifecycle with real
+    // repair evidence (§5.2). The only in-terminal adjudication is the PWR
+    // acceptance of the consumed ledger under the ruling's own scope.
     const registration: CapabilityFindingsRegistration = {
       evidenceRef: (findingsDescriptor ?? outputDescriptor).artifactRef,
       evidenceDigest: (findingsDescriptor ?? outputDescriptor).digest,
@@ -775,11 +812,10 @@ export class ExecutionGateway {
       runInvalidation,
       registerReflowFinding: isVerdictDispatch && !verdictAdmits &&
         (gateResult === "FAIL" || verdictStatus === "ESCALATED"),
-      adjudicateScanFindings: verdictAdmits &&
-        (gateResult === "PASS" || gateResult === "PASS_WITH_RISK")
+      adjudicateScanFindings: verdictAdmits && gateResult === "PASS_WITH_RISK"
         ? {
             decisionScopeId: decisionScopeId!,
-            mode: gateResult === "PASS" ? ("PASS_RESOLVE" as const) : ("PWR_ACCEPT" as const),
+            mode: "PWR_ACCEPT" as const,
           }
         : null,
     };

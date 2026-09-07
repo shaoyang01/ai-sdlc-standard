@@ -194,12 +194,16 @@ function main(): void {
     );
     ok(e.decisionStatus === "BLOCKED_UNKNOWN" && e.decisionDepth === null, "BLOCKED_UNKNOWN + explicit null parses, null preserved");
   }
-  // Illegal: missing decisionStatus on a verdict.
+  // Illegal: missing decisionStatus on a verdict. G4-R6-M3: derived from the
+  // complete legal positive by changing ONLY the target fact — the depth
+  // field stays present. The old negative dropped BOTH status and depth, so
+  // a status-defaulting mutation was shadowed by the depth rule and the
+  // survivor was misread as double-layer coverage.
   expectCode(
     "ENVELOPE_BAD_DECISION",
-    wrap({ summary: "x", body: "y", nodeStatus: "SUCCEEDED", gateResult: "PASS" }),
+    wrap({ summary: "x", body: "y", nodeStatus: "SUCCEEDED", gateResult: "PASS", decisionDepth: "DEEP" }),
     GATE,
-    "verdict without decisionStatus",
+    "verdict without decisionStatus (depth present — single-fact negative)",
   );
   // Illegal: BLOCKED_UNKNOWN with a MISSING depth (missing ≠ null).
   expectCode(

@@ -748,13 +748,17 @@ export function crossBindArtifactIndexRow(
   if (record.version !== currentRevision.semver) {
     return stop("VERSION_DRIFT", "manifest version does not match the journal current revision");
   }
-  // G4-R5-M2: the frozen §6.2.4 status mapping — ACTIVE↔"current";
-  // STALE/SUPERSEDED↔"stale" ("actionable" is the manual face's
-  // reflow-pending annotation over a non-current revision, legal wherever
-  // "stale" is). Any other pairing is drift, not a silent re-selection.
+  // G4-R6-M4: the FROZEN §6.2.4 mapping, verbatim — ACTIVE↔"current",
+  // STALE/SUPERSEDED↔"stale". The former "actionable wherever stale"
+  // extension widened the frozen contract by equating ANY non-ACTIVE
+  // revision with the manual face's reflow-pending annotation, without the
+  // rework context that annotation requires. A manifest "actionable" row is
+  // STATUS_DRIFT in the runtime cross-bind; a legal manual actionable
+  // annotation is judged by its real rework context in the manual-runtime
+  // layers, never inferred from non-ACTIVE validity alone.
   const statusMatches =
     (currentRevision.validity === "ACTIVE" && status === "current") ||
-    (currentRevision.validity !== "ACTIVE" && (status === "stale" || status === "actionable"));
+    (currentRevision.validity !== "ACTIVE" && status === "stale");
   if (!statusMatches) {
     return stop("STATUS_DRIFT", "manifest status does not match the frozen revision-validity mapping");
   }

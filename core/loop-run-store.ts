@@ -37,6 +37,7 @@ import {
 import {
   canonicalizeLoopCapabilityExecutionEvent,
   findPendingRevisionProducerExecution,
+  LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
   sameAttemptIdentity,
   validateLoopCapabilityExecutionChain,
   validateLoopCapabilityExecutionEvent,
@@ -46,6 +47,8 @@ import { validateBootstrapSourceProvenance } from "./loop-run-state";
 import { deriveDispatchCommand, recoverRunContext } from "./loop-recovery";
 import {
   planRegateFromFacts,
+  reduceBlockedPointIndexes,
+  reduceGateRoundFacts,
   type CurrentRevisionFacts,
   type RegateFindingFacts,
 } from "./loop-regate";
@@ -186,23 +189,27 @@ export type CapabilityFindingRegistrationDraft = Readonly<{
  * Directive for the atomic registration executed in the SAME transaction as
  * a terminal capability event (D-087 seam 2). The gateway derives it from
  * trusted journal facts; the store never trusts agent prose:
- *   - evidence: the node output blob binding every registered finding;
+ *   - evidence: the node output blob binding every registered finding —
+ *     G4-R6-H2: it must BE the terminal event's own artifact blob
+ *     (unresolvedFindingsRef, else outputArtifactRef) with the matching
+ *     digest; the binding is verified against the event before any write,
+ *     on the append path AND on the idempotent replay path;
  *   - runInvalidation: whether append-time invalidation edges propagate
- *     (non-admitting terminals only — scan rounds defer to the verdict's
- *     adjudication and an admitting PWR verdict must not invalidate the
- *     design it just accepted);
+ *     (non-scan terminals — scan rounds defer to the verdict's
+ *     adjudication; an admitting PWR verdict must not invalidate the design
+ *     it just accepted);
  *   - registerReflowFinding: a FAIL/ESCALATED verdict whose agent emitted no
  *     SOLUTION-category finding still owes the chain the §5.4 reflow fact;
- *   - registerReflowFinding: a FAIL/ESCALATED verdict whose agent emitted no
- *     SOLUTION-category finding still owes the chain the §5.4 reflow fact;
- *   - adjudicateScanFindings: the verdict round's ledger adjudication — with
- *     mode PASS_RESOLVE every OPEN scan-source finding (evidence = any scan
- *     Finding Ledger of this run) is RESOLVED by the design current the
- *     verdict examined (verifier = the discovering node per §5.2); with mode
- *     PWR_ACCEPT the OPEN, non-CRITICAL scan-source findings consumed by the
- *     ruling's ledger are ACCEPTED_RISK under THIS decision scope with the
- *     Gate Result as evidence, riskAcceptedBy formal_verdict (§5.2/§7.1).
- *     CRITICAL findings are never acceptable and stay OPEN — fail-closed.
+ *   - adjudicateScanFindings: the verdict round's PWR ledger acceptance
+ *     (G4-R6-H3: a plain PASS ruling no longer batch-closes anything —
+ *     findings close only through the per-item resolveFinding lifecycle
+ *     with real repair evidence, and unresolved findings keep blocking).
+ *     With mode PWR_ACCEPT the OPEN, non-CRITICAL scan-source findings
+ *     consumed by the ruling's ledger are ACCEPTED_RISK under the ruling
+ *     event's OWN decisionScopeId (the caller-supplied scopeId must equal
+ *     it) with the ruling's Gate Result blob as evidence, riskAcceptedBy
+ *     formal_verdict (§5.2/§7.1). CRITICAL findings are never acceptable
+ *     and stay OPEN — fail-closed.
  */
 export interface CapabilityFindingsRegistration {
   readonly evidenceRef: string;
@@ -212,7 +219,7 @@ export interface CapabilityFindingsRegistration {
   readonly registerReflowFinding?: boolean;
   readonly adjudicateScanFindings?: Readonly<{
     decisionScopeId: string;
-    mode: "PASS_RESOLVE" | "PWR_ACCEPT";
+    mode: "PWR_ACCEPT";
   }> | null;
 }
 
@@ -1897,6 +1904,21 @@ export class LoopRunStore {
           throw new LoopRunJournalError("EVENT_ID_CONFLICT", "eventId already exists with different content");
         }
 
+        // G4-R6-L1: the Decision-083 risk_accepted run event is RETIRED for
+        // writes (Decision-087 cleanup; G4-R5-H2 removed the acceptance-
+        // ritual admission branches it fed). The durable RISK_ACCEPTANCE
+        // proof rows are the lifecycle record; admission derives from the
+        // verdict's own §4.3 ruling. Historical journals keep replaying the
+        // kind (the exact-replay branch above stays open for legacy
+        // recovery), but a NEW write is refused — historical compatibility
+        // never becomes a live write path.
+        if (event.kind === "risk_accepted") {
+          throw new LoopRunJournalError(
+            "INVALID_INPUT",
+            "risk_accepted run events are retired for writes; the finding risk-acceptance proof is the lifecycle record",
+          );
+        }
+
         const capabilityExecutions = this.readCapabilityExecutionsInTransaction(db, event.runId);
         if (capabilityExecutions[capabilityExecutions.length - 1]?.status === "started") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "run events cannot advance while a capability execution is active");
@@ -2033,6 +2055,12 @@ export class LoopRunStore {
   ): CapabilityFindingsAppendResult {
     const db = this.connection();
     validateLoopCapabilityExecutionEvent(event);
+    // G4-R6-H2: the registration directive is validated against the EVENT's
+    // own immutable facts BEFORE any write — and equally on the replay path,
+    // so a replayed terminal can never smuggle different registration
+    // semantics (different evidence blob, different drafts, a different
+    // decision scope) past the idempotent no-op.
+    this.validateRegistrationBindingAgainstEvent(event, registration);
     const row = capabilityExecutionToRow(event);
     try {
       return db.transaction((): CapabilityFindingsAppendResult => {
@@ -2040,6 +2068,10 @@ export class LoopRunStore {
         if (!appendResult.appended) {
           // Idempotent exact replay: the original transaction already
           // registered these findings — repeating would double-register.
+          // The replayed REGISTRATION must still match what the original
+          // transaction persisted; a conflicting replay is refused with
+          // zero writes instead of being swallowed as a no-op.
+          this.verifyReplayedRegistrationInTransaction(db, event, registration);
           return Object.freeze({
             event: appendResult.event,
             appended: false,
@@ -2067,6 +2099,160 @@ export class LoopRunStore {
         acceptedFindingIds: Object.freeze([] as string[]),
         resolvedFindingIds: Object.freeze([] as string[]),
       });
+    }
+  }
+
+  /**
+   * G4-R6-H2: the registration's evidence and adjudication facts are bound
+   * to the terminal EVENT itself, inside the shared transaction boundary:
+   *   - the evidence blob IS the event's own artifact (its persisted
+   *     Finding Ledger for scan/verdict rounds that produced one, else the
+   *     node output blob) with the matching digest — acceptance or
+   *     registration on unrelated text is structurally impossible;
+   *   - a ledger adjudication is only legal on a v5 CONFIRMED
+   *     PASS_WITH_RISK formal_verdict ruling (a plain PASS closes nothing —
+   *     G4-R6-H3), and the caller-supplied decisionScopeId must EQUAL the
+   *     ruling event's own decisionScopeId (derived
+   *     `${runId}:decision:${attempt}`), never a caller-invented scope.
+   */
+  private validateRegistrationBindingAgainstEvent(
+    event: LoopCapabilityExecutionEvent,
+    registration: CapabilityFindingsRegistration,
+  ): void {
+    const expectedEvidenceRef = event.unresolvedFindingsRef ?? event.outputArtifactRef;
+    const expectedEvidenceDigest = event.unresolvedFindingsDigest ?? event.outputDigest;
+    if (
+      expectedEvidenceRef === null || expectedEvidenceDigest === null ||
+      registration.evidenceRef !== expectedEvidenceRef ||
+      registration.evidenceDigest !== expectedEvidenceDigest
+    ) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "finding registration evidence must be the terminal event's own artifact blob",
+      );
+    }
+    const adjudication = registration.adjudicateScanFindings ?? null;
+    if (adjudication === null) {
+      if (registration.findings.length === 0 && event.status === "failed") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "a failed terminal persists no output blob and registers no findings",
+        );
+      }
+      return;
+    }
+    if (adjudication.mode !== "PWR_ACCEPT") {
+      throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings mode is not canonical");
+    }
+    if (
+      event.status !== "succeeded" ||
+      event.capability !== "solution-gate" || event.executionRole !== "formal_verdict" ||
+      event.schemaVersion !== LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION ||
+      event.decisionStatus !== "CONFIRMED" || event.gateResult !== "PASS_WITH_RISK"
+    ) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "ledger acceptance is a CONFIRMED PASS_WITH_RISK formal_verdict ruling action",
+      );
+    }
+    if (
+      typeof adjudication.decisionScopeId !== "string" || adjudication.decisionScopeId.length === 0 ||
+      adjudication.decisionScopeId !== event.decisionScopeId
+    ) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "adjudication scope must be the ruling event's own decisionScopeId",
+      );
+    }
+  }
+
+  /**
+   * G4-R6-H2: replay comparison includes REGISTRATION SEMANTICS. An exact
+   * event replay stays a no-op only when the directive matches what the
+   * original transaction persisted: the same drafts (severity/category/
+   * cause, including the synthetic §5.4 reflow fact) and the same ledger
+   * acceptance outcome (every acceptable consumed-ledger finding already
+   * ACCEPTED_RISK under this scope, CRITICAL ones still OPEN). Any
+   * divergence is a conflicting replay: rejected, zero writes.
+   */
+  private verifyReplayedRegistrationInTransaction(
+    db: Database.Database,
+    event: LoopCapabilityExecutionEvent,
+    registration: CapabilityFindingsRegistration,
+  ): void {
+    void db;
+    const expectedEvidenceRef = event.unresolvedFindingsRef ?? event.outputArtifactRef;
+    const expectedEvidenceDigest = event.unresolvedFindingsDigest ?? event.outputDigest;
+    if (expectedEvidenceRef === null || expectedEvidenceDigest === null) {
+      throw new LoopRunJournalError("STORE_CORRUPT", "replayed terminal carries no registration evidence blob");
+    }
+    const findings = this.readFindingsForTransitionInTransaction(db, event.runId);
+    const drafts = [...registration.findings];
+    if (
+      registration.registerReflowFinding === true &&
+      !drafts.some((draft) => draft.category === "SOLUTION")
+    ) {
+      drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
+    }
+    const registeredByThisTerminal = findings.filter(
+      (finding) =>
+        finding.sourceCapability === event.capability &&
+        finding.evidenceRef === expectedEvidenceRef &&
+        finding.evidenceDigest === expectedEvidenceDigest,
+    );
+    if (registeredByThisTerminal.length !== drafts.length) {
+      throw new LoopRunJournalError(
+        "ILLEGAL_TRANSITION",
+        "replayed terminal registration conflicts with the originally registered findings",
+      );
+    }
+    for (let index = 0; index < drafts.length; index += 1) {
+      const record = registeredByThisTerminal[index]!;
+      const draft = drafts[index]!;
+      if (
+        record.severity !== draft.severity ||
+        record.category !== draft.category ||
+        record.causeKind !== draft.causeKind
+      ) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "replayed terminal registration conflicts with the originally registered findings",
+        );
+      }
+    }
+    const adjudication = registration.adjudicateScanFindings ?? null;
+    if (adjudication !== null) {
+      if (event.consumedFindingsRef === null || event.consumedFindingsDigest === null) {
+        throw new LoopRunJournalError("STORE_CORRUPT", "replayed PWR ruling carries no consumed ledger");
+      }
+      // Same origin binding as the acceptance itself: only gate-source
+      // findings whose evidence IS the consumed ledger were acceptable in
+      // the original transaction — a foreign finding that borrows the
+      // ledger reference (registered later or not) was never in scope.
+      const ledgerFindings = findings.filter(
+        (finding) =>
+          finding.sourceCapability === "solution-gate" &&
+          finding.evidenceRef === event.consumedFindingsRef &&
+          finding.evidenceDigest === event.consumedFindingsDigest,
+      );
+      for (const target of ledgerFindings) {
+        if (target.severity === "CRITICAL") {
+          if (target.status !== "OPEN") {
+            throw new LoopRunJournalError(
+              "ILLEGAL_TRANSITION",
+              "replayed ledger acceptance conflicts with the persisted CRITICAL finding state",
+            );
+          }
+        } else if (
+          target.status !== "ACCEPTED_RISK" ||
+          target.riskAcceptedScopeId !== adjudication.decisionScopeId
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "replayed ledger acceptance conflicts with the persisted acceptance outcome",
+          );
+        }
+      }
     }
   }
 
@@ -2230,142 +2416,70 @@ export class LoopRunStore {
     // closes as a whole), the PWR ruling risk-accepts the consumed ledger's
     // non-CRITICAL findings under THIS decision scope. CRITICAL findings are
     // never acceptable and stay OPEN, blocking A1 admission — fail-closed.
+    // G4-R6-H3: a plain PASS ruling no longer batch-closes scan findings —
+    // closure is the per-item resolveFinding lifecycle with real repair
+    // evidence (§5.2 复验), and unresolved findings keep blocking downstream
+    // admission. The only in-terminal adjudication left is the PWR
+    // acceptance of the consumed ledger; its shape, scope and evidence were
+    // already validated against the event by
+    // validateRegistrationBindingAgainstEvent.
     const acceptedFindingIds: string[] = [];
     const resolvedFindingIds: string[] = [];
     const adjudication = registration.adjudicateScanFindings ?? null;
     if (adjudication !== null) {
-      const scopeId = adjudication.decisionScopeId;
-      if (typeof scopeId !== "string" || scopeId.length === 0) {
-        throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings requires a decisionScopeId");
-      }
-      if (adjudication.mode !== "PASS_RESOLVE" && adjudication.mode !== "PWR_ACCEPT") {
-        throw new LoopRunJournalError("INVALID_INPUT", "adjudicateScanFindings mode is not canonical");
-      }
-      if (event.capability !== "solution-gate" || event.executionRole !== "formal_verdict") {
-        throw new LoopRunJournalError(
-          "ILLEGAL_TRANSITION",
-          "scan-ledger adjudication is a formal_verdict ruling action",
-        );
-      }
-      if (event.decisionStatus !== "CONFIRMED") {
-        throw new LoopRunJournalError(
-          "ILLEGAL_TRANSITION",
-          "scan-ledger adjudication requires a CONFIRMED ruling",
-        );
-      }
-      if (
-        event.outputArtifactRef === null || event.outputDigest === null ||
-        event.inputArtifactRef === null || event.inputArtifactVersion === null
-      ) {
-        throw new LoopRunJournalError(
-          "ILLEGAL_TRANSITION",
-          "scan-ledger adjudication requires the Gate Result blob binding and the examined design revision",
-        );
-      }
-      if (adjudication.mode === "PWR_ACCEPT" && event.gateResult !== "PASS_WITH_RISK") {
-        throw new LoopRunJournalError(
-          "ILLEGAL_TRANSITION",
-          "PWR_ACCEPT adjudication requires a PASS_WITH_RISK ruling",
-        );
-      }
-      if (adjudication.mode === "PASS_RESOLVE" && event.gateResult !== "PASS") {
-        throw new LoopRunJournalError(
-          "ILLEGAL_TRANSITION",
-          "PASS_RESOLVE adjudication requires a PASS ruling",
-        );
-      }
-      this.verifyFindingEvidenceBlob(event.outputArtifactRef, event.outputDigest, "append");
-      // Gate-round discovery facts: every OPEN finding whose evidence blob is
-      // a gate round's persisted Finding Ledger. Scan rounds own the baseline
-      // ledger; a FAIL/ESCALATED verdict round registers its own reflow
-      // findings in a verdict ledger — a CONFIRMED PASS re-adjudication
-      // closes BOTH kinds (the discovering node solution-gate re-verifies its
-      // own reflow findings in the closure round, §5.2). The ledger refs are
-      // recovered from the journal itself — no caller-supplied lists.
-      const gateExecutions = this.readCapabilityExecutionsInTransaction(db, event.runId)
-        .filter((item) =>
-          item.capability === "solution-gate" &&
-          item.status === "succeeded" &&
-          item.executionEventId !== event.executionEventId
-        );
-      const scanLedgerRefs = new Set(
-        gateExecutions
-          .filter((item) =>
-            (item.executionRole === "adversarial_scan" ||
-              (adjudication.mode === "PASS_RESOLVE" && item.executionRole === "formal_verdict")) &&
-            item.unresolvedFindingsRef !== null
-          )
-          .map((item) => item.unresolvedFindingsRef as string)
-          .concat(
-            // G4-R5: the synthetic §5.4 reflow finding binds the verdict
-            // round's OUTPUT product as its evidence — a PASS_RESOLVE
-            // re-adjudication closes it by that binding.
-            adjudication.mode === "PASS_RESOLVE"
-              ? gateExecutions
-                .filter((item) => item.executionRole === "formal_verdict" && item.outputArtifactRef !== null)
-                .map((item) => item.outputArtifactRef as string)
-              : [],
-          ),
+      const scopeId = event.decisionScopeId!;
+      this.verifyFindingEvidenceBlob(event.outputArtifactRef!, event.outputDigest!, "append");
+      // G4-R6-H2: the consumed ledger must have a REAL producing scan round
+      // in this run, and only findings whose origin is that scan source —
+      // evidence exactly this ledger blob, source capability solution-gate —
+      // are acceptable. A foreign finding borrowing the ledger reference is
+      // refused, not accepted.
+      const executions = this.readCapabilityExecutionsInTransaction(db, event.runId);
+      const producerScan = executions.find((item) =>
+        item.status === "succeeded" &&
+        item.capability === "solution-gate" &&
+        item.executionRole === "adversarial_scan" &&
+        item.unresolvedFindingsRef === event.consumedFindingsRef &&
+        item.unresolvedFindingsDigest === event.consumedFindingsDigest,
       );
+      if (producerScan === undefined) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "ledger acceptance requires a real producing adversarial_scan round for the consumed Finding Ledger",
+        );
+      }
       for (const target of current) {
         if (target.status !== "OPEN") continue;
         if (target.sourceCapability !== "solution-gate") continue;
-        if (!scanLedgerRefs.has(target.evidenceRef)) continue;
-        if (adjudication.mode === "PWR_ACCEPT") {
-          if (target.severity === "CRITICAL") continue;
-          if (target.evidenceRef !== event.consumedFindingsRef) continue;
-          const acceptance = validateLoopFindingRiskAcceptance({
-            riskAcceptedBy: "formal_verdict",
-            riskAcceptanceEvidenceRef: event.outputArtifactRef,
-            riskAcceptanceEvidenceDigest: event.outputDigest,
-            decisionScopeId: scopeId,
-          });
-          const accepted = acceptLoopFindingRisk(target, acceptance);
-          const updateResult = db.prepare(
-            `UPDATE loop_findings SET
-              status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
-              risk_acceptance_evidence_digest = ?, risk_accepted_scope_id = ?,
-              canonical_sha256 = ?
-            WHERE finding_id = ? AND status = ?`,
-          ).run(
-            "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
-            accepted.riskAcceptanceEvidenceDigest, accepted.riskAcceptedScopeId,
-            sha256Hex(canonicalizeLoopFinding(accepted)),
-            target.findingId, "OPEN",
-          );
-          if (updateResult.changes !== 1) {
-            corrupt("finding drifted during scan-finding risk acceptance");
-          }
-          insertFindingProofRow(db, createLoopFindingRiskAcceptanceProof(accepted, acceptance), event.runId);
-          acceptedFindingIds.push(target.findingId);
-        } else {
-          const resolution = validateLoopFindingResolution({
-            resolvedByNodeId: event.capability,
-            resolvedByRevisionId: examined!.revisionId,
-            resolutionEvidenceRef: event.outputArtifactRef,
-            resolutionEvidenceDigest: event.outputDigest,
-          });
-          const resolved = resolveLoopFinding(target, resolution);
-          const updateResult = db.prepare(
-            `UPDATE loop_findings SET
-              status = ?, resolved_by_revision_id = ?, resolution_evidence_ref = ?,
-              resolution_evidence_digest = ?, canonical_sha256 = ?
-            WHERE finding_id = ? AND status = ?`,
-          ).run(
-            "RESOLVED", resolved.resolvedByRevisionId, resolved.resolutionEvidenceRef,
-            resolved.resolutionEvidenceDigest, sha256Hex(canonicalizeLoopFinding(resolved)),
-            target.findingId, "OPEN",
-          );
-          if (updateResult.changes !== 1) {
-            corrupt("finding drifted during scan-finding resolution");
-          }
-          insertFindingProofRow(
-            db,
-            createLoopFindingResolutionProof(resolved, resolution, examined!),
-            event.runId,
-          );
-          resolvedFindingIds.push(target.findingId);
+        if (target.severity === "CRITICAL") continue;
+        if (
+          target.evidenceRef !== event.consumedFindingsRef ||
+          target.evidenceDigest !== event.consumedFindingsDigest
+        ) continue;
+        const acceptance = validateLoopFindingRiskAcceptance({
+          riskAcceptedBy: "formal_verdict",
+          riskAcceptanceEvidenceRef: event.outputArtifactRef!,
+          riskAcceptanceEvidenceDigest: event.outputDigest!,
+          decisionScopeId: scopeId,
+        });
+        const accepted = acceptLoopFindingRisk(target, acceptance);
+        const updateResult = db.prepare(
+          `UPDATE loop_findings SET
+            status = ?, risk_accepted_by = ?, risk_acceptance_evidence_ref = ?,
+            risk_acceptance_evidence_digest = ?, risk_accepted_scope_id = ?,
+            canonical_sha256 = ?
+          WHERE finding_id = ? AND status = ?`,
+        ).run(
+          "ACCEPTED_RISK", accepted.riskAcceptedBy, accepted.riskAcceptanceEvidenceRef,
+          accepted.riskAcceptanceEvidenceDigest, accepted.riskAcceptedScopeId,
+          sha256Hex(canonicalizeLoopFinding(accepted)),
+          target.findingId, "OPEN",
+        );
+        if (updateResult.changes !== 1) {
+          corrupt("finding drifted during scan-finding risk acceptance");
         }
+        insertFindingProofRow(db, createLoopFindingRiskAcceptanceProof(accepted, acceptance), event.runId);
+        acceptedFindingIds.push(target.findingId);
       }
     }
     return { registeredFindingIds, acceptedFindingIds, resolvedFindingIds };
@@ -2541,6 +2655,20 @@ export class LoopRunStore {
     }
     if (current.some((item) => item.sequence === event.sequence)) {
       throw new LoopRunJournalError("EVENT_SEQUENCE_CONFLICT", "capability execution sequence is occupied");
+    }
+    // G4-R6-H1: NEW capability execution events are written at the current
+    // schema version only. Historical schema versions stay readable (legacy
+    // journals keep verifying under their original canonical rules) but
+    // never gain fresh writes — and therefore never gain fresh
+    // decisionStatus authority: the v4 canonical form does not cover
+    // decisionStatus, so a v4 verdict's ruling can never be an admission or
+    // acceptance fact. Consumers independently require the current version
+    // (recovery A1 projection, PWR acceptance ruling, ledger adjudication).
+    if (event.schemaVersion !== LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "capability execution events are written at the current schema version only",
+      );
     }
     // Re-review F2-1: the terminal→revision window is a TRANSACTION
     // invariant of every started append, not merely a permit rule. While
@@ -4233,14 +4361,16 @@ export class LoopRunStore {
         if (target.severity === "CRITICAL") {
           throw new LoopRunJournalError("ILLEGAL_TRANSITION", "critical findings are not risk-acceptable");
         }
-        // The legal PWR basis: a succeeded formal_verdict event adjudicating
-        // THIS scope with a PASS_WITH_RISK + CONFIRMED ruling (v5 events
-        // carry decisionStatus; historical events never gain this authority).
+        // The legal PWR basis: a succeeded v5 formal_verdict event
+        // adjudicating THIS scope with a PASS_WITH_RISK + CONFIRMED ruling
+        // (G4-R6-H1: only v5 events carry decisionStatus authority — a v4
+        // row's unprotected status column never admits or accepts).
         const executions = this.readCapabilityExecutionsInTransaction(db, runId);
         const ruling = executions.find((event) =>
           event.status === "succeeded" &&
           event.capability === "solution-gate" &&
           event.executionRole === "formal_verdict" &&
+          event.schemaVersion === LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION &&
           event.decisionScopeId === valid.decisionScopeId &&
           event.gateResult === "PASS_WITH_RISK" &&
           event.decisionStatus === "CONFIRMED",
@@ -4251,15 +4381,47 @@ export class LoopRunStore {
             "no legal PASS_WITH_RISK+CONFIRMED formal_verdict ruling exists for this decision scope",
           );
         }
-        // Scan-source binding: the finding's evidence must be exactly the
-        // Finding Ledger the ruling adjudicated.
+        // G4-R6-H2: the acceptance evidence IS the ruling's own Gate Result
+        // blob — caller-chosen text (e.g. an unrelated human-action record)
+        // is refused, never rewritten silently.
         if (
-          ruling.consumedFindingsRef === null ||
-          target.evidenceRef !== ruling.consumedFindingsRef
+          ruling.outputArtifactRef === null || ruling.outputDigest === null ||
+          valid.riskAcceptanceEvidenceRef !== ruling.outputArtifactRef ||
+          valid.riskAcceptanceEvidenceDigest !== ruling.outputDigest
+        ) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "risk acceptance evidence must be the ruling verdict's own Gate Result blob",
+          );
+        }
+        // G4-R6-H2: origin binding beyond reference equality — the finding
+        // must originate from the gate's scan source (declared source
+        // capability AND evidence digest equal to the consumed ledger) and
+        // the ledger must have a REAL producing adversarial_scan round in
+        // this run. A foreign finding that merely borrows the consumed
+        // ledger reference is refused.
+        if (
+          ruling.consumedFindingsRef === null || ruling.consumedFindingsDigest === null ||
+          target.sourceCapability !== "solution-gate" ||
+          target.evidenceRef !== ruling.consumedFindingsRef ||
+          target.evidenceDigest !== ruling.consumedFindingsDigest
         ) {
           throw new LoopRunJournalError(
             "ILLEGAL_TRANSITION",
             "only scan-source findings adjudicated by the ruling's Finding Ledger may be risk-accepted",
+          );
+        }
+        const producerScan = executions.find((event) =>
+          event.status === "succeeded" &&
+          event.capability === "solution-gate" &&
+          event.executionRole === "adversarial_scan" &&
+          event.unresolvedFindingsRef === ruling.consumedFindingsRef &&
+          event.unresolvedFindingsDigest === ruling.consumedFindingsDigest,
+        );
+        if (producerScan === undefined) {
+          throw new LoopRunJournalError(
+            "ILLEGAL_TRANSITION",
+            "the ruling's consumed Finding Ledger has no producing adversarial_scan round in this run",
           );
         }
         this.verifyFindingEvidenceBlob(
@@ -4531,26 +4693,6 @@ export class LoopRunStore {
    * finding facts. Pure journal data — no skill surface, no caller input.
    */
   /** Per-point MAX(attempt) for Re-Gate mid-wave role refinement (WP4). */
-  private regatePointLastAttempts(
-    db: Database.Database,
-    runId: string,
-  ): Map<string, number> {
-    const rows = db.prepare(
-      `SELECT capability, execution_role, MAX(attempt) AS last_attempt
-       FROM loop_capability_executions WHERE run_id = ?
-       GROUP BY capability, execution_role`,
-    ).all(runId) as ReadonlyArray<{
-      capability: string;
-      execution_role: string;
-      last_attempt: number;
-    }>;
-    const map = new Map<string, number>();
-    for (const row of rows) {
-      map.set(`${row.capability}:${row.execution_role}`, row.last_attempt);
-    }
-    return map;
-  }
-
   private regateChainContextInTransaction(
     db: Database.Database,
     runId: string,
@@ -4599,11 +4741,21 @@ export class LoopRunStore {
     }));
     const currentByNode = new Map<NodeCapabilityId, CurrentRevisionFacts>();
     const pointerRows = db.prepare(
-      `SELECT c.node_id AS node_id, r.validity AS validity, r.generation AS generation
+      `SELECT c.node_id AS node_id, r.validity AS validity, r.generation AS generation,
+              r.artifact_ref AS artifact_ref, r.semver AS semver, r.digest AS digest,
+              r.revision_id AS revision_id
        FROM loop_artifact_current c
        JOIN loop_artifact_revisions r ON r.revision_id = c.revision_id
        WHERE c.run_id = ?`,
-    ).all(runId) as ReadonlyArray<{ node_id: string; validity: string; generation: number | null }>;
+    ).all(runId) as ReadonlyArray<{
+      node_id: string;
+      validity: string;
+      generation: number | null;
+      artifact_ref: string;
+      semver: string;
+      digest: string;
+      revision_id: string;
+    }>;
     for (const row of pointerRows) {
       currentByNode.set(row.node_id as NodeCapabilityId, {
         validity: row.validity,
@@ -4621,26 +4773,29 @@ export class LoopRunStore {
         ? null
         : { previousGeneration: Number(feedbackRow.previous_generation) };
     // G4-R5: succeeded-but-blocked points are mandatory wave re-drives —
-    // derived from the same journal facts the chain validator consumes.
-    // Raw reader: readCapabilityExecutionsInTransaction re-enters THIS
-    // context for read-path chain validation (mutual recursion).
+    // G4-R6-H5: derived through the ONE shared reduction (latest terminal
+    // per execution point) that the recovery projection also consumes, plus
+    // the shared gate-round facts — the planner never sees two diverging
+    // fact bases. Raw reader: readCapabilityExecutionsInTransaction
+    // re-enters THIS context for read-path chain validation (mutual
+    // recursion), so the rows stay raw here.
     const events = this.readCapabilityExecutionRowsValidatedInTransaction(db, runId);
-    const blockedPoints: number[] = [];
-    for (const item of events) {
-      if (
-        item.status === "succeeded" && item.nextStepEligibility === "BLOCKED" &&
-        item.capability !== "solution-gate"
-      ) {
-        const idx = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
-          (point) => point.capability === item.capability && point.executionRole === item.executionRole,
-        );
-        if (idx >= 0 && !blockedPoints.includes(idx)) blockedPoints.push(idx);
-      }
-    }
+    const blockedPoints = reduceBlockedPointIndexes(events);
+    const designCurrentRow = pointerRows.find((row) => row.node_id === "solution-design") ?? null;
+    const gateRoundFacts = reduceGateRoundFacts(
+      events,
+      designCurrentRow === null
+        ? null
+        : {
+            artifactRef: designCurrentRow.artifact_ref,
+            semver: designCurrentRow.semver,
+            digest: designCurrentRow.digest,
+          },
+    );
     const plan = planRegateFromFacts(
       historicalFindings,
       currentByNode,
-      this.regatePointLastAttempts(db, runId),
+      gateRoundFacts,
       feedbackChange,
       blockedPoints,
     );

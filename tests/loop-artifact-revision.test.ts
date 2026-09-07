@@ -1449,8 +1449,15 @@ console.log("artifact revision: manifest Artifact Index cross-binding");
     "stale runtime validity maps to the stale manifest status");
   assert(stop(crossBindArtifactIndexRow(row({ status: "current" }), staleRevision)) === "STATUS_DRIFT",
     "stale revision against a current manifest status is a STOP diagnosis");
+  // G4-R6-M4: the runtime cross-bind enforces the FROZEN §6.2.4 mapping
+  // verbatim. The former "actionable wherever stale" extension (asserted as
+  // correct here) widened the frozen contract — an actionable manifest row
+  // is a STATUS_DRIFT; the manual face's reflow annotation is judged by its
+  // real rework context in the manual-runtime layers, never by the runtime
+  // equivalence "any non-ACTIVE ⇒ actionable".
   const actionableRow = crossBindArtifactIndexRow(row({ status: "actionable" }), staleRevision);
-  assert(actionableRow.status === "OK", "a stale revision binds with the actionable reflow annotation");
+  assert(stop(actionableRow) === "STATUS_DRIFT",
+    "an actionable manifest row is STATUS_DRIFT in the runtime cross-bind (frozen mapping, G4-R6-M4)");
   const reviewRevision = createLoopArtifactRevision(revisionDraft({
     nodeId: "solution-gate", sequence: 1, semver: "1.0.0", digest: dg("f"),
     producerExecutionId: "run-001:capability:8:succeeded", gateResult: "PASS",

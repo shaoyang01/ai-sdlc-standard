@@ -124,7 +124,7 @@ Gate 是阶段准入条件，不是建议。
 - 异常处理、幂等、事务边界是否符合方案。
 - 是否引入兼容性、性能或安全风险。
 - 是否审阅了当前实现记录 Version。
-- 新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效；否则不阻塞本轮 closure（作为后续 improvement）。
+- 新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效；证明不成立时仍按 `causeKind=IMPROVEMENT` 登记 OPEN finding——与 REGRESSION 同等驱动返工波并阻断完成（G4-R5-H8），不存在"后续 improvement 不阻 closure"的旁路（G4-R6-M4 同步）。
 - 方案缺口必须按根因回流 `solution-design` / `task-planning`，不得只修代码。
 
 ### knowledge-sync 准入

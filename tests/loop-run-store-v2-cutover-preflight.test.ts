@@ -85,7 +85,11 @@ async function main(): Promise<void> {
     const report = preflightLoopRunStoreV2Cutover([root]);
     ok(report.candidateCount === 2, "both candidate files discovered");
     ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v7");
-    ok(verdictOf(report, "v7-journal.db")?.verdict === "OK_V7", "runtime-created journal classifies as OK_V7");
+    ok(
+      verdictOf(report, "v7-journal.db")?.verdict === "OK_SUPPORTED" &&
+        verdictOf(report, "v7-journal.db")?.declaredFormatVersion === 8,
+      "runtime-created journal classifies as OK_SUPPORTED with its real format version (G4-R6-L2: version-neutral verdict)",
+    );
     ok(verdictOf(report, "empty-v0.db")?.verdict === "FRESH_EMPTY", "empty unversioned database is FRESH_EMPTY");
   });
 
