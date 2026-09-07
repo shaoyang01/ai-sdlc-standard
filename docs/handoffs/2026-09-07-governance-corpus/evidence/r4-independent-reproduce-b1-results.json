@@ -1,0 +1,61 @@
+{
+  "evidence_root": "/tmp/d091-r4-b1-ytpjjmmb",
+  "reproductions": [
+    {
+      "entry": "adoption",
+      "folder": "memory",
+      "target": "/tmp/d091-r4-b1-ytpjjmmb/adoption-memory",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": "Use .sdlc/memory/x\n",
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [
+        ".sdlc/memory/a.md"
+      ],
+      "temp_archives": []
+    },
+    {
+      "entry": "adoption",
+      "folder": "coding_guide",
+      "target": "/tmp/d091-r4-b1-ytpjjmmb/adoption-coding_guide",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": "Use .sdlc/memory/x\n",
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [
+        ".sdlc/coding_guide/a.md"
+      ],
+      "temp_archives": []
+    },
+    {
+      "entry": "legacy",
+      "folder": "memory",
+      "target": "/tmp/d091-r4-b1-ytpjjmmb/legacy-memory",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": "Use .sdlc/memory/x\n",
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [
+        ".sdlc/memory/a.md"
+      ],
+      "temp_archives": []
+    },
+    {
+      "entry": "legacy",
+      "folder": "coding_guide",
+      "target": "/tmp/d091-r4-b1-ytpjjmmb/legacy-coding_guide",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": "Use .sdlc/memory/x\n",
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [
+        ".sdlc/coding_guide/a.md"
+      ],
+      "temp_archives": []
+    }
+  ]
+}
