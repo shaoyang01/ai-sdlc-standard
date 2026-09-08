@@ -1,6 +1,7 @@
 # AI-SDLC LOOP Core Contract
 
 > Status: Draft（2026-08-22，C02-WP3.5 阶段 3 合同重基线，Decision-044/045；待独立复审与 Current User 收口后升 Accepted）
+> Status note（2026-09-08 治理校准）：本合同自 Decision-090 冻结计划（2026-09-04）起被下游持续用作引用基线（G2 共同语义合同 v1.0.0、G3 `MANUAL_OPERATIONAL`、G4/D-087 集成）。Decision-049（2026-08-25）登记的是 `LOOP-CORE-02` = COMPLETED 的工作包收口事实；截至本注记撰写时，**尚未定位到把本合同文档 Status 由 Draft 改注为 Accepted 的明确记录**。在定位既有记录或由 Current User 作出该裁决之前维持 Draft，不自行升 Accepted。
 > Scope: AI-SDLC Standard 的 LOOP Core 产品合同。它定义目标、边界、运行语义和完成条件；不声明当前实现状态，不授予执行、Git 或发布权限。
 > Related: [Autonomous Delivery Roadmap](AI-SDLC-Autonomous-Delivery-Roadmap.md) · [Node Capability Contract](../ai-sdlc/node-capability-contract.md) · [C02-WP3.5 影响分析与实施规划](LOOP-CORE-C02-WP3.5-SINGLE-RAIL-IMPACT-ANALYSIS.md) · [Artifact Flow](../ai-sdlc/artifact-flow.md)
 
