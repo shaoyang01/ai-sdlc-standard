@@ -8,7 +8,7 @@
 - Requirement ID:
 - Requirement Name:
 - Version: 1.0.0
-- Status: active / blocked / completed / abandoned / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止，携带即 INVALID_INPUT——loop-artifact-revision.md）
 - Repository:
 - Created At:
 - Current Generation: 1
@@ -24,7 +24,7 @@
 本字段是 solution-gate（formal_verdict）设计深度裁决在 Manifest 中的唯一模板权威，语义遵循 `ai-sdlc/phase-gates.md` 与 `templates/gate-result-template.md`。
 
 - Depth: LIGHT / STANDARD / DEEP
-- Decision Status: DECIDED / BLOCKED_UNKNOWN
+- Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 枚举已废止——manual-runtime-semantic-contract §4.3）
 - Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE（变更时）
 - Decided At:
 - Decision Source: sdlc-solution-gate / formal_verdict
@@ -62,13 +62,13 @@ v2 change-control 保留字段（完整语义见 `ai-sdlc/change-control.md`）�
 
 | Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 00 需求资料 | yes | `00-需求资料/` |  |  | draft / active / stale / replaced |  |  |
-| 01 技术方案 | yes | `01-技术方案/` |  |  | draft / active / stale / replaced |  |  |
-| 02 方案审核 | yes | `02-方案审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |
-| 03 任务规划 | yes | `03-任务规划/` |  |  | draft / active / stale |  |  |
-| 04 实现记录 | actual_implementation_required | `04-实现记录/` |  |  | draft / active / stale |  |  |
-| 05 代码审核 | actual_implementation_required | `05-代码审核/` |  |  | draft / active / stale | closed / blocked / risk_accepted |  |
-| 06 知识同步 | yes | `06-知识同步/` |  |  | draft / active / stale | NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT |  |
+| 00 需求资料 | yes | `00-需求资料/` |  |  | current / stale / actionable |  |  |
+| 01 技术方案 | yes | `01-技术方案/` |  |  | current / stale / actionable |  |  |
+| 02 方案审核 | yes | `02-方案审核/` |  |  | current / stale / actionable | PASS / FAIL / PASS_WITH_RISK |  |
+| 03 任务规划 | yes | `03-任务规划/` |  |  | current / stale / actionable |  |  |
+| 04 实现记录 | actual_implementation_required | `04-实现记录/` |  |  | current / stale / actionable |  |  |
+| 05 代码审核 | actual_implementation_required | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked |  |
+| 06 知识同步 | yes | `06-知识同步/` |  |  | current / stale / actionable | NO_CHANGE / APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT |  |
 
 `07 交付总结` 属于 C03 Delivery Tail，不映射节点能力，不进入 node Artifact Index；单独登记，见下文 Delivery Tail 区段。
 
@@ -138,25 +138,20 @@ Normal updates to the same stable file use `Version` and `Change History`.
 
 - Result: PASS / FAIL / PASS_WITH_RISK
 - Can Continue: yes/no
-- Risk Accepted: yes/no
-- Accepted Risk:
-- Accepted By:
-- Accepted At:
-- Accepted Reason:
-- Accepted Scope:
+- Risk Refs:（PASS_WITH_RISK 随行的风险引用列表，指向 Finding Ledger 行——Decision-086/§7.1：verdict scope 级裁决即风险验收，无独立接受者/审批字段）
 - Follow-up Required: yes/no
 - Follow-up Owner:
 - Reviewed Artifact:
 - Reviewed Artifact Version:
 - Design Depth Decision: LIGHT / STANDARD / DEEP
-- Depth Decision Status: DECIDED / BLOCKED_UNKNOWN
+- Depth Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 已废止）
 - Finding Ledger Reference:
 - Scan Executor Binding:
 - Verdict Executor Binding:（必须与 Scan Executor Binding 不同）
 
 ### 代码审核（closure review 结论，非 Gate）
 
-- Closure Status: completed / blocked / risk_accepted
+- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径——manual-runtime-semantic-contract §5.2）
 - Blocking Findings:
 - Required Fixes:
 - Finding Ledger Reference:

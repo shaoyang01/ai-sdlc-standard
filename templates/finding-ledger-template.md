@@ -9,7 +9,7 @@
 - Artifact Type: Finding Ledger（solution-gate / adversarial_scan）
 - Round:（baseline / closure review 第 N 轮）
 - Version: 1.0.0
-- Status: draft / active / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止，携带即 INVALID_INPUT——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -22,7 +22,7 @@
 - adversarial_scan 只产出本 Ledger（对抗扫描发现），不做 Gate 裁决；
 - baseline 轮建立不可变基线；后续轮次为 closure review，只逐项验证 baseline
   finding 的修复证据，不给正式 Gate；
-- finding ID 沿用 `ADV-N` 序列，跨轮递增不复用。
+- finding ID = `{requirement_id}-F{两位序号}`（如 `20260908-common-data-analysis-F01`），全 requirement 单一序列、发现登记即占用、不可变（manual-runtime-semantic-contract §5.1）。
 
 ## Finding Ledger
 
@@ -31,13 +31,20 @@
 
 | Finding ID | Category | Severity | Message | Evidence / 位置 | Source Revision | Earliest Affected Node | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| ADV-001 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |
+| {requirement_id}-F01 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |
 
 ## Closure 对照（closure review 轮填写）
 
-| Finding ID | 处置（RESOLVED / ACCEPTED_RISK / SUPERSEDED） | 修复证据 / 验收引用 | 复核结论 |
+> Ledger 只承载不可变的 scan 发现事实（登记时 `OPEN`）。finding 的关闭/接受
+> **不在本文件回写**：处置经 `finding-action`（publisher）登记为生命周期记录 /
+> manifest findingIndex 行——`OPEN → RESOLVED`（独立关闭复验）或
+> `OPEN → ACCEPTED`（仅 scan 来源 + formal_verdict 合法 PASS_WITH_RISK；
+> manual-runtime-semantic-contract §5.2/§7.1）。下表只作本轮复核的对照视图，
+> 以 publisher 登记的生命周期记录为准。
+
+| Finding ID | 复核轮次 | 修复证据 / 验收引用 | 复核结论 |
 | --- | --- | --- | --- |
-| ADV-001 |  |  |  |
+| {requirement_id}-F01 |  |  |  |
 
 ## 结论
 

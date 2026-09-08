@@ -8,7 +8,7 @@
 - Requirement ID:
 - Artifact Type: 实现记录（implementation）
 - Version: 1.0.0
-- Status: draft / active / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -57,10 +57,10 @@
 
 ## Gate 随行风险关闭对照
 
-> 02-方案审核 PWR 随行风险（如 ADV-006/007 类关闭条件）逐条对照；
+> 02-方案审核 PWR 随行风险（Gate Risk Refs，指向 Finding Ledger 行，如 `{requirement_id}-F01`）逐条对照；
 > 无随行风险则写"无"并引用 Gate 结论。
 
-| ADV / 风险项 | 关闭条件 | 关闭证据引用 | 状态 |
+| Risk Ref（Finding Ledger 行） | 关闭条件 | 关闭证据引用 | 状态 |
 | --- | --- | --- | --- |
 |  |  |  |  |
 

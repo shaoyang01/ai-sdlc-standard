@@ -57,7 +57,7 @@ Update the stable artifact file and increment its internal Metadata Version inst
 - Requirement Name:
 - Artifact Type: 需求摘要
 - Version: 1.0.0
-- Status: draft / active / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Intake Classification: New Requirement / Requirement Supplement / Requirement Change / Rework / Feedback-Driven Change / Documentation Correction
 - Created At:
 - Updated At:

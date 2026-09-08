@@ -8,7 +8,7 @@
 - Requirement ID:
 - Artifact Type: 知识同步结果（knowledge-sync）
 - Version: 1.0.0
-- Status: draft / active / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:

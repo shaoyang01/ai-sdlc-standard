@@ -8,7 +8,7 @@
 - Requirement ID:
 - Artifact Type: 任务计划（task-planning）
 - Version: 1.0.0
-- Status: draft / active / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -56,7 +56,7 @@
 
 ## 测试任务覆盖
 
-（测试任务清单及其覆盖的验收标准；含 Gate 随行风险的关闭对照，如 ADV-006/007 类关闭条件）
+（测试任务清单及其覆盖的验收标准；含 Gate 随行风险的关闭对照，如 `{requirement_id}-F01` 类 Risk Ref 的关闭条件）
 
 ## 范围外
 
