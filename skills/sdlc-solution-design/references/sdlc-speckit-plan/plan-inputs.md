@@ -24,7 +24,7 @@ Continue only when:
 - `sdlc-speckit-clarify` has no Blocking Items.
 - `specs/{feature}/spec.md` is current and not stale.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
-- Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.
+- 深度起点由 requirement-intake 提案、formal_verdict 终审（manual-runtime-semantic-contract §4.2/§4.3；Development Path 双轨判定已废止）。
 - No open Required Action affects Scope, data, state, failure behavior, or acceptance.
 
 ## Missing Clarify Result

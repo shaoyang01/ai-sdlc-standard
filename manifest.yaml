@@ -118,9 +118,7 @@ skills:
     contract: skill-contracts/known-skills/sdlc-knowledge-sync.md
     references:
       - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/classification-routing.md
-      - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/output-report.md
       - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/sync-boundaries.md
-      - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/sync-workflow.md
       - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/conflict-and-blocking.md
       - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/fact-eligibility.md
       - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/output-and-manifest.md
@@ -169,7 +167,6 @@ skills:
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/challenge-workflow.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/finding-classification.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/follow-up-verification.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-challenger/output-report.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/scope-and-phase-firewall.md
   sdlc_task_planning:
     path: skills/sdlc-task-planning/SKILL.md

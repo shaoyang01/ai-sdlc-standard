@@ -31,7 +31,7 @@ Continue only when:
 - Route source is known from `specs/{feature}/route.md`, Pipeline Domain Route Summary, or Analyze Gate evidence.
 - `02-方案审核` result is `PASS` or valid `PASS_WITH_RISK`.
 - Task Gate and Analyze Gate are passable.
-- Development Path Decision is `SPECKIT_PIPELINE_REQUIRED`, unless the user explicitly requested full SDD.
+- 准入（A2）：current 的任务计划（PWR Risk Refs 随行）——manual-runtime-semantic-contract §7.3；Development Path 双轨判定已废止。
 - Tasks identify implementation targets and verification expectations.
 
 ## Repository State Checks

@@ -13,10 +13,7 @@ sdlc-requirement-intake
   -> sdlc-task-planning -> sdlc-implementation -> sdlc-code-review -> sdlc-knowledge-sync
 ```
 
-旧双轨分流（`DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` /
-`BLOCKED_NEEDS_REVISION`）与 Plan Gate 前置已随 D-088-01 v3 迁移与
-manual-runtime-semantic-contract §4.3 首轮解耦废止；`specs/**` 为退役
-只读历史面，不是准入前置。
+
 
 ## Step 1: Input Resolution
 

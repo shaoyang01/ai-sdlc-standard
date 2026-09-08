@@ -74,7 +74,7 @@ Recorded readiness/Gate blockers (each is scanned and reported, then drives
   `service_inventory.tsv` cannot be parsed by TSV fields.
 - `02-方案审核` result is not `PASS` / valid `PASS_WITH_RISK`.
 - Plan Gate result or Task Gate result is not passable.
-- Development Path Decision is not `SPECKIT_PIPELINE_REQUIRED` (unless the
+- Development Path 双轨判定已废止（manual-runtime-semantic-contract §4.3）：任务规划准入按 A1（
   user explicitly requested full SDD).
 - An open Required Action affects implementation readiness.
 

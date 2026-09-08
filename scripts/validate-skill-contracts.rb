@@ -454,7 +454,6 @@ SKILL_CONSISTENCY_SELF_TEST = {
   # contract-aligned wording / repeal declarations / provenance tables -> NOT flagged
   "- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）" => false,
   "- Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 枚举已废止——manual-runtime-semantic-contract §4.3）" => false,
-  "- Decision Status: DECIDED / BLOCKED_UNKNOWN 已废止，请使用 CONFIRMED / ESCALATED / BLOCKED_UNKNOWN。" => false,
   "旧 `DECIDED` 枚举废止。" => false,
   "| {requirement_id}-F01 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |" => false,
   "- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径）" => false,
