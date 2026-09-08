@@ -329,6 +329,63 @@ def unsafe_dual_rail_declarations(text)
   unsafe_hits(text, DUAL_RAIL_DECLARATION_PATTERN, require_normative: DUAL_RAIL_NORMATIVE_RE)
 end
 
+# G4-closure skill-consistency wave (2026-09-08): the manual-face finding
+# identity, disposition vocabulary, repealed manifest status words, the retired
+# DECIDED depth enum and the retired Speckit source-of-truth directive must not
+# re-enter normative skills/templates content. Authoritative contract:
+# manual-runtime-semantic-contract.md §5.1/§5.2/§7.1 (finding_id =
+# {requirement_id}-F{nn}; OPEN -> RESOLVED | ACCEPTED; Gate Ledger carries
+# immutable scan facts only, disposition via publisher finding-action) and
+# loop-artifact-revision.md (frozen manifest status vocabulary
+# current/stale/actionable; draft/active/replaced repealed).
+LEGACY_FINDING_ID_PATTERN = /\bADV-\d+\b|\bADV-N\b/
+LEGACY_DISPOSITION_ENUM_PATTERN = /\bACCEPTED_RISK\b|\brisk_accepted\b|\bSUPERSEDED\b/
+REPEALED_STATUS_VOCAB_PATTERN =
+  /draft \/ active \/ stale \/ replaced|active \/ blocked \/ completed \/ abandoned \/ stale \/ replaced|draft \/ active \/ stale\b/
+LEGACY_DECIDED_ENUM_PATTERN = /DECIDED \/ BLOCKED_UNKNOWN/
+LEGACY_SPECS_SOT_PATTERN = /`specs\/\*\*` as the SpecKit machine source of truth|`specs\/\*\*`[^。\n]{0,40}source of truth/i
+SKILL_CONSISTENCY_NORMATIVE_RE = /
+  \bStatus\b|
+  处置|
+  Closure\s*Status|
+  Decision\s+Status|
+  Depth\s+Decision\s+Status|
+  finding\s+ID|
+  finding\s+编号|
+  source\s+of\s+truth
+/ix
+
+def unsafe_skill_finding_vocabulary(text)
+  hits = []
+  hits.concat(unsafe_hits(text, LEGACY_FINDING_ID_PATTERN))
+  hits.concat(unsafe_hits(text, LEGACY_DISPOSITION_ENUM_PATTERN,
+                          require_normative: SKILL_CONSISTENCY_NORMATIVE_RE))
+  hits.concat(unsafe_hits(text, REPEALED_STATUS_VOCAB_PATTERN,
+                          require_normative: /\bStatus\b/i))
+  hits.concat(unsafe_hits(text, LEGACY_DECIDED_ENUM_PATTERN,
+                          require_normative: /Decision\s+Status/i))
+  hits.concat(unsafe_hits(text, LEGACY_SPECS_SOT_PATTERN,
+                          require_normative: /source\s+of\s+truth/i))
+  hits.uniq
+end
+
+SKILL_CONSISTENCY_SELF_TEST = {
+  # normative legacy identity / disposition / vocabulary -> flagged
+  "- finding ID 沿用 `ADV-N` 序列，跨轮递增不复用。" => true,
+  "| ADV-001 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |" => true,
+  "| Finding ID | 处置（RESOLVED / ACCEPTED_RISK / SUPERSEDED） | 修复证据 |" => true,
+  "- Status: draft / active / stale / replaced" => true,
+  "- Status: active / blocked / completed / abandoned / stale / replaced" => true,
+  "- Decision Status: DECIDED / BLOCKED_UNKNOWN" => true,
+  "Treat `specs/**` as the SpecKit machine source of truth and `library/{requirement_id}/**` as the handoff view." => true,
+  # contract-aligned wording / repeal declarations -> NOT flagged
+  "- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）" => false,
+  "- Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 枚举已废止——manual-runtime-semantic-contract §4.3）" => false,
+  "旧 `DECIDED` 枚举废止。" => false,
+  "| {requirement_id}-F01 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |" => false,
+  "- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径）" => false
+}.freeze
+
 DUAL_RAIL_SELF_TEST = {
   # normative declarations -> must be flagged
   "Reconcile supports three source modes: speckit_driven, library_driven, hybrid." => true,
@@ -597,6 +654,16 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
 
   unsafe_legacy_process_runtime_outputs(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} treats legacy process filename as runtime output or compatibility format: #{line}"
+  end
+end
+
+skill_consistency_scan_paths = [
+  Dir[File.join(ROOT, "templates", "**", "*.md")],
+  Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")]
+].flatten.select { |path| File.file?(path) }.uniq.sort
+skill_consistency_scan_paths.each do |path|
+  unsafe_skill_finding_vocabulary(File.read(path)).each do |line_number, line|
+    errors << "#{relative(path)}:#{line_number} carries legacy finding identity / disposition / status vocabulary as normative guidance: #{line}"
   end
 end
 
@@ -1123,9 +1190,13 @@ end
 # Self-tests for the per-hit negation detectors (table-driven red/green;
 # D088-R1-H7 / D088-R2-H4 / D088-R2-H5 — Ruby 2.6 compatible, no filter_map).
 begin
-  %w[DUAL_RAIL LEGACY_SOURCE].each do |table_name|
+  %w[DUAL_RAIL LEGACY_SOURCE SKILL_CONSISTENCY].each do |table_name|
     table = Object.const_get("#{table_name}_SELF_TEST")
-    detector = table_name == "DUAL_RAIL" ? method(:unsafe_dual_rail_declarations) : method(:unsafe_legacy_source_references)
+    detector = {
+      "DUAL_RAIL" => method(:unsafe_dual_rail_declarations),
+      "LEGACY_SOURCE" => method(:unsafe_legacy_source_references),
+      "SKILL_CONSISTENCY" => method(:unsafe_skill_finding_vocabulary)
+    }[table_name]
     failures = []
     table.each do |sample, expected_flag|
       actual_flag = !detector.call(sample).empty?

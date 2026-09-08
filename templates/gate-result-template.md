@@ -8,7 +8,7 @@
 - Requirement ID:
 - Artifact Type: 方案审核（solution-gate 正式裁决）/ 其他
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md；裁决结论承载于下方 Result 字段）
 - Reviewer / Skill:
 - Created At:
 - Updated At:

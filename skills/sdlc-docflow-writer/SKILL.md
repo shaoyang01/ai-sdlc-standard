@@ -24,7 +24,7 @@ Support three output targets:
 3. If the output format cannot be inferred, ask the user to choose Markdown, HTML, or Lark/Feishu.
 4. Write local DocFlow artifacts under `library/{requirement_id}/{node_directory}/`.
 5. Do not use legacy `library/技术方案/` or `library/代码审核/` as the primary DocFlow path.
-6. Treat `specs/**` as the SpecKit machine source of truth and `library/{requirement_id}/**` as the human handoff view.
+6. Treat `library/{requirement_id}/**` as the human handoff view. `specs/**` 与 `.specify/**` 是 D-088-01 v3 迁移前的退役历史面（原件归档 `.sdlc/legacy/**`）：只读引用，不是 source of truth，也不得作为新产物生成依据；现役事实源见 manual-runtime-semantic-contract（library 产物 + requirement manifest + `.sdlc/business_domain/**`）。
 7. When publishing to Lark/Feishu, use `lark-cli` with user identity. If authorization expires, stop and ask the user to renew authorization.
 8. Do not silently downgrade a requested Lark/Feishu document into a local-only file.
 
@@ -160,7 +160,7 @@ Allowed:
 Not allowed:
 
 - Modify production code
-- Modify `specs/**` as the source of truth
+- Modify `specs/**` or `.specify/**`（retired read-only historical roots; never a source of truth）
 - Modify `.specify/business_domain/**`
 - Commit or push git changes
 - Treat Lark/Feishu publication as complete when authorization failed
