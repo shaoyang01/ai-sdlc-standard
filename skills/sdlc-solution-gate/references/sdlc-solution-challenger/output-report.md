@@ -1,3 +1,5 @@
+> 已退役（迁移历史参考）：adversarial_scan 产物以 canonical Finding Ledger（02-方案审核/{id}_FindingLedger.md）为准，独立"方案挑战报告"不再产出。本文件仅作结构/措辞的历史参考，禁止作为产出格式依据或执行入口；现役形态见对应 canonical 模板/本包 SKILL.md。
+
 # Output Report Structure
 
 ## Output Location

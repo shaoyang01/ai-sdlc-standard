@@ -14,7 +14,7 @@ The artifact must include:
 - Requirement ID:
 - Artifact Type:
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -96,7 +96,7 @@ library/{requirement_id}/manifest.md
 
 Resolve standard-package paths from the repository root that contains `manifest.yaml`.
 
-If `manifest.md` does not exist, create it from `templates/artifact-manifest-template.md` when possible.
+`manifest.md` 由 `sdlc-requirement-intake` 经 `scripts/publish-requirement-manifest.sh init` 创建（manual-runtime-semantic-contract §6.1）；其余节点经 `entry-update` 提交（§6.2 publisher 唯一写入，禁止直接编辑或按模板直建）。`manifest.md` 缺失的存量 `library/` 目录不得复用为现役产物面（§6.1），须先由 Owner 决定重建或归档。
 
 Update manifest after successful local write or Lark/Feishu publication:
 

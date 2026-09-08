@@ -101,8 +101,8 @@ When the requirement already has downstream artifacts, identify the earliest aff
 - Requirement goal, scope, or success criteria changes -> `00-需求资料`
 - Behavior, compatibility, exception, data, API, state, or acceptance detail changes -> `01-技术方案`
 - Gate decision or risk acceptance changes -> `02-方案审核`
-- Implementation scope or verification result changes -> `03-实现记录`
-- Review result changes -> `04-代码审核`
-- Test feedback or acceptance evidence changes -> `05-测试验收`
+- Implementation scope or verification result changes -> `04-实现记录`
+- Review closure result changes -> `05-代码审核`
+- Test feedback or acceptance evidence changes -> intake 分类重入（`00-需求资料/反馈/`，FEEDBACK_DRIVEN_CHANGE）
 
 Recommend Re-Gate from that node.

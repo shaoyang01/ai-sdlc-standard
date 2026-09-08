@@ -49,7 +49,7 @@ Before editing:
 If no Analyze Gate result exists:
 
 - Continue only when the user explicitly confirms all artifacts are current and implementation readiness has no open blocker.
-- Recommend running `sdlc-speckit-analyze`.
+- Recommend `sdlc-task-planning`（一致性审计属任务规划内部能力）.
 - Do not implement from raw tasks when artifact consistency is unresolved.
 
 ## Source Priority

@@ -83,10 +83,10 @@ Mark `Ready for Code Review: no` when:
 
 Use one of:
 
-- `Run sdlc-code-review-normalizer`
+- `sdlc-code-review（发现经 finding-register 登记）`
 - `Fix implementation bug`
 - `Return to sdlc-specification-writer`
-- `Run sdlc-solution-reviewer`
+- `Gate 复审由 sdlc-solution-gate 承担`
 - `Apply change-control and re-Gate`
 - `Run missing verification`
 

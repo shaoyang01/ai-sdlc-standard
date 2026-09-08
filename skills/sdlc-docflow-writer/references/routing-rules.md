@@ -11,11 +11,11 @@ Map user intent to one DocFlow node.
 | 方案审核, 方案审查, 审阅方案, 开发前 Gate, 方案评审报告 | `02-方案审核/` | `方案审核` |
 | 实现记录, 实现总结, Codex 实现摘要, 开发记录, 改动说明 | `04-实现记录/` | `实现记录` |
 | 代码审核, 代码审查, Code Review, Review 报告 | `05-代码审核/` | `代码审核` |
-| 测试反馈, 测试验收, 整理 bug, 测试截图, 复现步骤, 验收问题 | `05-代码审核/` | `代码审核`（WP3.5 测试反馈并入代码审核节点） |
+| 测试反馈, 整理 bug, 测试截图, 复现步骤, 验收问题 | `00-需求资料/反馈/` | `测试反馈分类`（原始反馈经 `sdlc-requirement-intake` 分类为 FEEDBACK_DRIVEN_CHANGE；实现期审核反馈经 `sdlc-code-review` 走 `05-代码审核/`） |
 
 If multiple nodes match, prefer the more specific node:
 
-1. 测试验收
+1. 测试反馈分类（归 intake）
 2. 代码审核
 3. 方案审核
 4. 实现记录

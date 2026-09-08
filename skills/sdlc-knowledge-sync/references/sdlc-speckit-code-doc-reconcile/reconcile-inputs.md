@@ -13,8 +13,8 @@ required and are not single-rail inputs.
 - Requirement ID (and feature identifier when available).
 - Current repository status, relevant diff, commit range, or implementation scope.
 - Approved DocFlow artifacts from `library/{requirement_id}/01-技术方案` and `library/{requirement_id}/02-方案审核`.
-- Implementation evidence when auditing implemented behavior (`library/{requirement_id}/03-实现记录/*`).
-- Verification evidence when auditing sync completeness (`library/{requirement_id}/05-测试验收/*`).
+- Implementation evidence when auditing implemented behavior (`library/{requirement_id}/04-实现记录/*`).
+- Review closure evidence when auditing sync completeness (`library/{requirement_id}/05-代码审核/*`).
 - `manifest.md` when available.
 - `.sdlc/business_domain/**` or declared knowledge target when auditing knowledge sync.
 
@@ -24,10 +24,9 @@ Absence of legacy specs paths is never a blocker on the single rail.
 
 Use these when present:
 
-- `library/{requirement_id}/03-实现记录/*`.
-- `library/{requirement_id}/04-交付总结/*`.
-- `library/{requirement_id}/04-代码审核/*`.
-- `library/{requirement_id}/05-测试验收/*`.
+- `library/{requirement_id}/04-实现记录/*`.
+- `library/{requirement_id}/05-代码审核/*`.
+- `library/{requirement_id}/06-知识同步/*`.
 - Current `.sdlc/business_domain/**` or other declared knowledge target.
 - Re-Gate Records and Replaced Artifact Paths.
 - Accepted risk records.

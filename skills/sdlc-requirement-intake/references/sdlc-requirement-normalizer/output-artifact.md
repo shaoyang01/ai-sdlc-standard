@@ -14,7 +14,7 @@ The artifact must include:
 - Requirement ID:
 - Artifact Type:
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -123,21 +123,21 @@ Recommend these manifest updates when an artifact is written:
 - Change History: record the change if classification is not `New Requirement`.
 - Missing Artifacts: list missing inputs or downstream artifacts.
 - Blocking Issues: record blocking conflicts or missing context.
-- Next Step: `Run sdlc-specification-writer`, `Clarify requirement source`, or `Apply change-control and re-Gate`.
+- Next Step: `Proceed to sdlc-solution-design`, `Clarify requirement source`, or `Apply change-control and re-Gate`.
 
 Do not silently edit `manifest.md` unless the user explicitly asks for file updates or output routing through `sdlc-docflow-writer`.
 
 ## Readiness Values
 
-Use `Ready for sdlc-specification-writer: yes` only when no core-blocking uncertainty remains.
+Use `Ready for sdlc-solution-design: yes` only when no core-blocking uncertainty remains.
 
-Use `Ready for sdlc-specification-writer: no` when:
+Use `Ready for sdlc-solution-design: no` when:
 
 - Business goal is unclear.
 - Scope is unresolved.
 - Source priority is unresolved.
 - Required source is missing.
-- A change requires upstream Re-Gate before a new specification can be written.
+- A change requires upstream Re-Gate before a new specification can be written（方案由 sdlc-solution-design 增量产出，Gate 复审属 solution-gate）.
 
 ## Response Summary
 
@@ -146,6 +146,6 @@ When returning the result to the user, include:
 - Requirement ID
 - Intake classification
 - Whether a file was written
-- Ready for `sdlc-specification-writer`
+- Ready for `sdlc-solution-design`
 - Blocking conflicts or missing context
 - Recommended next step

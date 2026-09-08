@@ -48,6 +48,6 @@ Avoid tasks that are:
 
 Do not modify production code in this skill.
 
-Use `sdlc-speckit-implement` after Task Gate and cross-artifact analysis pass.
+Use `sdlc-implementation` after the task plan is current（A2）.
 
 The task list may specify intended files or modules, but it must not contain code patches.

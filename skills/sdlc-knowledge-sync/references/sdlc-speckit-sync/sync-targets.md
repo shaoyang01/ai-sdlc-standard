@@ -192,4 +192,4 @@ Stop when:
 - A missing L4 target would require writing to `99PendingConfirmation`.
 - Create-if-missing would leave the L2 main document index or `01DomainCatalog.md` stale.
 
-Recommend `sdlc-speckit-code-doc-reconcile` when code and knowledge appear to disagree.
+Recommend the code/document consistency audit of this Skill（`sdlc-knowledge-sync` 内部能力）when code and knowledge appear to disagree.

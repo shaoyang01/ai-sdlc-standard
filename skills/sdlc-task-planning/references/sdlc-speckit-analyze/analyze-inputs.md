@@ -86,7 +86,7 @@ If no Task Gate result exists:
   scan completes and the Gate concludes `FAIL` unless
   `specs/{feature}/tasks.md` contains an explicit no-blocking Task Gate
   section and the user explicitly confirms it is current.
-- Recommend running `sdlc-speckit-tasks`.
+- Recommend `sdlc-task-planning`.
 - Do not approve implementation readiness from raw tasks or unreviewed implementation notes.
 
 ## Source Priority

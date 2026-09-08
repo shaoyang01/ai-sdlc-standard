@@ -64,4 +64,4 @@ Block when:
 
 Summarize coverage in a compact table with category, status, evidence, and action.
 
-Recommend `sdlc-speckit-tasks` only when there are no Blocking items.
+Recommend `sdlc-task-planning` only when there are no Blocking items.

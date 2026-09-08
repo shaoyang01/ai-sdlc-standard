@@ -35,7 +35,7 @@ Classify the request before writing the summary.
 | Requirement Change | The goal, scope, rule, or success criteria changes during the flow. | `00-需求资料` or `01-技术方案` |
 | Rework | Implementation or review reveals a misunderstood requirement. | Earliest affected node |
 | Specification Missing | The original requirement goal is unchanged, but the technical specification misses behavior, exception, compatibility, data, interface, state, or acceptance details. | `01-技术方案` |
-| Feedback-Driven Change | Test or review feedback exposes a specification gap. | `05-测试验收` plus affected upstream node |
+| Feedback-Driven Change | Test or review feedback exposes a specification gap. | 分类结论 + 受影响上游节点（`00-需求资料/反馈/`；不设"测试验收"节点） |
 | Documentation Correction | Only wording, typo, path, or layout changes. | Activity Log only, unless Gate is affected |
 
 For Requirement Supplement, Requirement Change, Rework, Specification Missing, or Feedback-Driven Change, output the supplement routing fields:
@@ -96,7 +96,7 @@ Do not promote inferred content to confirmed content.
 
 ## Step 5: Evaluate Downstream Readiness
 
-Mark `Ready for sdlc-specification-writer: yes` only when:
+Mark `Ready for sdlc-solution-design: yes` only when:
 
 - Business goal is clear.
 - In Scope and Out of Scope are separated.
@@ -104,15 +104,18 @@ Mark `Ready for sdlc-specification-writer: yes` only when:
 - Source conflicts do not affect core scope.
 - Missing context does not affect core behavior.
 
-Mark `Ready for sdlc-specification-writer: no` when core behavior, scope, or source priority is unresolved.
+Mark `Ready for sdlc-solution-design: no` when core behavior, scope, or source priority is unresolved.
 
 ## Step 6: Recommend The Next Step
 
 Use one of:
 
-- `Run sdlc-specification-writer` when the intake is stable.
+- `Proceed to sdlc-solution-design` when the intake is stable（下一节点：方案设计首轮直接产出方案，manual-runtime-semantic-contract §4.3）.
 - `Clarify requirement source` when source priority or core scope is unresolved.
 - `Apply change-control and re-Gate` when this is a change to an active flow.
 - `Attach missing source` when a referenced document, screenshot, or attachment is required.
 
-Do not recommend `sdlc-solution-reviewer` directly unless a technical specification already exists.
+退役来源包（`sdlc-specification-writer` / `sdlc-solution-reviewer` /
+`sdlc-requirement-normalizer` 等）已全部吸收进现役七节点 Skill，仅作历史
+溯源；不得作为可调用入口或下一步推荐。Gate 裁决属 solution-gate，不直接
+跳审核角色。

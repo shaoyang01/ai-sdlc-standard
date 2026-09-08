@@ -5,7 +5,7 @@
 | Classification | Primary Route | Checklist / Schema Recommendation | Knowledge Sync |
 | --- | --- | --- | --- |
 | Implementation Bug | Fix code and update `03-实现记录`. | Only recommend if the bug reveals a reusable implementation checklist gap. | Do not sync failed behavior. |
-| Specification Missing | Return to `01-技术方案` and rerun `sdlc-solution-reviewer`. | Recommend Specification Checklist or Schema update when the missing rule is reusable. | Sync only after new Gate passes. |
+| Specification Missing | Return to `01-技术方案`（`sdlc-solution-design` 增量补强）. | Recommend Specification Checklist or Schema update when the missing rule is reusable. | Sync only after new Gate passes. |
 | Review Missing | Record review gap and improve review checklist. | Recommend Code Review Checklist update. | Sync review lesson only after fix is validated. |
 | Requirement Change | Apply change-control. | No checklist/schema update unless the change reveals a reusable intake rule. | Do not sync until requirement is confirmed and Gate passes. |
 | Test Case Issue | Update test case or acceptance wording. | Recommend test feedback schema wording only if the issue is systemic. | Usually no knowledge sync. |

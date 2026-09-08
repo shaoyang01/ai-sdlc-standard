@@ -5,8 +5,12 @@
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/05-测试验收/{requirement_id}_测试验收.md
+library/{requirement_id}/00-需求资料/反馈/{requirement_id}_测试反馈分类.md
 ```
+
+原始测试/线上反馈由 requirement-intake 归一化并分类为
+`FEEDDBACK_DRIVEN_CHANGE` 等变更记录后由相应节点消费；intake 不设
+"测试验收"节点，不做发布判定（manual-runtime-semantic-contract §6.1/§6.2）。
 
 Update the stable artifact file and increment its internal Metadata Version instead of creating a versioned filename.
 
@@ -19,18 +23,15 @@ Update the stable artifact file and increment its internal Metadata Version inst
 
 - Requirement ID:
 - Requirement Name:
-- Artifact Type: 测试验收
+- Artifact Type: 测试反馈分类
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Reporter / Tester:
 - Classifier / Skill:
 - Created At:
 - Updated At:
 - Reviewed Artifact:
 - Reviewed Artifact Version:
-- Gate Artifact Version:
-- Result: PASS / FAIL / PASS_WITH_RISK
-- Can Release: yes/no
 - Repository:
 - Environment:
 - Feedback Source:
@@ -102,7 +103,7 @@ Update the stable artifact file and increment its internal Metadata Version inst
 
 Recommend updates for:
 
-- Artifact Index: add or update `05 测试验收`.
+- 分类结论由相应节点消费；requirement manifest 的 Artifact Index 由 publisher 维护（intake 经 init/entry-update 提交），不新增"测试验收"节点。
 - Activity Log: record test feedback classification.
 - Change History: record Requirement Change, Specification Missing, Review Missing, Implementation Bug, Test Case Issue, or Environment / Data Issue.
 - Re-Gate Records: record required Re-Gate path when applicable.

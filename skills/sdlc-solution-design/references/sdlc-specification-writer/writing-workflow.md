@@ -4,14 +4,19 @@
 
 Use this workflow to turn requirement input or a draft solution into an ESS-compliant `01-技术方案` artifact.
 
-Expected downstream flow:
+Expected downstream flow（七节点单轨，manual-runtime-semantic-contract §2 I-A/§4.3）：
 
 ```text
-sdlc-requirement-normalizer
-  -> sdlc-specification-writer
-  -> sdlc-solution-reviewer
-  -> DIRECT_IMPLEMENTATION / SPECKIT_PIPELINE_REQUIRED / BLOCKED_NEEDS_REVISION
+sdlc-requirement-intake
+  -> sdlc-solution-design（首轮按 requiredDepth 直接产出方案，不等待 Gate）
+  -> sdlc-solution-gate（adversarial_scan -> formal_verdict）
+  -> sdlc-task-planning -> sdlc-implementation -> sdlc-code-review -> sdlc-knowledge-sync
 ```
+
+旧双轨分流（`DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQUIRED` /
+`BLOCKED_NEEDS_REVISION`）与 Plan Gate 前置已随 D-088-01 v3 迁移与
+manual-runtime-semantic-contract §4.3 首轮解耦废止；`specs/**` 为退役
+只读历史面，不是准入前置。
 
 ## Step 1: Input Resolution
 
@@ -120,6 +125,6 @@ Whole-model impact self-check: every applicable frozen surface from the shared r
 
 After output:
 
-- Recommend `sdlc-solution-reviewer`.
-- Recommend manifest Artifact Index and Activity Log updates.
+- Next step: `sdlc-solution-gate` adversarial_scan（Owner 驱动）。
+- Recommend manifest Artifact Index and Activity Log updates（经 publisher）.
 - If HTML or Lark/Feishu output is requested, route through `sdlc-docflow-writer`.

@@ -14,7 +14,7 @@ The artifact must include:
 - Requirement ID:
 - Artifact Type:
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -100,14 +100,14 @@ Use this structure:
 - Recommended action:
 ```
 
-## Handoff To Normalizer
+## Handoff To Registration
 
-Use `sdlc-code-review-normalizer` when:
-
-- The review must be written to `library/{requirement_id}/04-代码审核/`.
-- Multiple review sources must be merged.
-- The report must strictly follow `ess/code-review-schema.md`.
-- Manifest Code Review Gate recommendations need a DocFlow artifact.
+审核产物写 `library/{requirement_id}/05-代码审核/`；发现经
+`finding-register` 登记、状态迁移经 `finding-action`（publisher 写入
+生命周期记录——manual-runtime-semantic-contract §5.1/§5.2）。`sdlc-code-
+review-normalizer` 为退役来源包（已吸收进本包归一化规则），不得作为独立
+入口调用。多来源合并与 `ess/code-review-schema.md` 结构要求由本包在登记
+前完成。
 
 ## Manifest Recommendation
 
