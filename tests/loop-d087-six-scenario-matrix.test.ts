@@ -331,13 +331,18 @@ async function main(): Promise<void> {
       ]);
       // G4-R7-B5: capture the ACTUAL dispatch carriers — the unique risk
       // marker must reach the real staged/stdin content, not just the delta.
-      const captured: { stdin: string | null; stagedText: string } = { stdin: null, stagedText: "" };
+      // S2 (G4-R9): capture PER CAPABILITY — a single shared slot let the
+      // implementation dispatch overwrite the task-planning capture, so the
+      // planning carrier was never independently asserted.
+      const captured = new Map<string, { stdin: string | null; stagedText: string }>();
       const { adapter } = scriptedAdapter(script, (req) => {
         if (req.capability === "task-planning" || req.capability === "implementation") {
-          captured.stdin = typeof req.stdinContent === "string" ? req.stdinContent : null;
+          const slot: { stdin: string | null; stagedText: string } = { stdin: null, stagedText: "" };
+          slot.stdin = typeof req.stdinContent === "string" ? req.stdinContent : null;
           const pointers = req.promptPointers as ReadonlyArray<{ absolutePath?: string }> | undefined;
           const path = pointers?.[0]?.absolutePath;
-          captured.stagedText = typeof path === "string" ? readFileSync(path, "utf8") : "";
+          slot.stagedText = typeof path === "string" ? readFileSync(path, "utf8") : "";
+          captured.set(req.capability, slot);
         }
       });
       const result = await run("build a risky feature", {
@@ -363,10 +368,21 @@ async function main(): Promise<void> {
       ok(events.some((e) => e.capability === "task-planning" && e.status === "succeeded"),
         "task-planning was admitted (A1) by the CONFIRMED ruling");
       // G4-R7-B5: the risk refs ride the ACTUAL downstream input carriers.
-      ok(captured.stdin !== null && captured.stdin.includes("RISK-1") &&
-        captured.stagedText.includes("RISK-1") &&
-        captured.stagedText.includes("decisionDeltaRef"),
-        "the PWR risk refs + delta pointer reach the real staged/stdin input of downstream nodes");
+      // S2 (G4-R9): task-planning and implementation are asserted
+      // independently. The staged body must carry the risk refs + delta
+      // pointer for BOTH nodes; a node's stdin (when the dispatch actually
+      // uses one — task-planning is staged-only, implementation is
+      // stdin+staged) must carry the risk refs too.
+      const carrierAssert = (capability: string): boolean => {
+        const slot = captured.get(capability);
+        return slot !== undefined && slot.stagedText.includes("RISK-1") &&
+          slot.stagedText.includes("decisionDeltaRef") &&
+          (slot.stdin === null || slot.stdin.includes("RISK-1"));
+      };
+      ok(carrierAssert("task-planning"),
+        "the PWR risk refs + delta pointer reach the real staged input of task-planning");
+      ok(carrierAssert("implementation") && captured.get("implementation")!.stdin !== null,
+        "the PWR risk refs + delta pointer reach the real staged/stdin input of implementation");
     } finally {
       closeHarness(h);
     }

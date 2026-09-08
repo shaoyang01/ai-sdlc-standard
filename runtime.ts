@@ -15,7 +15,7 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -1197,28 +1197,79 @@ function productionContainmentMarkerPath(identity: LoopRunIdentity): string {
   return join(identity.controlRoot, PRODUCTION_CONTAINMENT_MARKER_DIR, `${identity.requirementId}.json`);
 }
 
-function writeProductionContainmentMarker(identity: LoopRunIdentity): void {
-  const path = productionContainmentMarkerPath(identity);
-  if (existsSync(path)) return;
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(
-    path,
-    JSON.stringify({
-      reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
-      requirementId: identity.requirementId,
-      discoveredAt: new Date().toISOString(),
-    }),
-  );
+/**
+ * G4-R9-F4: the marker's three observable states. "absent" means the anchor
+ * verifiably does not exist; "present" means a valid containment marker was
+ * read back; "invalid" means SOMETHING occupies the marker path (or its
+ * content is not a valid marker) and it is undecidable whether an
+ * un-discharged containment is hiding behind it — never equated with
+ * "absent".
+ */
+type ProductionContainmentMarkerState = "present" | "absent" | "invalid";
+
+function readProductionContainmentMarker(identity: LoopRunIdentity): ProductionContainmentMarkerState {
+  let raw: string;
+  try {
+    raw = readFileSync(productionContainmentMarkerPath(identity), "utf8");
+  } catch (error) {
+    // G4-R9-F4: only a verifiable ENOENT is "no marker". An unreadable path
+    // (directory occupying the file path, permission, I/O error) must stay
+    // fail-closed — treating it as "no marker" let a re-entry resume past an
+    // isolation failure whose anchor was smothered.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return "absent";
+    return "invalid";
+  }
+  try {
+    const marker = JSON.parse(raw) as { reasonCode?: unknown };
+    return marker?.reasonCode === "PRODUCTION_ISOLATION_VIOLATED" ? "present" : "invalid";
+  } catch {
+    return "invalid";
+  }
 }
 
-function readProductionContainmentMarker(identity: LoopRunIdentity): boolean {
+function writeProductionContainmentMarker(identity: LoopRunIdentity): void {
+  const path = productionContainmentMarkerPath(identity);
+  // G4-R9-F4: "already contained" means a VALID marker is verifiably in
+  // place. An existing but invalid/unreadable object at the marker path is
+  // an anomaly on the fail-closed anchor — never smoothed over as a
+  // successful write, and never overwritten (the occupier may itself be
+  // evidence).
+  const existing = readProductionContainmentMarker(identity);
+  if (existing === "present") return;
+  if (existing === "invalid") {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but the containment marker path ${path} is ` +
+        `occupied by an invalid or unreadable object and was NOT overwritten. The occupier must ` +
+        `be discharged before this requirement can proceed.`,
+    );
+  }
   try {
-    const marker = JSON.parse(readFileSync(productionContainmentMarkerPath(identity), "utf8")) as {
-      reasonCode?: unknown;
-    };
-    return marker?.reasonCode === "PRODUCTION_ISOLATION_VIOLATED";
-  } catch {
-    return false;
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+        requirementId: identity.requirementId,
+        discoveredAt: new Date().toISOString(),
+      }),
+    );
+  } catch (error) {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but persisting its containment marker failed: ` +
+        `${(error as Error).message}. The polluted state must be discharged before this run can proceed.`,
+    );
+  }
+  // Write-then-verify: the write only counts as persisted when the anchor
+  // reads back as a valid marker (G4-R9-F4: a silently swallowed write left
+  // the writer and the re-entry guard disagreeing about the same path).
+  if (readProductionContainmentMarker(identity) !== "present") {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but the containment marker at ${path} did not ` +
+        `persist as a valid marker. The polluted state must be discharged before this run can proceed.`,
+    );
   }
 }
 
@@ -1443,7 +1494,22 @@ export async function runProduction(
   // scenario from leaking: the first invocation propagated its persistence
   // error, and the marker stops the next call from re-taking the polluted
   // source state as a clean baseline and reusing the unverified outputs.
-  if (source === "real" && deps.inspectWorkspace !== undefined && readProductionContainmentMarker(identity)) {
+  // G4-R9-F4: an existing-but-invalid/unreadable object at the marker path
+  // is NOT "no marker". With no journal run fact yet it is a FIRST invocation
+  // for this requirement — the run proceeds and the terminal verification
+  // hits the same anchor anomaly through the marker writer. Once a journal
+  // run already exists, the anchor anomaly is an un-discharged containment:
+  // fail closed exactly like a confirmed marker.
+  let containmentHold =
+    source === "real" && deps.inspectWorkspace !== undefined &&
+    readProductionContainmentMarker(identity) === "present";
+  if (
+    source === "real" && deps.inspectWorkspace !== undefined &&
+    !containmentHold && readProductionContainmentMarker(identity) === "invalid"
+  ) {
+    containmentHold = runStore.findLatestRunByRequirement(identity.requirementId) !== undefined;
+  }
+  if (containmentHold) {
     let runIdForBlock: string | null = null;
     try {
       const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;

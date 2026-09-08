@@ -2381,18 +2381,6 @@ export class LoopRunStore {
         "finding registration requires the examined input revision to exist in the run",
       );
     }
-    // Directive drafts + the G4-R5-H5 synthetic reflow fact: a FAIL or
-    // ESCALATED verdict ruling that reflows to solution-design registers the
-    // §5.4 reflow finding itself when the agent emitted none (category
-    // SOLUTION ⇒ earliest affected node solution-design), so the reflow is
-    // auditable even against a silent agent.
-    const drafts = [...registration.findings];
-    if (
-      registration.registerReflowFinding === true &&
-      !drafts.some((draft) => draft.category === "SOLUTION")
-    ) {
-      drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
-    }
     // G4-R8-F1: a canonical loop-capability-findings:v1 evidence blob IS the
     // terminal's registration content — the drafts registered from it must
     // BE that content, derived exactly the way the gateway derives them.
@@ -2402,16 +2390,23 @@ export class LoopRunStore {
     // identity and is refused. Opaque/legacy blobs stay tolerated (their
     // content is undecidable; membership identity is carried by the
     // producer-createdAt receipt instead).
+    // G4-R9-F1: the reconciliation set is the agent's ORIGINAL registration
+    // drafts ONLY. The §5.4 reflow fact appended below is synthesized BY THE
+    // TERMINAL DIRECTIVE (registerReflowFinding), not authored into the
+    // evidence blob, so it is not part of the blob's own membership and must
+    // not take part in this reconciliation — reconciling the synthetic row
+    // against the blob turned every legal FAIL/ESCALATED verdict carrying a
+    // non-SOLUTION original finding into a full registration rejection.
     const ledgerContent = this.readScanLedgerContent(registration.evidenceRef, registration.evidenceDigest);
     if (ledgerContent !== null) {
-      if (ledgerContent.length !== drafts.length) {
+      if (ledgerContent.length !== registration.findings.length) {
         throw new LoopRunJournalError(
           "ILLEGAL_TRANSITION",
           "finding registration must match the evidence blob's own finding membership",
         );
       }
-      for (let index = 0; index < drafts.length; index += 1) {
-        const draft = drafts[index]!;
+      for (let index = 0; index < registration.findings.length; index += 1) {
+        const draft = registration.findings[index]!;
         const blob = ledgerContent[index]!;
         const blobSeverity = typeof blob["severity"] === "string" ? blob["severity"] : "";
         const blobCategory = typeof blob["category"] === "string"
@@ -2431,6 +2426,21 @@ export class LoopRunStore {
           );
         }
       }
+    }
+    // Directive drafts + the G4-R5-H5 synthetic reflow fact: a FAIL or
+    // ESCALATED verdict ruling that reflows to solution-design registers the
+    // §5.4 reflow finding itself when the agent emitted none (category
+    // SOLUTION ⇒ earliest affected node solution-design), so the reflow is
+    // auditable even against a silent agent. Runs AFTER the blob
+    // reconciliation (G4-R9-F1): the synthetic row is a directive-derived
+    // fact, never an agent blob member, and an agent-emitted SOLUTION row
+    // keeps suppressing the duplicate synthesis.
+    const drafts = [...registration.findings];
+    if (
+      registration.registerReflowFinding === true &&
+      !drafts.some((draft) => draft.category === "SOLUTION")
+    ) {
+      drafts.push({ severity: "HIGH", category: "SOLUTION", causeKind: "IMPROVEMENT" });
     }
     const invalidationInsert = db.prepare(
       `INSERT INTO loop_finding_invalidations (
