@@ -30,5 +30,5 @@ version: 0.3.0
 
 | 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-code-review-excellence` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-code-review-excellence/` |
-| `sdlc-code-review-normalizer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-code-review-normalizer/` |
+| `sdlc-code-review-excellence` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-code-review-normalizer` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |

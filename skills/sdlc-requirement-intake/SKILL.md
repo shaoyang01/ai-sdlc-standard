@@ -28,5 +28,5 @@ version: 0.2.0
 
 | 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-requirement-normalizer` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-requirement-normalizer/` |
-| `sdlc-test-feedback-classifier` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-test-feedback-classifier/` |
+| `sdlc-requirement-normalizer` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-test-feedback-classifier` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |

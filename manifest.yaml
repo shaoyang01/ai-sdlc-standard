@@ -76,15 +76,6 @@ skills:
     path: skills/sdlc-code-review/SKILL.md
     contract: skill-contracts/known-skills/sdlc-code-review.md
     references:
-      - skills/sdlc-code-review/references/sdlc-code-review-normalizer/blocking-and-scope.md
-      - skills/sdlc-code-review/references/sdlc-code-review-normalizer/finding-mapping.md
-      - skills/sdlc-code-review/references/sdlc-code-review-normalizer/normalization-workflow.md
-      - skills/sdlc-code-review/references/sdlc-code-review-normalizer/output-artifact.md
-      - skills/sdlc-code-review/references/sdlc-code-review-excellence/blocking-and-regate.md
-      - skills/sdlc-code-review/references/sdlc-code-review-excellence/finding-standards.md
-      - skills/sdlc-code-review/references/sdlc-code-review-excellence/output-and-handoff.md
-      - skills/sdlc-code-review/references/sdlc-code-review-excellence/review-inputs.md
-      - skills/sdlc-code-review/references/sdlc-code-review-excellence/review-workflow.md
   sdlc_docflow_writer:
     path: skills/sdlc-docflow-writer/SKILL.md
     contract: skill-contracts/known-skills/sdlc-docflow-writer.md
@@ -98,94 +89,27 @@ skills:
     path: skills/sdlc-implementation/SKILL.md
     contract: skill-contracts/known-skills/sdlc-implementation.md
     references:
-      - skills/sdlc-implementation/references/sdlc-implementation-recorder/deviation-and-blocking.md
-      - skills/sdlc-implementation/references/sdlc-implementation-recorder/evidence-sources.md
-      - skills/sdlc-implementation/references/sdlc-implementation-recorder/output-artifact.md
-      - skills/sdlc-implementation/references/sdlc-implementation-recorder/recording-workflow.md
-      - skills/sdlc-implementation/references/sdlc-speckit-checklist/checklist-inputs.md
-      - skills/sdlc-implementation/references/sdlc-speckit-checklist/item-generation-rules.md
-      - skills/sdlc-implementation/references/sdlc-speckit-checklist/output-and-manifest.md
-      - skills/sdlc-implementation/references/sdlc-speckit-checklist/output-targets.md
-      - skills/sdlc-implementation/references/sdlc-speckit-checklist/staleness-and-regate.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/blocking-and-regate.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/execution-boundaries.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/implementation-inputs.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/output-and-manifest.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/process-products.md
-      - skills/sdlc-implementation/references/sdlc-speckit-implement/verification-and-recording.md
   sdlc_knowledge_sync:
     path: skills/sdlc-knowledge-sync/SKILL.md
     contract: skill-contracts/known-skills/sdlc-knowledge-sync.md
     references:
-      - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/classification-routing.md
-      - skills/sdlc-knowledge-sync/references/sdlc-test-feedback-sync/sync-boundaries.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/conflict-and-blocking.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/fact-eligibility.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/output-and-manifest.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/sync-inputs.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-sync/sync-targets.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-code-doc-reconcile/apply-boundaries.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-code-doc-reconcile/audit-workflow.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-code-doc-reconcile/drift-categories.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-code-doc-reconcile/output-and-manifest.md
-      - skills/sdlc-knowledge-sync/references/sdlc-speckit-code-doc-reconcile/reconcile-inputs.md
   sdlc_requirement_intake:
     path: skills/sdlc-requirement-intake/SKILL.md
     contract: skill-contracts/known-skills/sdlc-requirement-intake.md
     references:
-      - skills/sdlc-requirement-intake/references/sdlc-test-feedback-classifier/classification-rules.md
-      - skills/sdlc-requirement-intake/references/sdlc-test-feedback-classifier/classification-workflow.md
-      - skills/sdlc-requirement-intake/references/sdlc-test-feedback-classifier/evidence-and-blocking.md
-      - skills/sdlc-requirement-intake/references/sdlc-test-feedback-classifier/output-artifact.md
-      - skills/sdlc-requirement-intake/references/sdlc-requirement-normalizer/conflict-and-blocking.md
-      - skills/sdlc-requirement-intake/references/sdlc-requirement-normalizer/intake-workflow.md
-      - skills/sdlc-requirement-intake/references/sdlc-requirement-normalizer/output-artifact.md
-      - skills/sdlc-requirement-intake/references/sdlc-requirement-normalizer/source-handling.md
   sdlc_solution_design:
     path: skills/sdlc-solution-design/SKILL.md
     contract: skill-contracts/known-skills/sdlc-solution-design.md
     references:
-      - skills/sdlc-solution-design/references/sdlc-speckit-plan/output-and-manifest.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-plan/plan-gate-check.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-plan/plan-inputs.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-plan/planning-scope.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-plan/project-type-contract-matrix.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-specify/blocking-and-regate.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-specify/docflow-inputs.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-specify/output-and-manifest.md
-      - skills/sdlc-solution-design/references/sdlc-speckit-specify/spec-sync-mapping.md
-      - skills/sdlc-solution-design/references/sdlc-specification-writer/blocking-rules.md
-      - skills/sdlc-solution-design/references/sdlc-specification-writer/output-artifact.md
-      - skills/sdlc-solution-design/references/sdlc-specification-writer/schema-mapping.md
-      - skills/sdlc-solution-design/references/sdlc-specification-writer/writing-workflow.md
   sdlc_solution_gate:
     path: skills/sdlc-solution-gate/SKILL.md
     contract: skill-contracts/known-skills/sdlc-solution-gate.md
     references:
-      - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/checklist.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-reviewer/review-workflow.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-challenger/challenge-workflow.md
       - skills/sdlc-solution-gate/references/sdlc-solution-challenger/finding-classification.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-challenger/follow-up-verification.md
-      - skills/sdlc-solution-gate/references/sdlc-solution-challenger/scope-and-phase-firewall.md
   sdlc_task_planning:
     path: skills/sdlc-task-planning/SKILL.md
     contract: skill-contracts/known-skills/sdlc-task-planning.md
     references:
-      - skills/sdlc-task-planning/references/sdlc-speckit-checklist/checklist-inputs.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-checklist/item-generation-rules.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-checklist/output-and-manifest.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-checklist/output-targets.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-checklist/staleness-and-regate.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-analyze/analyze-gate-check.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-analyze/analyze-inputs.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-analyze/consistency-scope.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-analyze/output-and-manifest.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-analyze/project-type-checks.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-tasks/output-and-manifest.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-tasks/task-gate-check.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-tasks/task-inputs.md
-      - skills/sdlc-task-planning/references/sdlc-speckit-tasks/task-scope.md
 portability:
   may_be_copied_to:
     - repository_root
