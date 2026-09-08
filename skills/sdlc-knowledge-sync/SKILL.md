@@ -31,6 +31,6 @@ version: 0.2.0
 
 | 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-sync` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-sync/` |
-| `sdlc-speckit-code-doc-reconcile` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-code-doc-reconcile/` |
-| `sdlc-test-feedback-sync` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-test-feedback-sync/` |
+| `sdlc-speckit-sync` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-speckit-code-doc-reconcile` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-test-feedback-sync` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |

@@ -27,6 +27,6 @@ version: 0.2.0
 
 | 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-tasks` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-speckit-tasks/` |
-| `sdlc-speckit-analyze` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-analyze/` |
-| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-checklist/` |
+| `sdlc-speckit-tasks` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-speckit-analyze` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |

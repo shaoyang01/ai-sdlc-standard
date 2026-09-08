@@ -28,6 +28,6 @@ version: 0.2.0
 
 | 来源旧包 | 吸收落点 |
 | --- | --- |
-| `sdlc-speckit-implement` | Core Rules 全部条款吸收至本包；references 迁移件 6 个文件见 `references/sdlc-speckit-implement/` |
-| `sdlc-implementation-recorder` | Core Rules 全部条款吸收至本包；references 迁移件 4 个文件见 `references/sdlc-implementation-recorder/` |
-| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-checklist/` |
+| `sdlc-speckit-implement` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-implementation-recorder` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
+| `sdlc-speckit-checklist` | Core Rules 全部条款吸收至本包（迁移件已随吸收完成移除） |
