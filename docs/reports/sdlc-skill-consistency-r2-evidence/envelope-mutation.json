@@ -1,0 +1,18 @@
+[
+  {
+    "name": "baseline",
+    "exit": 0,
+    "target_failure": [
+      "  ✓ verdict without decisionStatus (depth present — single-fact negative) (got ENVELOPE_BAD_DECISION)",
+      "Results: 44 passed, 0 failed"
+    ]
+  },
+  {
+    "name": "mutated",
+    "exit": 1,
+    "target_failure": [
+      "Results: 43 passed, 1 failed",
+      "  ✗ verdict without decisionStatus (depth present — single-fact negative) (no error)"
+    ]
+  }
+]

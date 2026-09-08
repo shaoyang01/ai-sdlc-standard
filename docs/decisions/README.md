@@ -78,6 +78,7 @@
 
 | [Decision-079](Decision-079-smoke-run3-parked-and-diag-prep-waves-chartered.md) | 2026-09-01 | Accepted / smoke run3 parked, W-GW-DIAG + W-GW-PREP chartered | 冒烟 run3 停驻不收口（gate PASS_WITH_RISK 合法停等），待修复波落地后重发全新冒烟；立项波 1 W-GW-DIAG（P-E 最小释放门 --release + 合法矩阵 / P-A 后进程证据包装 / P-I journal_path 回填）与波 2 W-GW-PREP（P-B 按 C1：ProductionRunDeps 可选 prepareWorkspace，内核 prepare→inspect）；P-C/P-D 方向认可（链尾物化 + canonical 覆盖 + 漂移报告）时机缓随交付尾；P-F 观察不立项；旧接线缺口 blocker 关闭移出；D2/E5-L3/②③边界不变。 |
 | [Decision-091](Decision-091-governance-corpus-adoption.md) | 2026-09-07 | Accepted / R5 PASS + 已合并集成主线 `31a67ce`（2026-09-08 PR #129）；四业务仓收编执行与状态终值仍待 Owner 授权 | 治理语料（memory/coding_guide）收编与生成：迁移分类新增 C11/C12 确定性转换收编（报告记录逐规则替换数与 pending_confirmation 待确认清单）、INIT/AUDIT 生成 7 份语料骨架（pending 槽位、零退役词汇）、`--adopt-governance-corpus` 显式收编入口（复用 PLAN_SHA/DP1/两阶段事务/回滚）、同名冲突确定性（转换后一致→源归档；不一致→阻塞）、残留门 `.specify` 模式加 `(?<!\.sdlc\/legacy\/)` 完整归档前缀负向断言（归档地址引用不触发）；语料效力边界不变（非事实源/非写目标/非标准源）；正式收掉 Decision-089 推迟项。 |
+| [Decision-092](Decision-092-sdlc-skill-consistency-closure.md) | 2026-09-08 | Accepted / Skill consistency R2 收口 | R1-H1/H2 补修、末列表格守卫及实际加载 schema 对齐；本轮治理闭环按 Current User 指令执行，动态回执见 STATE，下一包仍待单独授权。 |
 
 ## 新增流程
 

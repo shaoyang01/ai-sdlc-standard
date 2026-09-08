@@ -1,0 +1,450 @@
+{
+  "baseline_exit": 0,
+  "cases": [
+    {
+      "name": "H2_GATE_EXACT",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/gate-result-template.md",
+      "line": 11,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/gate-result-template.md:11 carries legacy finding identity / disposition / status vocabulary as normative guidance: - Status: draft / active / passed / failed / stale / replaced"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "H2_MANIFEST_02_EXACT",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 67,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/artifact-manifest-template.md:67 carries legacy finding identity / disposition / status vocabulary as normative guidance: | 02 方案审核 | yes | `02-方案审核/` |  |  | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "H2_MANIFEST_05_EXACT",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 70,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/artifact-manifest-template.md:70 carries legacy finding identity / disposition / status vocabulary as normative guidance: | 05 代码审核 | actual_implementation_required | `05-代码审核/` |  |  | draft / active / stale | closed / blocked / risk_accepted |  |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "H2_MANIFEST_05_SOLO",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 70,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/artifact-manifest-template.md:70 carries legacy finding identity / disposition / status vocabulary as normative guidance: | 05 代码审核 | actual_implementation_required | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked / risk_accepted |  |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "N1_ADV_N",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/finding-ledger-template.md:54 carries legacy finding identity / disposition / status vocabulary as normative guidance: - finding ID 沿用 `ADV-N` 序列，跨轮递增不复用。"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "N2_DISPOSITION",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/finding-ledger-template.md:54 carries legacy finding identity / disposition / status vocabulary as normative guidance: | Finding ID | 处置（RESOLVED / ACCEPTED_RISK / SUPERSEDED） | 修复证据 |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "N3_STATUS",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/task-plan-template.md",
+      "line": 74,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/task-plan-template.md:74 carries legacy finding identity / disposition / status vocabulary as normative guidance: - Status: draft / active / stale / replaced"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "N4_DECIDED",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 192,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/artifact-manifest-template.md:192 carries legacy finding identity / disposition / status vocabulary as normative guidance: - Decision Status: DECIDED / BLOCKED_UNKNOWN"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "N5_SPECS",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-docflow-writer/SKILL.md",
+      "line": 178,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-docflow-writer/SKILL.md:178 carries legacy finding identity / disposition / status vocabulary as normative guidance: Treat `specs/**` as the SpecKit machine source of truth and `library/{requirement_id}/**` as the handoff view."
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "KIMI_CN",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-task-planning/SKILL.md",
+      "line": 34,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-task-planning/SKILL.md:34 carries legacy finding identity / disposition / status vocabulary as normative guidance: 先跑一次 speckit-analyze 做需求/方案/任务三产物的独立交叉分析，再实施。"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "KIMI_EN",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-task-planning/SKILL.md",
+      "line": 34,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-task-planning/SKILL.md:34 carries legacy finding identity / disposition / status vocabulary as normative guidance: Recommend running sdlc-speckit-plan"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "TABLE_MISALIGNED",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 192,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/artifact-manifest-template.md:194 carries legacy finding identity / disposition / status vocabulary as normative guidance: | 05 | x | x | risk_accepted |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        194
+      ]
+    },
+    {
+      "name": "TABLE_DISPOSITION",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/finding-ledger-template.md:56 carries legacy finding identity / disposition / status vocabulary as normative guidance: | example | risk_accepted |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        56
+      ]
+    },
+    {
+      "name": "G1_CURRENT",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "templates/task-plan-template.md",
+      "line": 74,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "G2_POSTFIX_REPEAL",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 192,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "G3_PROVENANCE",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "skills/sdlc-solution-design/SKILL.md",
+      "line": 35,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "G4_CONTRACT_MAP",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "ai-sdlc/loop-finding-lifecycle.md",
+      "line": 129,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "G5_LEGACY_NEGATION",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "skills/sdlc-knowledge-sync/SKILL.md",
+      "line": 38,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "G6_CURRENT_TABLE",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "templates/artifact-manifest-template.md",
+      "line": 192,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "REG_E04",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-implementation/SKILL.md",
+      "line": 35,
+      "result": "killed",
+      "diagnostics": [
+        "- E0.4 closure: skills/sdlc-implementation/SKILL.md:41 contains retired path-decision term \"DIRECT_IMPLEMENTATION\" in active context"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        41
+      ]
+    },
+    {
+      "name": "REG_DUAL_RAIL",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-knowledge-sync/SKILL.md",
+      "line": 38,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-knowledge-sync/SKILL.md:38 declares retired dual-rail sync modes as normative: Reconcile supports three source modes: speckit_driven, library_driven, hybrid."
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "REG_LEGACY_SOURCE",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-knowledge-sync/SKILL.md",
+      "line": 38,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-knowledge-sync/SKILL.md:38 treats legacy .specify source as normal sdlc input: Use `.specify/business_domain/knowledge-target.yaml` as the knowledge target."
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "REG_DOUBLE_UNDERSCORE",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-docflow-writer/references/output-targets.md",
+      "line": 119,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-docflow-writer/references/output-targets.md:125 uses double underscore DocFlow runtime path: Write `library/{requirement_id}/01-技术方案/{requirement_id}__技术方案.md`."
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        125
+      ]
+    },
+    {
+      "name": "REG_VERSION_FILENAME",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "skills/sdlc-docflow-writer/references/output-targets.md",
+      "line": 119,
+      "result": "killed",
+      "diagnostics": [
+        "- skills/sdlc-docflow-writer/references/output-targets.md:125 recommends filename-based artifact versioning: Write `library/{requirement_id}/01-技术方案/{requirement_id}_技术方案_v2.md`."
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        125
+      ]
+    },
+    {
+      "name": "TABLE_LAST_ACCEPTED_RISK",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/finding-ledger-template.md:56 carries legacy finding identity / disposition / status vocabulary as normative guidance: | F01 | ACCEPTED_RISK |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        56
+      ]
+    },
+    {
+      "name": "TABLE_LAST_SUPERSEDED",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/finding-ledger-template.md:56 carries legacy finding identity / disposition / status vocabulary as normative guidance: | F01 | SUPERSEDED |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        56
+      ]
+    },
+    {
+      "name": "TABLE_LAST_STATUS",
+      "expected_red": true,
+      "exit": 1,
+      "positioned": true,
+      "path": "templates/gate-result-template.md",
+      "line": 131,
+      "result": "killed",
+      "diagnostics": [
+        "- templates/gate-result-template.md:133 carries legacy finding identity / disposition / status vocabulary as normative guidance: | 02 | draft / active / stale |"
+      ],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true,
+      "diagnostic_lines": [
+        133
+      ]
+    },
+    {
+      "name": "TABLE_LAST_CURRENT",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    },
+    {
+      "name": "TABLE_EVIDENCE_WORD",
+      "expected_red": false,
+      "exit": 0,
+      "positioned": false,
+      "path": "templates/finding-ledger-template.md",
+      "line": 54,
+      "result": "allowed",
+      "diagnostics": [],
+      "restored_bytes": true,
+      "restored_git_status": "M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md",
+      "restored_git_status_matches_baseline": true
+    }
+  ],
+  "all_tracked_bytes_restored": true,
+  "final_git_status": " M ess/code-review-schema.md\n M ess/test-feedback-schema.md\n M scripts/validate-skill-contracts.rb\n M skills/sdlc-docflow-writer/SKILL.md\n M skills/sdlc-docflow-writer/references/execution-scenarios.md\n"
+}

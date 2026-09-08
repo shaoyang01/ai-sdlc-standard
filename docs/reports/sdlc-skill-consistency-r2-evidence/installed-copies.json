@@ -1,0 +1,194 @@
+[
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-code-review",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-docflow-writer",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-implementation",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-knowledge-sync",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-requirement-intake",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-solution-design",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-solution-gate",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.kimi-code/skills",
+    "skill": "sdlc-task-planning",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-code-review",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-docflow-writer",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-implementation",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-knowledge-sync",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-requirement-intake",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-solution-design",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-solution-gate",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.hermes/skills",
+    "skill": "sdlc-task-planning",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-code-review",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-docflow-writer",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-implementation",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-knowledge-sync",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-requirement-intake",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-solution-design",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-solution-gate",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.zcode/skills",
+    "skill": "sdlc-task-planning",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-code-review",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-docflow-writer",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-implementation",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-knowledge-sync",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-requirement-intake",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-solution-design",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-solution-gate",
+    "exit": 0,
+    "output": ""
+  },
+  {
+    "root": "${USER_HOME}/.agents/skills",
+    "skill": "sdlc-task-planning",
+    "exit": 0,
+    "output": ""
+  }
+]
