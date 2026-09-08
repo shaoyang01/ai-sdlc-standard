@@ -44,7 +44,10 @@ executorAgent / executorAdapter / executorVersion
 inputArtifactRef / inputArtifactVersion / inputDigest
 outputArtifactRef / outputArtifactVersion / outputDigest
 gateResult
-depthDecision              # { depth: LIGHT|STANDARD|DEEP, decision_status: DECIDED|BLOCKED_UNKNOWN }
+decisionDepth              # LIGHT|STANDARD|DEEP|null（仅 formal_verdict 持档；null 仅与 BLOCKED_UNKNOWN 组合）
+decisionStatus             # CONFIRMED|ESCALATED|BLOCKED_UNKNOWN（仅 succeeded formal_verdict，冻结合同 §4.3）
+decisionScopeId / decisionDeltaRef / decisionDeltaDigest
+consumedFindingsRef / consumedFindingsDigest   # formal_verdict 声明其消费的 Finding Ledger
 findingLedgerRef           # adversarial_scan 产出 ledger / closure round 引用
 unresolvedFindingsRef / unresolvedFindingsDigest
 nextStepEligibility
@@ -59,7 +62,7 @@ errorCode / retryable / reasonCode
 - started 是互斥执行 claim。完全相同的重复写入只算幂等回放，不取得第二次 dispatch 权；存在 active capability 时 delivery journal 不允许推进；
 - **Gate 语义（v2）**：只有 `solution-gate` 的 `formal_verdict` 角色产生结构化 `PASS / FAIL / PASS_WITH_RISK`；`adversarial_scan`（对抗扫描）与其它非 Gate 节点角色的 `gateResult` 固定 `NOT_APPLICABLE`；未解决 blocking finding 或 FAIL verdict 不得产生 `ELIGIBLE`；
 - **solution-gate 双角色**：`adversarial_scan` 与 `formal_verdict` 的执行记录都必须可恢复；同一 revision 的两角色必须满足 `executorAgent` 不同，runtime 在 dispatch 前与结果提升为 current 前各校验一次；
-- **深度裁决与收敛协议**：`formal_verdict` 输出设计深度裁决（`depth` + `decision_status`），`solution-gate` 是唯一深度裁决点；首轮 `adversarial_scan` 建立不可变 Finding Ledger baseline，后续轮次为 closure review（只逐项验证修复证据；新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效，否则作为后续 improvement 不阻塞 closure）；
+- **深度裁决与收敛协议**：`formal_verdict` 输出设计深度裁决（`decisionDepth` + `decisionStatus`，§4.3 组合表），`solution-gate` 是唯一深度裁决点；首轮 `adversarial_scan` 建立不可变 Finding Ledger baseline，后续轮次为 closure review（只逐项验证修复证据；新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效，证明不成立时仍以 `IMPROVEMENT` 登记 OPEN finding，与 REGRESSION 同等驱动返工并阻断完成——G4-R5-H8；"不阻 closure"旧表述已废止，G4-R6-M4）；
 - 普通 `getSnapshot/getRun/findLatestRunByRequirement` 同时验证 run journal 与 capability execution 事件，任何一侧损坏都 fail-closed；旧五节点 delivery 事件、`loop/registry/node_map.ts` 与 `sdlc_graph/**` 的恢复上下文随 cutover 退役（WP3.5-C），不再作为恢复权威。
 
 ## 3. 溯源写入（recordNodeExecution）

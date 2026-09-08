@@ -1,0 +1,29 @@
+{
+  "unreadable-root": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=f3ce09b68f7eb2759a1e5363d2e87e4e9f2d3ef7acd9da59dd94245b0435a584\nFILES:\n  BLOCKED\t<legacy-root>\t-\tC10\tlegacy root not readable: .specify/memory\nBLOCKED_FILES:\n  - <legacy-root>: legacy root not readable: .specify/memory\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: legacy root not readable: .specify/memory; zero partial upgrade (spec R03/I6).\n",
+    "source_left": true
+  },
+  "active-lookbehind": {
+    "plan_rc": 0,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=ffba6910478860d35b4b36b46129d39b2eee9995a46efa55cebfb408df14c14e\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\t2e22da2ab13713309ac75219e525b8e06ed02f3f1963b8feef203fa25827f93d\n",
+    "output_tail": "omain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-173017.50787.vohcTl\nMIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-173016.50787.json.SO2SMz\nRESIDUE GATE FAILED: rolled back migration to pre-migration state.\nBLOCKED: migration rolled back (residue gate violations); see stderr list. Violations:\n  - .sdlc/business_domain/active.md:1\n",
+    "audit_rc": 0,
+    "audit_residue_line": [
+      "AUDIT_RESULT=FINDINGS missing=0 diffs=12 residue=1"
+    ]
+  },
+  "gate-controls": {
+    "/.specify/x": 1,
+    "./.specify/x": 1,
+    ".specify/**": 1,
+    ".sdlc/legacy/.specify/workflow/x": 0
+  },
+  "render-literal": {
+    "rc": 0,
+    "output_tail": "onStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nUPDATED: \nPRESERVED: \nREPORT=.sdlc/reports/knowledge_target_bootstrap_report.20260907-173027.53638.gSQYfZ\nREMAINING_CONFIRMATION: owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n"
+  }
+}

@@ -26,16 +26,22 @@ import Database from "better-sqlite3";
 // Round 1 (H2): owner detection shares the store's COMPLETE physical table
 // catalogue — main tables and every self-owned child table — so a v0
 // database carrying e.g. only loop_artifact_current classifies as history.
-import { LOOP_PHYSICAL_TABLES } from "../core/loop-run-store";
+import { LOOP_PHYSICAL_TABLES, LOOP_RUN_STORE_FORMAT_VERSION } from "../core/loop-run-store";
 
-const SUPPORTED_FORMAT_VERSION = 7;
+// G4-R5-H1: the supported version is the STORE's own constant, not a
+// second hardcoded copy (the drift this preflight exists to catch).
+const SUPPORTED_FORMAT_VERSION = LOOP_RUN_STORE_FORMAT_VERSION;
 const SQLITE_MAGIC = "SQLite format 3\x00";
 const CANDIDATE_EXTENSIONS = new Set([".db", ".sqlite", ".sqlite3"]);
 
 const LOOP_BUSINESS_TABLES = LOOP_PHYSICAL_TABLES;
 
 export type PreflightVerdict =
-  | "OK_V7"
+  // G4-R6-L2: the success verdict is VERSION-NEUTRAL — the store's format
+  // version is the real declared field (`declaredFormatVersion`) and the
+  // detail line, never a hardcoded label that drifts on the next bump
+  // (the old OK_V7 already reported a v8 store as "V7").
+  | "OK_SUPPORTED"
   | "FRESH_EMPTY"
   | "FAIL_HISTORICAL_FORMAT"
   | "FAIL_UNVERSIONED_WITH_TABLES"
@@ -188,7 +194,7 @@ export function classifyCandidate(path: string): PreflightCandidate {
     if (loopTablesFound.length === 0) {
       return { ...base, verdict: "FAIL_OWNER_UNKNOWN", detail: "no LOOP business table found; owner cannot be confirmed" };
     }
-    return { ...base, verdict: "OK_V7", detail: `supported v${SUPPORTED_FORMAT_VERSION} journal format` };
+    return { ...base, verdict: "OK_SUPPORTED", detail: `supported v${declaredFormatVersion} journal format (build supports up to v${SUPPORTED_FORMAT_VERSION})` };
   } catch {
     return {
       path, sizeBytes, verdict: "FAIL_NOT_SQLITE", declaredFormatVersion: null,
@@ -219,7 +225,7 @@ export function preflightLoopRunStoreV2Cutover(roots: readonly string[]): Prefli
   // Every non-passing verdict counts as a failure; a v5 journal is both a
   // failure and the distinct STOP_AND_RE_RULE governance stop (D3 rule 5).
   const blocking = candidates.filter(
-    (candidate) => candidate.verdict !== "OK_V7" && candidate.verdict !== "FRESH_EMPTY",
+    (candidate) => candidate.verdict !== "OK_SUPPORTED" && candidate.verdict !== "FRESH_EMPTY",
   );
   const requiresGovernanceStop = candidates.some((candidate) => candidate.verdict === "STOP_AND_RE_RULE");
   return Object.freeze({

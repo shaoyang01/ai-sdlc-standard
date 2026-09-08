@@ -22,7 +22,7 @@ Do not directly modify:
 - Technical specification artifacts
 - Code review artifacts
 - Test feedback classification artifacts
-- `.specify/business_domain/**`
+- `.sdlc/business_domain/**`
 - Checklist or Schema files
 - Long-term knowledge files
 
@@ -54,7 +54,7 @@ Do not sync:
 Require explicit confirmation before recommending actual write-back for:
 
 - Checklist or Schema edits.
-- `.specify/**` updates.
+- `.sdlc/**` updates.
 - Business domain knowledge updates.
 - Process rule changes that affect future requirements.
 

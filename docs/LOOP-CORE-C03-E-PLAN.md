@@ -470,6 +470,10 @@ E3 验收：exit 0 + invalid output、旧 input、错 generation、伪造 digest
 
 E4 验收：对 started/spawn/result/validation/terminal/revision 各 crash window 做 fault injection；
 并发 resume 至多一个真实 spawn；fresh operator 只凭 journal/artifact 即可判断下一步。
+**窗口口径（E5-W1 修订，2026-08-30）**：spawn/result/validation 三窗口的崩溃由
+dispatch 级中断注入统一覆盖（in-dispatch interruption → `ATTEMPT_INTERRUPTED` +
+同输入重试）——恢复语义上三窗口同质，dispatch 级注入是其严格泛化；started/
+terminal/revision 三窗口保留逐点专用注入。
 
 ### E5 — Autonomous Runtime Acceptance（独立授权）
 
@@ -498,7 +502,7 @@ E5 PASS 后才请求下一条真实业务 C05 授权。E5 或 C05 任一失败�
 | S05 | 进程非零退出且无工作区变化 | failed event；同 binding 最多一次受控重试 | 否 |
 | S06 | 进程 timeout 且 worktree 有变化 | 保留隔离 attempt，进入 recovery verification，不直接 retry | 通常否 |
 | S07 | exit 0，但 result JSON 缺 `artifact.digest` | output invalid；不 promotion、不推进 | 否 |
-| S08 | result 指向 allowed path 外文件 | `WORKSPACE_BOUNDARY_VIOLATION`，run blocked | 否 |
+| S08 | result 指向 allowed path 外文件 | run blocked（实现机器码 `CLEANUP_BLOCKED`；规划早期文本曾写作 `WORKSPACE_BOUNDARY_VIOLATION`，E5-W1 对齐实现） | 否 |
 | S09 | stdout 超限或包含疑似 token/prompt 回显 | 截断/泄密失败证据；原文不落 journal | 否 |
 | S10 | result 已写且 digest 合格，terminal append 前崩溃 | resume 重验 staging 并幂等提交；不再调用 Agent | 否 |
 | S11 | terminal succeeded，revision 未写时崩溃 | pending materialization 幂等补写 | 否 |

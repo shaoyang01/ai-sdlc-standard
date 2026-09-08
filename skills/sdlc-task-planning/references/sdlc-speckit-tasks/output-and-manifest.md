@@ -1,3 +1,9 @@
+> ⚠️ **已废弃（v2，Decision-084）**：本迁移参考件的目标 `specs/{feature}/tasks.md`
+> 为 v1 事实源路径，v2 单轨链下 specs/** 不再承担事实源职责（artifact-flow
+> 「历史产物的引用边界」）。canonical 模板 =
+> `templates/task-plan-template.md`（library/{requirement_id}/03-任务规划/）。
+> 本文件仅作迁移历史参考保留，禁止作为产出格式依据。
+
 # Output And Manifest
 
 ## Artifact Versioning Requirements

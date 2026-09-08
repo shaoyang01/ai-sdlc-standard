@@ -1,0 +1,797 @@
+[
+  {
+    "file": "agent-capability-binding.test.ts",
+    "code": 0,
+    "seconds": 0.78
+  },
+  {
+    "file": "agent-cli-profile.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "agent-skill-registry.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "bootstrap-knowledge-target.test.sh",
+    "code": 0,
+    "seconds": 118.83
+  },
+  {
+    "file": "capability-gateway-source.test.ts",
+    "code": 0,
+    "seconds": 0.86
+  },
+  {
+    "file": "capability-prompt-builder.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "cli-adapter-audit.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "codex-adapter.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "codex-cli-process-runner.test.ts",
+    "code": 0,
+    "seconds": 0.22
+  },
+  {
+    "file": "codex-real-dispatch-fake-runner-integration.test.ts",
+    "code": 0,
+    "seconds": 1.49
+  },
+  {
+    "file": "codex-real-dispatch-fake-runner-test-plan-contract.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "codex-real-dispatch-fallback-policy.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "codex-real-dispatch-gateway-integration-contract.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "codex-real-dispatch-gateway-wiring.test.ts",
+    "code": 0,
+    "seconds": 0.28
+  },
+  {
+    "file": "codex-real-dispatch-guardrails-contract.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "codex-real-dispatch-observability-contract.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "codex-real-dispatch-output-parser-contract.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "codex-real-dispatch-prompt-builder-contract.test.ts",
+    "code": 0,
+    "seconds": 0.23
+  },
+  {
+    "file": "codex-real-dispatch-readiness-review.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "codex-real-dispatch-real-runner.test.ts",
+    "code": 0,
+    "seconds": 0.23
+  },
+  {
+    "file": "codex-real-dispatch-smoke-validation.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "e5-w3-file-pointer-transport.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "evolution-proposal-analyzer.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  },
+  {
+    "file": "execution-gateway.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "feedback-analyzer.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-cli-adapter-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-cli-command-executor.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "hermes-cli-dry-run.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-cli-executor-contract.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "hermes-gateway-integration-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-contract.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-fallback-policy.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-gateway-integration-contract.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-gateway-integration.test.ts",
+    "code": 0,
+    "seconds": 0.23
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-guardrails.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-observability.test.ts",
+    "code": 0,
+    "seconds": 0.24
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-operator-runbook.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-code-review-canary-executor.test.ts",
+    "code": 0,
+    "seconds": 12.2
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-code-review-canary-gate.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-code-review-canary-session.test.ts",
+    "code": 0,
+    "seconds": 0.22
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-operator-acceptance.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts",
+    "code": 0,
+    "seconds": 0.24
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-post-enablement-review-template.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-readiness-review.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts",
+    "code": 0,
+    "seconds": 0.2
+  },
+  {
+    "file": "hermes-gateway-real-dispatch.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "hermes-gateway-shadow-sidecar.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "hermes-runtime-attachment-contract.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "hermes-runtime-shadow-attachment-readiness-review.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "hermes-runtime-shadow-attachment-wiring-contract.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "hermes-runtime-shadow-attachment.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-cli-adapter-contract.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "kimi-cli-command-executor.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "kimi-cli-dry-run.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "kimi-cli-executor-contract.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "kimi-gateway-integration-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-contract.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-fallback-policy.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-gateway.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-guardrails.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-observability.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-gateway-real-dispatch-readiness-review.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "kimi-gateway-real-dispatch.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-gateway-shadow-sidecar.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-output-normalizer.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "kimi-request-type-expansion-contract.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "kimi-runtime-attachment-contract.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "kimi-runtime-shadow-attachment.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "loop-artifact-revision.test.ts",
+    "code": 0,
+    "seconds": 1.52
+  },
+  {
+    "file": "loop-artifact-store.test.ts",
+    "code": 0,
+    "seconds": 1.61
+  },
+  {
+    "file": "loop-autonomous-delivery-loop.test.ts",
+    "code": 0,
+    "seconds": 1.47
+  },
+  {
+    "file": "loop-c03-delivery-tail.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "loop-c03d-runtime-wiring.test.ts",
+    "code": 0,
+    "seconds": 23.17
+  },
+  {
+    "file": "loop-capability-execution.test.ts",
+    "code": 0,
+    "seconds": 3.51
+  },
+  {
+    "file": "loop-change-classification.test.ts",
+    "code": 0,
+    "seconds": 0.43
+  },
+  {
+    "file": "loop-codex-implementation-adapter.test.ts",
+    "code": 0,
+    "seconds": 86.51
+  },
+  {
+    "file": "loop-d087-six-scenario-matrix.test.ts",
+    "code": 0,
+    "seconds": 42.9
+  },
+  {
+    "file": "loop-decision-delta-integrity.test.ts",
+    "code": 0,
+    "seconds": 12.26
+  },
+  {
+    "file": "loop-delivery-checkpoint-store.test.ts",
+    "code": 0,
+    "seconds": 1.23
+  },
+  {
+    "file": "loop-delivery-checkpoint.test.ts",
+    "code": 0,
+    "seconds": 0.21
+  },
+  {
+    "file": "loop-delivery-publisher.test.ts",
+    "code": 0,
+    "seconds": 1.72
+  },
+  {
+    "file": "loop-finding-lifecycle.test.ts",
+    "code": 0,
+    "seconds": 29.11
+  },
+  {
+    "file": "loop-g4-r6-fix-round.test.ts",
+    "code": 0,
+    "seconds": 28.76
+  },
+  {
+    "file": "loop-git-workspace.test.ts",
+    "code": 0,
+    "seconds": 70.1
+  },
+  {
+    "file": "loop-governance-tail-result.test.ts",
+    "code": 0,
+    "seconds": 0.33
+  },
+  {
+    "file": "loop-gw-diag-evidence.test.ts",
+    "code": 0,
+    "seconds": 0.33
+  },
+  {
+    "file": "loop-gw-fix-run-real-reaches-spawn.test.ts",
+    "code": 0,
+    "seconds": 1.3
+  },
+  {
+    "file": "loop-gw-prep.test.ts",
+    "code": 0,
+    "seconds": 7.97
+  },
+  {
+    "file": "loop-intake-manifest.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "loop-patch-application.test.ts",
+    "code": 0,
+    "seconds": 229.22
+  },
+  {
+    "file": "loop-posix-process-runner.test.ts",
+    "code": 0,
+    "seconds": 32.58
+  },
+  {
+    "file": "loop-posix-runner-timeout-bound.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "loop-process-evidence-mapping.test.ts",
+    "code": 0,
+    "seconds": 0.91
+  },
+  {
+    "file": "loop-production-coordinator.test.ts",
+    "code": 0,
+    "seconds": 0.44
+  },
+  {
+    "file": "loop-production-entry.test.ts",
+    "code": 0,
+    "seconds": 0.11
+  },
+  {
+    "file": "loop-regate-dispatch-window.test.ts",
+    "code": 0,
+    "seconds": 46.23
+  },
+  {
+    "file": "loop-requirement-design-orchestrator.test.ts",
+    "code": 0,
+    "seconds": 1.08
+  },
+  {
+    "file": "loop-run-cli.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "loop-run-concurrency.test.ts",
+    "code": 0,
+    "seconds": 1.85
+  },
+  {
+    "file": "loop-run-from-intake.test.ts",
+    "code": 0,
+    "seconds": 0.94
+  },
+  {
+    "file": "loop-run-provenance.test.ts",
+    "code": 0,
+    "seconds": 0.28
+  },
+  {
+    "file": "loop-run-release.test.ts",
+    "code": 0,
+    "seconds": 1.58
+  },
+  {
+    "file": "loop-run-requirement-query.test.ts",
+    "code": 0,
+    "seconds": 0.19
+  },
+  {
+    "file": "loop-run-state.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "loop-run-store-v2-cutover-preflight.test.ts",
+    "code": 0,
+    "seconds": 0.61
+  },
+  {
+    "file": "loop-run-store.test.ts",
+    "code": 0,
+    "seconds": 0.42
+  },
+  {
+    "file": "loop-runtime-v2-cutover.test.ts",
+    "code": 0,
+    "seconds": 4.01
+  },
+  {
+    "file": "loop-s05-retry-budget.test.ts",
+    "code": 0,
+    "seconds": 1.22
+  },
+  {
+    "file": "loop-single-rail-contract.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "loop-validation-guards.test.ts",
+    "code": 0,
+    "seconds": 1.09
+  },
+  {
+    "file": "loop-w5-invalid-output-no-advance.test.ts",
+    "code": 0,
+    "seconds": 2.26
+  },
+  {
+    "file": "loop-w6a-process-evidence-recovery.test.ts",
+    "code": 0,
+    "seconds": 0.33
+  },
+  {
+    "file": "loop-w6b1-resume-lease-window.test.ts",
+    "code": 0,
+    "seconds": 0.41
+  },
+  {
+    "file": "loop-w6b2-human-action-artifact.test.ts",
+    "code": 0,
+    "seconds": 0.18
+  },
+  {
+    "file": "loop-w6b3-attempt-workspace-three-state.test.ts",
+    "code": 0,
+    "seconds": 21.21
+  },
+  {
+    "file": "loop-wp35-b-round1-corrections.test.ts",
+    "code": 0,
+    "seconds": 0.77
+  },
+  {
+    "file": "loop-wp35-b-round2-corrections.test.ts",
+    "code": 0,
+    "seconds": 0.43
+  },
+  {
+    "file": "loop-wp4-regate.test.ts",
+    "code": 0,
+    "seconds": 296.93
+  },
+  {
+    "file": "loop-wp5-cross-entry.test.ts",
+    "code": 0,
+    "seconds": 105.48
+  },
+  {
+    "file": "loop-wp6-completion-contracts.test.ts",
+    "code": 0,
+    "seconds": 73.43
+  },
+  {
+    "file": "manual-chain-fixture.test.sh",
+    "code": 0,
+    "seconds": 11.45
+  },
+  {
+    "file": "memory-routing-shadow.test.ts",
+    "code": 0,
+    "seconds": 0.36
+  },
+  {
+    "file": "minimal-end-to-end-sdlc-flow.test.ts",
+    "code": 0,
+    "seconds": 3.79
+  },
+  {
+    "file": "multi-agent-fake-runners.test.ts",
+    "code": 0,
+    "seconds": 0.11
+  },
+  {
+    "file": "node-capability-contract.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "node-output-envelope.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "policy-memory-read.test.ts",
+    "code": 0,
+    "seconds": 0.14
+  },
+  {
+    "file": "policy-memory.test.ts",
+    "code": 0,
+    "seconds": 0.13
+  },
+  {
+    "file": "real-agent-adapter-capability-matrix.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "real-capability-adapter.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "real-capability-gateway.test.ts",
+    "code": 0,
+    "seconds": 0.23
+  },
+  {
+    "file": "repository-capability-inventory.test.ts",
+    "code": 0,
+    "seconds": 0.11
+  },
+  {
+    "file": "run-production.test.ts",
+    "code": 0,
+    "seconds": 1.45
+  },
+  {
+    "file": "runtime-capabilities.test.ts",
+    "code": 0,
+    "seconds": 0.17
+  },
+  {
+    "file": "skill-aware-execution-request.test.ts",
+    "code": 0,
+    "seconds": 0.15
+  },
+  {
+    "file": "skill-flow-inventory.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "skill-flow-orchestrator-contract.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "skill-flow-runtime-integration-contract.test.ts",
+    "code": 0,
+    "seconds": 0.12
+  },
+  {
+    "file": "skill-flow-shadow-orchestrator.test.ts",
+    "code": 0,
+    "seconds": 0.11
+  },
+  {
+    "file": "system-capability-review.test.ts",
+    "code": 0,
+    "seconds": 0.16
+  }
+]

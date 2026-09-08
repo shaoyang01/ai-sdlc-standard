@@ -18,7 +18,7 @@ Decision-044 Q2 起不再存在 `DIRECT_IMPLEMENTATION` / `SPECKIT_PIPELINE_REQU
 - `DEEP`：跨模块状态变更或高风险；方案强制包含状态机/DB/MQ/事务/回滚/代表数据/边界场景章节，任务规划承担实现前一致性审计。
 - `BLOCKED_UNKNOWN`（对应 `decision_status = BLOCKED_UNKNOWN`）：缺少关键事实，不能可靠分级；必须回到需求/方案补齐事实，不能靠猜测。
 
-`solution-gate` 是**唯一深度裁决点**；`decision_status` 只取 `DECIDED` / `BLOCKED_UNKNOWN`；`BLOCKED_UNKNOWN` 不进入实现。
+`solution-gate` 是**唯一正式深度裁决点**（`requirement-intake` 的 `proposedDepthBasis` 是提案输入，不是裁决）；`decision_status` 取 `CONFIRMED` / `ESCALATED` / `BLOCKED_UNKNOWN`；后两者不进入实现。深度提案、`requiredDepth` 与覆盖台账的结构化定义见 [Manual/Runtime Semantic Contract](manual-runtime-semantic-contract.md) §4（本文件的档位判据是其 §4.4 规范来源）。
 
 ## Decision Scope
 
@@ -90,19 +90,9 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 
 用于需要完整设计支撑的需求。
 
-任一强触发因素出现时，默认判为 `DEEP`：
+强触发因素的**唯一合法枚举**为 Manual/Runtime Semantic Contract §4.2 T1（F1–F9：状态机/生命周期变更；DB/schema/数据一致性；MQ 系列；定时/异步/编排；事务/幂等/补偿/回滚边界；跨系统接口；不可逆操作；高影响域；新流程或主流程大幅变更）——本文件**不再自维护触发清单**。纯跨模块协作拆分、无任何 T1 因子 → intake 提案 STANDARD（T2），verdict 可依风险升档。用户明确要求完整深度设计 → `user_requested`（最高优先，覆盖提案）。
 
-- 多模块、多服务或跨仓库协作。
-- 新流程或大幅改变既有主流程。
-- 状态机、状态流转、任务生命周期或单据生命周期变化。
-- DB schema、关键数据写入、迁移、回填或数据一致性变化。
-- MQ 生产、消费、重试、幂等、顺序或补偿变化。
-- 定时任务、监听器、异步任务、批处理或流程编排变化。
-- 事务边界、幂等边界、补偿策略、回滚策略复杂。
-- 权限、资金、库存、履约、计费、结算等高影响域。
-- 用户明确要求完整深度设计。
-
-注意：需要沉淀 `.specify/business_domain/**` 或长期知识库事实本身不是自动 `DEEP` 触发因素；只有当知识同步需求伴随上述当前实现范围自身的强触发因素时，才默认 `DEEP`。
+注意：需要沉淀 `.sdlc/business_domain/**` 或长期知识库事实本身不是自动 `DEEP` 触发因素；只有当知识同步需求伴随 T1 因子时，才默认 `DEEP`。
 
 规则：
 
@@ -134,15 +124,13 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 `solution-gate` 产物必须包含：
 
 - Decision Scope: `FULL_REQUIREMENT` / `DELTA_CHANGE`
-- Depth: `LIGHT` / `STANDARD` / `DEEP`
-- decision_status: `DECIDED` / `BLOCKED_UNKNOWN`
-- Delta Depth: `LIGHT` / `STANDARD` / `DEEP` / `BLOCKED_UNKNOWN`
-- Aggregate Depth: reference only
-- Depth Triggers: 触发因素列表
-- Delta Depth Triggers
-- Ignored Aggregate Triggers
-- Re-Gate Source
-- Earliest Affected Node
+- requiredDepth: `LIGHT` / `STANDARD` / `DEEP`（当前生效要求档位）
+- decisionDepth: `LIGHT` / `STANDARD` / `DEEP`（verdict 最终持守档位）
+- decision_status: `CONFIRMED` / `ESCALATED` / `BLOCKED_UNKNOWN`
+- initialDepthBasis: `user_requested` / `normalized_proposal` / `PROVISIONAL_STANDARD`
+- proposedDepthBasis: intake 提案及理由（normalized_proposal 时附带）
+- Delta Depth / Depth Triggers / Delta Depth Triggers / Ignored Aggregate Triggers / Re-Gate Source / Earliest Affected Node：保留
+- 字段结构化定义与合法组合以 [Manual/Runtime Semantic Contract](manual-runtime-semantic-contract.md) §4.1/§4.3 为唯一权威
 - Depth Override: `none` / `user_requested` / `later_gate_required`
 - Rationale: 为什么选择该深度
 
@@ -150,9 +138,9 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 
 | Depth | 默认裁决 | 说明 |
 | --- | --- | --- |
-| `LIGHT` | solution-gate `DECIDED` | 方案完整且无强触发因素；内容精简。 |
-| `STANDARD` | solution-gate `DECIDED` | 需说明为什么不需要 DEEP。 |
-| `DEEP` | solution-gate `DECIDED` | 需列出强触发因素；方案与任务按 DEEP 档位内容执行。 |
+| `LIGHT` | solution-gate `CONFIRMED` | 方案完整且无强触发因素；内容精简。 |
+| `STANDARD` | solution-gate `CONFIRMED` | 需说明为什么不需要 DEEP。 |
+| `DEEP` | solution-gate `CONFIRMED` | 需列出强触发因素；方案与任务按 DEEP 档位内容执行。 |
 | `BLOCKED_UNKNOWN` | solution-gate `BLOCKED_UNKNOWN` | 不能靠猜测选择深度；回到方案补齐事实。 |
 
 用户明确要求加深设计时：
@@ -173,8 +161,8 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 
 | Delta Scope | Delta Depth | 裁决 | 说明 |
 | --- | --- | --- | --- |
-| 遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件、局部兼容规则，且 01/02 已覆盖 | `LIGHT` / `STANDARD` | `DECIDED` | 原需求深度只作为 context。 |
-| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、跨模块、状态机或其他强触发因素 | `DEEP` | `DECIDED` | 理由必须来自 Delta Depth Triggers；Delta 自身的知识同步需求不单独构成触发因素。 |
+| 遗漏判断、字段映射、边界规则、校验条件、文案、局部查询条件、局部兼容规则，且 01/02 已覆盖 | `LIGHT` / `STANDARD` | `CONFIRMED` | 原需求深度只作为 context。 |
+| Delta 自身新增 DB schema、MQ、schedule、关键数据写入、状态机或其他强触发因素（T1，F1–F9）；跨模块**伴随**强触发同样 DEEP | `DEEP` | `CONFIRMED`（或 `ESCALATED` 升档） | 理由必须来自 Delta Depth Triggers；纯跨模块协作拆分无强触发 → 按 §4.2 T2 提案 STANDARD；Delta 自身的知识同步需求不单独构成触发因素。 |
 | Delta 影响行为但技术方案未更新 | `BLOCKED_UNKNOWN` | `BLOCKED_UNKNOWN` | Earliest Affected Node = `01-技术方案`。 |
 | Delta 已写入方案但方案门禁未覆盖 | `BLOCKED_UNKNOWN` | `BLOCKED_UNKNOWN` | Required Re-Gate = `02-方案审核`。 |
 
@@ -185,11 +173,12 @@ Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE
 - 不得把 `DEEP` 当作方案缺失的替代结论。
 - 不得让任何 Skill 承担从零澄清核心业务规则的职责（方案缺口必须回流 `solution-design`）。
 - 不得用聊天记忆替代深度触发因素。
-- 不得在缺少关键事实时输出 `DECIDED`。
+- 不得在缺少关键事实时输出 `CONFIRMED`（应为 `BLOCKED_UNKNOWN`）。
 - 不得恢复任何 Direct/Speckit 路径分流语义（Decision-044）。
 
 ## Revision Record
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| 2.1.0 | 2026-09-05 | 修订 | 对齐 Manual/Runtime Semantic Contract v0.3.0（G2/C1）：decision_status 枚举替换为 CONFIRMED/ESCALATED/BLOCKED_UNKNOWN；intake 深度提案（proposedDepthBasis）输入定位；纯跨模块协作拆分分层为 T2 提案 STANDARD；solution-gate 保留为唯一正式裁决点。 |
 | 2.0.0 | 2026-08-22 | Draft | Decision-044 Q2 重基线：SIMPLE/MEDIUM/COMPLEX/BLOCKED_UNKNOWN 与路径分流整体替换为 LIGHT/STANDARD/DEEP + DECIDED/BLOCKED_UNKNOWN 深度档位模型；Development Path Decision 字段删除；solution-gate 为唯一深度裁决点；Decision Scope/Delta 隔离与 user_requested/later_gate_required override 语义平移保留。 |

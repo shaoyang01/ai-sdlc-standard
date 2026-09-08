@@ -163,7 +163,9 @@ async function main(): Promise<void> {
     );
     const recovery = recoverRunContext(runStore, "REQ-WP35C-001")!;
     ok(recovery.capabilityChainStatus === "COMPLETED", "recovery projection reports COMPLETED");
-    ok(result.journal_path === null, "injected stores leave journal_path null (caller owns the path)");
+    // W-GW-DIAG P-I (Decision-079): injected stores surface their own database
+    // file so the operator keeps the diagnostic anchor.
+    ok(result.journal_path === join(root, "journal.db"), "injected stores surface the journal path (P-I)");
     ok(existsSync(join(root, "journal.db")), "the injected journal file exists");
   } finally {
     rmSync(root, { recursive: true, force: true });

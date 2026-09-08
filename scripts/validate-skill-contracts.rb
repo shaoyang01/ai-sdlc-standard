@@ -42,7 +42,13 @@ def relative(path)
   path.sub("#{ROOT}/", "")
 end
 
-LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:memory|workflow|coding_guide)(?:/|\b)}.freeze
+# Decision-089: `.sdlc/**` is the only legitimate knowledge/governance root for
+# the paths this wave switched (business_domain, memory, workflow, coding_guide);
+# those legacy `.specify/` locations must never appear as normal sdlc inputs.
+# The remaining `.specify/` subpaths (entry-coverage-profile, project-governance-
+# profile, reports, project-context) still have consumers outside the authorized
+# D-088-01 v2 switch surface and are flagged for a follow-up wave.
+LEGACY_SOURCE_PATH_PATTERN = %r{\.specify/(?:business_domain|memory|workflow|coding_guide)(?:/|\b)}.freeze
 LEGACY_SOURCE_DANGER_PATTERN = /
   required\s+inputs?|
   input_artifacts?|
@@ -250,31 +256,111 @@ GATE_REVIEW_NAME_PATTERN = /
   reconcile
 /ix.freeze
 
-def unsafe_legacy_source_references(text)
-  lines = text.lines
+# D088-R2-H4: per-hit negation binding shared by both scanners. A hit is
+# exempt only when a negation occurs BEFORE it inside the SAME sentence clause
+# with no adversative boundary (but/但/however/不过/yet) in between; commas in
+# a coordinated list do not cut the verb's negation scope. Fail-closed: any
+# hit whose negation cannot be reliably proven stays flagged. Fenced code
+# blocks are flagged unless their opening fence is explicitly marked as a
+# negative/historical example.
+SENTENCE_SPLIT_RE = /[。；;！!？]/
+ADVERSATIVE_RE = /(?:^|[,\s，、(（])+(but|但|however|不过|yet)(?:[,\s，:：]|$)/i
+NEGATION_WORD_RE = /(不得|禁止|不能|不应|切勿|不读取|不改写|never|must\s+not|do\s+not|don't|does\s+not|not\s+use|prohibit\w*|forbidden|retired|historical|no\s+longer|there\s+are\s+no|单轨|已退役)/i
+CODE_FENCE_RE = /\A\s*(```|~~~)/
+CODE_EXAMPLE_MARKER_RE = /(negative|反例|historical|历史|example|示例|anti[-\s]?pattern|bad)/i
+
+def hit_negated?(clause, hit_offset)
+  prefix = clause[0...hit_offset].to_s
+  neg = prefix.match(NEGATION_WORD_RE)
+  return false unless neg
+  between = prefix[neg.begin(0)..-1].to_s
+  !between.match?(ADVERSATIVE_RE)
+end
+
+def unsafe_hits(text, hit_pattern, require_normative: nil)
   unsafe = []
-
-  lines.each_with_index do |line, index|
-    next unless line.match?(LEGACY_SOURCE_PATH_PATTERN)
-
-    context = [
-      lines[index - 4],
-      lines[index - 3],
-      lines[index - 2],
-      lines[index - 1],
-      line,
-      lines[index + 1],
-      lines[index + 2]
-    ].compact.join(" ")
-
-    next if context.match?(LEGACY_SOURCE_ALLOWED_GUARD_PATTERN)
-    next unless context.match?(LEGACY_SOURCE_DANGER_PATTERN)
-
-    unsafe << [index + 1, line.strip]
+  in_code_block = false
+  code_block_marked = false
+  text.lines.each_with_index do |line, index|
+    if line.match?(CODE_FENCE_RE)
+      in_code_block = !in_code_block
+      code_block_marked = in_code_block && line.match?(CODE_EXAMPLE_MARKER_RE) ? true : false
+      next
+    end
+    matches = line.to_enum(:scan, hit_pattern).map { Regexp.last_match }
+    next if matches.empty?
+    if in_code_block
+      # unlabeled normative code block -> flagged; a block whose opening fence
+      # is explicitly marked negative/historical/example is exempt
+      unsafe << [index + 1, line.strip] unless code_block_marked
+      next
+    end
+    violates = matches.any? do |m|
+      scope = line[0...m.begin(0)].to_s
+      clause = scope.split(SENTENCE_SPLIT_RE).last.to_s
+      clause_offset = scope.length - clause.length
+      # the hit sits at the end of its prefix scope, so its offset inside the
+      # clause is the clause length
+      hit_offset_in_clause = scope.length - clause_offset
+      # normative context is a whole-line property (mode enums/requirements may
+      # trail the token); negation binding stays scoped to the hit's clause
+      if require_normative && !line.match?(require_normative)
+        false
+      else
+        !hit_negated?(clause, hit_offset_in_clause)
+      end
+    end
+    unsafe << [index + 1, line.strip] if violates
   end
-
   unsafe
 end
+
+def unsafe_legacy_source_references(text)
+  unsafe_hits(text, LEGACY_SOURCE_PATH_PATTERN, require_normative: LEGACY_SOURCE_DANGER_PATTERN)
+end
+
+# D088-R1-H7 / D088-R2-H4: detect NORMATIVE dual-rail sync-mode declarations
+# (mode enums, mode switches, mode-conditional requirements), not the bare
+# characters; per-hit negation, never released by a sibling clause.
+DUAL_RAIL_DECLARATION_PATTERN = /\b(speckit_driven|library_driven|hybrid)\b/i
+DUAL_RAIL_NORMATIVE_RE = /\b(modes?|switch|classify|classification|select(?:ion|s)?|supports?|supported|requires?|required|explicit|enum|source_of_truth|decides?|priority)\b/i
+
+def unsafe_dual_rail_declarations(text)
+  unsafe_hits(text, DUAL_RAIL_DECLARATION_PATTERN, require_normative: DUAL_RAIL_NORMATIVE_RE)
+end
+
+DUAL_RAIL_SELF_TEST = {
+  # normative declarations -> must be flagged
+  "Reconcile supports three source modes: speckit_driven, library_driven, hybrid." => true,
+  "- `library_driven`: Specs are not required; library artifacts are primary." => true,
+  "Classify the sync mode (speckit_driven | library_driven | hybrid) before writing." => true,
+  # D088-R2-H4 per-hit red cases
+  "Do not use speckit_driven, but hybrid is required." => true,
+  # negative rules / historical notes / non-sync prose -> must NOT be flagged
+  "Single rail: there are no source modes such as speckit_driven or library_driven (Decision-044)." => false,
+  "The retired manifest field last_sync_source_mode=library_driven is historical only." => false,
+  "Do not use speckit_driven mode; it was retired." => false,
+  "Do not use speckit_driven or hybrid." => false,
+  "Plain prose about hybrid vehicles has no sync semantics here." => false,
+  # fenced code blocks: unlabeled normative -> flagged; explicitly marked -> exempt
+  "```\nspeckit_driven sync writes confirmed facts.\n```\n" => true,
+  "```negative example\nspeckit_driven sync writes confirmed facts.\n```\n" => false
+}.freeze
+
+LEGACY_SOURCE_SELF_TEST = {
+  # adjacent-line negation must NOT release an active legacy input (R1 repro)
+  "Do not alter unrelated generated examples.\nRequired input: read .specify/business_domain/** as authoritative." => true,
+  # same-sentence sibling clause: negation of one action never covers the other
+  "Never overwrite reports; Required inputs: .specify/business_domain/**." => true,
+  "Do not write .specify/business_domain/** but read .specify/business_domain/** as required input." => true,
+  # a coordinated prohibition list keeps the verb's negation scope
+  "Do not modify production code, specs/**, or .specify/business_domain/**." => false,
+  # same-clause negation before the hit -> exempt
+  "Do not read .specify/memory/** under any circumstance." => false,
+  # fenced code blocks: unlabeled active read -> flagged; marked example -> exempt
+  "```\nread .specify/business_domain/knowledge-target.yaml\n```\n" => true,
+  "```historical example\nread .specify/business_domain/knowledge-target.yaml\n```\n" => false
+}.freeze
 
 def unsafe_filename_version_references(text)
   lines = text.lines
@@ -499,6 +585,16 @@ Dir[File.join(SKILL_DIR, "sdlc-*", "**", "*.md")].sort.each do |path|
     errors << "#{relative(path)}:#{line_number} treats legacy .specify source as normal sdlc input: #{line}"
   end
 
+  # D088-R1-H7 boundary: the normative dual-rail check protects the contract this
+  # wave actually cleaned (skills/sdlc-knowledge-sync/**). Other packages still
+  # carry dual-rail wording (e.g. sdlc-solution-design planning-scope.md) and
+  # stay flagged for the follow-up wave, like the remaining .specify subpaths.
+  if File.basename(File.dirname(path)) == "sdlc-knowledge-sync" || path.include?(File.join(SKILL_DIR, "sdlc-knowledge-sync"))
+    unsafe_dual_rail_declarations(text).each do |line_number, line|
+      errors << "#{relative(path)}:#{line_number} declares retired dual-rail sync modes as normative: #{line}"
+    end
+  end
+
   unsafe_legacy_process_runtime_outputs(text).each do |line_number, line|
     errors << "#{relative(path)}:#{line_number} treats legacy process filename as runtime output or compatibility format: #{line}"
   end
@@ -597,6 +693,120 @@ if File.exist?(entry_bootstrap_path)
   errors << "entry coverage profile bootstrap must keep standard package self-protection" unless entry_bootstrap.include?("standard_package_root?")
 else
   errors << "missing scripts/bootstrap-entry-coverage-profile.sh"
+end
+
+# D-088-01 v3 (Decision-090 / spec d088-01-v3-behavior-spec.md §9): the
+# knowledge-target initializer's migration face must keep its contract markers;
+# the negative matrix forbids whole-target/whole-root deletion (RETIRE is an
+# archive move into .sdlc/legacy/**, never a physical delete).
+kt_bootstrap_path = File.join(ROOT, "scripts", "bootstrap-knowledge-target.sh")
+if File.exist?(kt_bootstrap_path)
+  kt_bootstrap = File.read(kt_bootstrap_path)
+  KT_V3_REQUIRED_TERMS = {
+    "--confirm-migration-plan" => "DP1 confirmation flag (spec §4.5)",
+    "BLOCKED_AMBIGUOUS" => "type-level ambiguity gate (spec R03)",
+    ".sdlc/legacy/" => "legacy archive root (spec §4.1)",
+    "PLAN_SHA256" => "plan digest output (spec §4.3)",
+    "RESIDUE" => "post-migration residue gate (spec §6.4)",
+    "migration/plan.json" => "plan artifact path (spec §4.3)"
+  }.freeze
+  KT_V3_REQUIRED_TERMS.each do |term, why|
+    errors << "knowledge-target bootstrap missing #{why}" unless kt_bootstrap.include?(term)
+  end
+  errors << "knowledge-target bootstrap must not delete the target root (zero-touch)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}"')
+  errors << "knowledge-target bootstrap must not delete the legacy root wholesale (RETIRE = archive move)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}/.specify"')
+  errors << "knowledge-target bootstrap must not delete the specs rail wholesale (RETIRE = archive move)" if kt_bootstrap.include?('rm -rf "${TARGET_PATH}/specs"')
+  # behavior anchors (G1-R1-H7): these literals are the load-bearing contract lines;
+  # a behavioral mutation that removes them must fail validation.
+  KT_V3_BEHAVIOR_ANCHORS = {
+    '"${CONFIRM_DIGEST}" != "${PLAN_SHA}"' => "DP1 plan-digest comparison (spec §4.5)",
+    "MIG_MOVED - 1" => "moved-only rollback boundary (spec §6.3)",
+    'cmp -s "${src}" "${MIG_BACKUP_DIR}/${brel}"' => "byte-identity verification on rollback (spec §6.3)",
+    "RESIDUE GATE FAILED" => "residue-gate failure path (spec §6.4)",
+    "signals=${MIG_SIG_CSV}" => "plan digest bound to detection signals (spec §4.3)",
+    "trap script_exit_guard EXIT" => "single combined EXIT guard: transaction window covers explicit exits (G1-R3-H1)"
+  }.freeze
+  KT_V3_BEHAVIOR_ANCHORS.each do |term, why|
+    errors << "knowledge-target bootstrap missing behavior anchor: #{why}" unless kt_bootstrap.include?(term)
+  end
+  gate_skip_line = kt_bootstrap.lines.find { |l| l.include?("skip_prefixes =") }
+  if gate_skip_line.nil? || gate_skip_line.include?("business_domain")
+    errors << "knowledge-target residue gate must not exempt business_domain (G1-R1-H5)"
+  end
+else
+  errors << "missing scripts/bootstrap-knowledge-target.sh"
+end
+
+# G3 / D-090-02 anchors (manual-runtime-semantic-contract v1.0.0 §8.1): the manual
+# main chain Skills must carry the frozen semantics; negative matrix N4/N5/N6 anchors.
+G3_SKILL_ANCHORS = {
+  "skills/sdlc-requirement-intake/SKILL.md" => [
+    ["publish-requirement-manifest.sh", "intake manifest creation via publisher (C2)"],
+    ["requestedDepth", "depth proposal fields (C2/DP3)"],
+    ["不依赖 LOOP runtime recovery context", "runtime dependency removed (C2)"]
+  ],
+  "skills/sdlc-solution-design/SKILL.md" => [
+    ["depthCoverageLedger", "coverage ledger (C3)"],
+    ["立即**产出可审核方案，不等待 Gate", "first-round decoupling (N4/C3)"],
+    ["缺口增量", "escalation incremental rework (C3)"]
+  ],
+  "skills/sdlc-solution-gate/SKILL.md" => [
+    ["scannedDesignVersion", "same-revision binding (C4/§5.4)"],
+    ["CONFIRMED", "legal combo enum (C4)"],
+    ["ESCALATED", "escalation path (C4)"],
+    ["publish-requirement-manifest.sh", "manifest write via publisher (C4)"]
+  ],
+  "skills/sdlc-task-planning/SKILL.md" => [
+    ["decisionStatus=CONFIRMED", "A1 admission predicate (C5)"]
+  ],
+  "skills/sdlc-implementation/SKILL.md" => [
+    ["baseRevision, reviewedRevision, changeDigest", "evidence binding (C8-a/§5.5)"],
+    ["不依赖 LOOP runtime recovery context", "runtime dependency removed (C8-a)"]
+  ],
+  "skills/sdlc-code-review/SKILL.md" => [
+    ["finding-register", "full-chain finding registration (C6)"],
+    ["不重走 solution-gate", "direct rework preserved (C6/Decision-086)"]
+  ],
+  "skills/sdlc-knowledge-sync/SKILL.md" => [
+    ["ACCEPTED 不阻断", "A4 admission (C8-b)"],
+    ["entry-update", "publisher update duty (C8-b)"]
+  ],
+  "skills/sdlc-docflow-writer/SKILL.md" => [
+    ["publish-requirement-manifest.sh", "manifest writes via publisher only (C7)"]
+  ]
+}.freeze
+G3_SKILL_ANCHORS.each do |path, terms|
+  full = File.join(ROOT, path)
+  unless File.exist?(full)
+    errors << "missing #{path}"
+    next
+  end
+  text = File.read(full)
+  terms.each do |term, why|
+    errors << "#{path} missing #{why}" unless text.include?(term)
+  end
+end
+# N4 negative: solution-design must NOT keep the depth-precondition clause
+sd_path = File.join(ROOT, "skills/sdlc-solution-design/SKILL.md")
+if File.exist?(sd_path)
+  sd = File.read(sd_path)
+  errors << "solution-design keeps the depth-precondition clause (N4)" if sd.include?("档位未裁决前不产出")
+end
+# N6 negative: code-review must NOT keep the risk-acceptance ritual
+cr_path = File.join(ROOT, "skills/sdlc-code-review/SKILL.md")
+if File.exist?(cr_path)
+  cr = File.read(cr_path)
+  errors << "code-review keeps the risk-acceptance ritual (N6)" if cr.include?("PASS_WITH_RISK（须列明风险接受字段）")
+end
+# C10: publisher tool exists and implements the self-attesting protocol
+pub_path = File.join(ROOT, "scripts/publish-requirement-manifest.sh")
+if File.exist?(pub_path)
+  pub = File.read(pub_path)
+  errors << "publisher missing self-digest verification (C10)" unless pub.include?("self-digest mismatch")
+  errors << "publisher missing atomic publish" unless pub.include?("mv ")
+  errors << "publisher missing finding lifecycle actions" unless pub.include?("finding-action")
+else
+  errors << "missing scripts/publish-requirement-manifest.sh"
 end
 
 bootstrap_context_paths = {
@@ -733,14 +943,29 @@ else
     "Gate Name:", "Gate Type:", "Manifest Path:", "Gate Basis:",
     "Result: PASS / FAIL / PASS_WITH_RISK", "Can Continue: yes/no",
     "## Design Depth Decision", "## Finding Ledger Reference",
-    "Depth: LIGHT / STANDARD / DEEP", "Decision Status: DECIDED / BLOCKED_UNKNOWN",
-    "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
+    "Depth: LIGHT / STANDARD / DEEP", "decisionStatus: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN",
+    "requiredDepth:", "Decision Scope: FULL_REQUIREMENT / DELTA_CHANGE", "BLOCKED_UNKNOWN",
+    "Scanned Design Version:", "Ledger Digest:", "## Depth Coverage Ledger",
+    "## Risk Refs",
     "adversarial_scan", "formal_verdict", "Earliest Affected Node",
     "Current / Stale:", "Finding Ledger Artifact:", "Scan Executor Binding",
-    "Verdict Executor Binding", "## Re-Gate Check", "## Risk Acceptance",
+    "Verdict Executor Binding", "## Re-Gate Check", "## Risk Refs",
     "PASS_WITH_RISK", "Reviewed Artifact:", "Reviewed Artifact Version:",
     "Gate Artifact Version:"
   ].each { |needle| tail_require(errors, gate_template, needle, "gate-result-template") }
+  # G3-R2-M3: prevent proof-ritual restoration (Decision-086)
+  if gate_template.include?("## Risk Acceptance") || gate_template.include?("Accepted By:")
+    errors << "gate-result-template: proof-ritual language must not be restored (Decision-086)"
+  end
+  if gate_template.include?("ACCEPTED_RISK proof")
+    errors << "gate-result-template: proof consumption requirement must not be restored (Decision-086)"
+  end
+  if gate_template.include?("只消费") && gate_template.include?("ACCEPTED_RISK")
+    errors << "gate-result-template: PWR proof consumption requirement must not be restored (Decision-086)"
+  end
+  unless gate_template.include?("## Risk Refs")
+    errors << "gate-result-template missing ## Risk Refs (Decision-086)"
+  end
   {
     /^## Design Depth Decision/ => 1,
     /^## Finding Ledger Reference/ => 1
@@ -895,6 +1120,33 @@ rescue StandardError => e
   errors << "C03-A canonical topology: #{e.message}"
 end
 
+# Self-tests for the per-hit negation detectors (table-driven red/green;
+# D088-R1-H7 / D088-R2-H4 / D088-R2-H5 — Ruby 2.6 compatible, no filter_map).
+begin
+  %w[DUAL_RAIL LEGACY_SOURCE].each do |table_name|
+    table = Object.const_get("#{table_name}_SELF_TEST")
+    detector = table_name == "DUAL_RAIL" ? method(:unsafe_dual_rail_declarations) : method(:unsafe_legacy_source_references)
+    failures = []
+    table.each do |sample, expected_flag|
+      actual_flag = !detector.call(sample).empty?
+      failures << sample if actual_flag != expected_flag
+    end
+    raise "self-test mismatches: #{failures.join(' | ')}" if failures.any?
+    puts "#{table_name}_DETECTOR_SELF_TEST_VERIFIED true"
+  end
+rescue StandardError => e
+  errors << "per-hit negation detectors: #{e.message}"
+end
+
+# D088-R2-H4: retired-owner active actions must not survive in the knowledge-sync
+# references (the SKILL.md capability provenance table is exempt by scope).
+Dir[File.join(SKILL_DIR, "sdlc-knowledge-sync", "references", "**", "*.md")].sort.each do |path|
+  File.readlines(path).each_with_index do |line, index|
+    next unless line.include?("sdlc-speckit-sync")
+    errors << "#{relative(path)}:#{index + 1} routes an active action to the retired owner sdlc-speckit-sync: #{line.strip}"
+  end
+end
+
 canonical_errors << "non-node utility sdlc-docflow-writer missing non-node boundary declaration" unless
   File.exist?(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")) &&
   File.read(File.join(SKILL_DIR, "sdlc-docflow-writer", "SKILL.md")).include?("非节点边界")
@@ -940,27 +1192,114 @@ else
 end
 
 # B-6: mechanically link the solution-gate dual-role firewall clause to the
-# C02 BindingRegistry structure — three facts must coexist:
+# Q1 BindingRegistry. Since W1 (Decision-073) INITIAL returns the Q1 slot map
+# directly (the former runtime swap patch was removed), three facts coexist:
 #   (a) loop/types declares BOTH execution-role literals;
-#   (b) runtime createRuntimeBindingRegistry swaps formal_verdict to hermes
-#       while adversarial_scan stays codex (different agents);
+#   (b) the Q1 slot map in core/agent-capability-bindings.ts assigns
+#       adversarial_scan->codex and formal_verdict->hermes (different agents),
+#       and createRuntimeBindingRegistry returns INITIAL directly with no
+#       replaceBinding verdict-swap patch;
 #   (c) the solution-gate SKILL.md carries the dual-role firewall clause.
 roles_declared = types_text.include?("\"adversarial_scan\"") && types_text.include?("\"formal_verdict\"")
+bindings_source_path = File.join(ROOT, "core", "agent-capability-bindings.ts")
+bindings_text = File.exist?(bindings_source_path) ? File.read(bindings_source_path) : ""
+q1_scan_codex = bindings_text.include?("\"solution-gate:adversarial_scan\": \"codex\"")
+q1_verdict_hermes = bindings_text.include?("\"solution-gate:formal_verdict\": \"hermes\"")
 runtime_source_path = File.join(ROOT, "runtime.ts")
 runtime_text = File.exist?(runtime_source_path) ? File.read(runtime_source_path) : ""
-scan_kept_codex = runtime_text.include?("binding-codex-solution-gate-formal_verdict")
-verdict_moved_hermes = runtime_text.include?("binding-hermes-solution-gate-formal_verdict")
+runtime_returns_initial = runtime_text.include?("return INITIAL_BINDING_REGISTRY")
+runtime_has_no_swap = !runtime_text.include?("replaceBinding")
+dual_agent_bound = q1_scan_codex && q1_verdict_hermes && runtime_returns_initial && runtime_has_no_swap
 sg_skill_path = File.join(SKILL_DIR, "sdlc-solution-gate", "SKILL.md")
 sg_skill = File.exist?(sg_skill_path) ? File.read(sg_skill_path) : ""
 contract_firewall = sg_skill.include?("adversarial_scan") && sg_skill.include?("formal_verdict") &&
                     sg_skill =~ /不同\s*Agent|different Agent/i
-unless roles_declared && scan_kept_codex && verdict_moved_hermes && contract_firewall
-  canonical_errors << "solution-gate dual-role firewall not mechanically linked to C02 BindingRegistry " \
-                      "(roles_declared=#{!!roles_declared}, scan_kept_codex=#{!!scan_kept_codex}, " \
-                      "verdict_moved_hermes=#{!!verdict_moved_hermes}, contract_firewall=#{!!contract_firewall})"
+unless roles_declared && dual_agent_bound && contract_firewall
+  canonical_errors << "solution-gate dual-role firewall not mechanically linked to Q1 BindingRegistry " \
+                      "(roles_declared=#{!!roles_declared}, q1_scan_codex=#{!!q1_scan_codex}, " \
+                      "q1_verdict_hermes=#{!!q1_verdict_hermes}, runtime_returns_initial=#{!!runtime_returns_initial}, " \
+                      "runtime_has_no_swap=#{!!runtime_has_no_swap}, contract_firewall=#{!!contract_firewall})"
 end
 
 errors.concat(canonical_errors.map { |e| "C03-A canonical topology: #{e}" })
+
+# ── B-7: W4 Path-A freeze (E2-T7 / Decision-073) ──
+# (a) every file on the frozen Path-A / legacy Agent-spawn list carries the
+#     FROZEN banner marker; (b) the NEW Path-B assembly surface (factory, CLI,
+#     chain kernel) imports NONE of the frozen modules — it may reach L2
+#     gateways only. Reference graph and layer definitions:
+#     docs/reports/c03-e-w4-spawn-reference-graph.md
+FROZEN_BANNER = "[FROZEN: PATH A RETIREMENT"
+W4_FROZEN_FILES = %w[
+  core/loop-requirement-design-orchestrator.ts
+  core/loop-production-coordinator.ts
+  core/loop-autonomous-delivery-loop.ts
+  core/loop-codex-implementation-adapter.ts
+  core/kimi-runtime-shadow-attachment.ts
+  core/hermes-runtime-shadow-attachment.ts
+  execution/kimi-cli-command-executor.ts
+  execution/hermes-cli-command-executor.ts
+  execution/codex-adapter.ts
+  execution/codex-cli-process-runner.ts
+  execution/hermes-gateway-real-dispatch-phase-2-code-review-canary-process-runner.ts
+  execution/codex-real-dispatch-runner.ts
+  execution/codex-real-dispatch-real-runner.ts
+  execution/kimi-gateway-real-dispatch.ts
+  execution/hermes-gateway-real-dispatch.ts
+  execution/kimi-gateway-shadow-sidecar.ts
+  execution/hermes-gateway-shadow-sidecar.ts
+].freeze
+W4_NEW_ASSEMBLY = %w[
+  execution/capability-gateway-source.ts
+  scripts/loop-run.ts
+  runtime.ts
+].freeze
+frozen_basenames = W4_FROZEN_FILES.map { |f| File.basename(f).sub(/\.ts$/, "") }
+W4_FROZEN_FILES.each do |rel|
+  frozen_path = File.join(ROOT, rel)
+  frozen_text = File.exist?(frozen_path) ? File.read(frozen_path) : ""
+  unless frozen_text.include?(FROZEN_BANNER)
+    errors << "B-7 W4 Path-A freeze: #{rel} is on the frozen list but missing the FROZEN banner marker"
+  end
+end
+W4_NEW_ASSEMBLY.each do |rel|
+  assembly_path = File.join(ROOT, rel)
+  assembly_text = File.exist?(assembly_path) ? File.read(assembly_path) : ""
+  specifiers = assembly_text.scan(/(?:from|import|require)\s*\(?\s*["']([^"']+)["']/).flatten
+  specifiers.each do |spec|
+    base = File.basename(spec).sub(/\.(ts|js)$/, "")
+    if frozen_basenames.include?(base)
+      errors << "B-7 W4 new Path-B assembly #{rel} imports frozen Path-A/legacy-spawn module #{spec.inspect} (reach L2 gateways only, see W4 reference graph)"
+    end
+  end
+end
+
+# ── B-8: C03-E W6b1 dispatch-window firewall assembly lock (E4-T3) ──
+# W6b1 turned "the recovery -> claim -> spawn -> terminal/promotion window runs
+# under the journal resume lease" from an incidental property of `run()` into an
+# enforced one. Review probe P2 proved the whole suite stays green when the
+# runtime assembly line is deleted, so only this check can catch a production
+# path that silently loses the firewall. Locked here:
+#   (a) runtime.ts assembles the guard on the LoopCapabilityEntry it builds;
+#   (b) the guard and withResumeLease use the SAME journal path variable
+#       (a second variable would check a lease nobody holds, or vice versa);
+#   (c) the entry still fails closed through isResumeLeaseHeld.
+W6B1_RUNTIME = "runtime.ts"
+W6B1_ENTRY = "core/loop-capability-entry.ts"
+w6b1_runtime_text = File.exist?(File.join(ROOT, W6B1_RUNTIME)) ? File.read(File.join(ROOT, W6B1_RUNTIME)) : ""
+w6b1_entry_text = File.exist?(File.join(ROOT, W6B1_ENTRY)) ? File.read(File.join(ROOT, W6B1_ENTRY)) : ""
+w6b1_guard_vars = w6b1_runtime_text.scan(/requireResumeLeaseJournal:\s*([A-Za-z_][A-Za-z0-9_]*)/).flatten.uniq
+w6b1_lease_vars = w6b1_runtime_text.scan(/withResumeLease\(\s*([A-Za-z_][A-Za-z0-9_]*)/).flatten.uniq
+if w6b1_guard_vars.empty?
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_RUNTIME} must assemble requireResumeLeaseJournal on the LoopCapabilityEntry (without it the dispatch window is unguarded)"
+elsif w6b1_lease_vars.empty?
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_RUNTIME} must hold the resume lease via withResumeLease"
+elsif (w6b1_guard_vars & w6b1_lease_vars).empty?
+  errors << "B-8 W6b1 dispatch-window firewall: requireResumeLeaseJournal #{w6b1_guard_vars.inspect} and withResumeLease #{w6b1_lease_vars.inspect} must use the same journal path variable"
+end
+unless w6b1_entry_text.match?(/isResumeLeaseHeld\(\s*this\.options\.requireResumeLeaseJournal\s*\)/)
+  errors << "B-8 W6b1 dispatch-window firewall: #{W6B1_ENTRY} must fail closed with isResumeLeaseHeld(this.options.requireResumeLeaseJournal)"
+end
 
 # ── C03-B R2 closure validation (H1-d / H1-e) ──
 # H1-d: category-guide ↔ known-skills contract exact consistency.

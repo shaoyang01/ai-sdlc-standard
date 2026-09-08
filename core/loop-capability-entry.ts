@@ -24,6 +24,7 @@ import type { NodeCapabilityId } from "../loop/types";
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
   NODE_CAPABILITY_EXECUTION_ROLES,
+  NODE_CAPABILITY_IDS,
   type CapabilityExecutionRole,
 } from "../loop/types";
 import {
@@ -47,6 +48,7 @@ import {
   validateLoopRunIdentity,
   validateRequirementId,
 } from "./loop-run-state";
+import { isResumeLeaseHeld } from "./loop-resume-lock";
 import { isLoopRunStoreBoundToArtifactStore, LoopRunStore } from "./loop-run-store";
 
 export interface LoopCapabilityEntryOptions {
@@ -66,6 +68,18 @@ export interface LoopCapabilityEntryOptions {
    * disjoint stores.
    */
   gateway: Pick<ExecutionGateway, "execute">;
+  /**
+   * E4-T3 dispatch-window firewall. When present, this journal path's resume
+   * lease MUST be held by the calling async context for the whole
+   * recovery→claim→spawn→terminal/promotion window; the entry fails closed
+   * with STORE_BUSY before it reads or writes anything otherwise.
+   *
+   * Optional rather than unconditional so that unit tests which exercise the
+   * entry in isolation keep testing what they were written to test. The
+   * production entry sets it, and `tests/loop-w6b1-resume-lease-window.test.ts`
+   * proves both directions of the guard.
+   */
+  requireResumeLeaseJournal?: string;
   now?: () => string;
 }
 
@@ -133,6 +147,19 @@ export class LoopCapabilityEntry {
         "capability entry requires the gateway tracing the same run store and artifact store instances",
       );
     }
+    // E4-T3: the firewall path is validated at construction so a caller cannot
+    // arm the guard with a value the check can never match (empty string, or
+    // non-string that would silently compare false forever).
+    if (
+      options.requireResumeLeaseJournal !== undefined &&
+      (typeof options.requireResumeLeaseJournal !== "string" ||
+        options.requireResumeLeaseJournal.trim().length === 0)
+    ) {
+      throw new LoopRunJournalError(
+        "INVALID_INPUT",
+        "requireResumeLeaseJournal must be a non-empty journal path when provided",
+      );
+    }
     // C02-WP5 (clause 0.1.6): snapshot and freeze the dependency configuration
     // so post-construction mutation of the caller's options object cannot swap
     // the gateway or the artifact store this entry uses.
@@ -177,6 +204,19 @@ export class LoopCapabilityEntry {
         throw new LoopRunJournalError("INVALID_INPUT", "run identity must not be a Proxy");
       }
       validateLoopRunIdentity(request.identity);
+    }
+    // E4-T3: the dispatch window opens here and stays open through the terminal
+    // /promotion decision below. When the caller armed the firewall, entering it
+    // without the journal's resume lease is refused BEFORE the first recovery
+    // read, so an unguarded window can neither claim nor spawn.
+    if (
+      this.options.requireResumeLeaseJournal !== undefined &&
+      !isResumeLeaseHeld(this.options.requireResumeLeaseJournal)
+    ) {
+      throw new LoopRunJournalError(
+        "STORE_BUSY",
+        "capability dispatch window requires the journal resume lease",
+      );
     }
     const now = this.readNow();
     let recovery = recoverRunContext(this.options.runStore, request.requirementId);
@@ -282,7 +322,8 @@ export class LoopCapabilityEntry {
           event.executionRole === previousPoint.executionRole,
       );
       if (
-        previousSucceeded === undefined || previousSucceeded.nextStepEligibility !== "ELIGIBLE" ||
+        previousSucceeded === undefined ||
+        previousSucceeded.nextStepEligibility !== "ELIGIBLE" ||
         previousSucceeded.outputArtifactRef !== request.inputArtifactRef ||
         previousSucceeded.outputArtifactVersion !== request.inputArtifactVersion ||
         previousSucceeded.outputDigest !== request.inputDigest
@@ -348,6 +389,58 @@ export class LoopCapabilityEntry {
         "ILLEGAL_TRANSITION",
         "request does not match the dispatch command derived from the recovery context",
       );
+    }
+    // G4-R5-H2 (frozen contract §7.3 A1): dispatching task-planning is an
+    // ADMITTED transition — the verdict's §4.3 ruling must be CONFIRMED with
+    // an admitting Gate Result (recovery projects it as DECIDED) and no OPEN
+    // finding whose §5.2 blocking scope covers task-planning (problem layers
+    // at or upstream of planning: REQUIREMENT / SOLUTION / PLANNING).
+    // ESCALATED and BLOCKED_UNKNOWN verdicts never satisfy A1, even when the
+    // literal Gate Result reads PASS/PWR.
+    if (request.capability === "task-planning") {
+      if (recovery.solutionGateDecision?.status !== "DECIDED") {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          "task-planning admission (A1) requires a CONFIRMED admitting verdict ruling",
+        );
+      }
+      const planningNodeIdx = NODE_CAPABILITY_IDS.indexOf("task-planning");
+      // G4-R7-B4: §5.2 rework-target semantics — an OPEN finding whose
+      // earliest node IS task-planning names planning as the rework target;
+      // it must stay dispatchable to produce the repair evidence. Only
+      // strictly-upstream OPEN findings block planning admission.
+      const blocking = recovery.openFindings.filter(
+        (finding) =>
+          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+          planningNodeIdx,
+      );
+      if (blocking.length > 0) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          `task-planning admission (A1) is blocked by OPEN findings: ${blocking.map((item) => item.findingId).join(", ")}`,
+        );
+      }
+    }
+    // G4-R8-F3 (§7.3 A4): knowledge-sync admission follows the SAME public
+    // execution precondition on EVERY dispatch boundary — the run loop
+    // (runtime) and this direct entry/claim boundary alike. The blocking
+    // scope is §5.2: an OPEN finding whose earliest node IS knowledge-sync
+    // names the tail as the rework target itself and stays dispatchable;
+    // only strictly-upstream OPEN findings (still un-resolved) block the
+    // tail until the discovery node closes them per-item.
+    if (request.capability === "knowledge-sync") {
+      const knowledgeSyncNodeIdx = NODE_CAPABILITY_IDS.indexOf("knowledge-sync");
+      const blocking = recovery.openFindings.filter(
+        (finding) =>
+          (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+          knowledgeSyncNodeIdx,
+      );
+      if (blocking.length > 0) {
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          `knowledge-sync admission (A4) is blocked by OPEN findings: ${blocking.map((item) => item.findingId).join(", ")}`,
+        );
+      }
     }
     // v2 dispatch-time role firewall (A2/G1): before dispatching the
     // formal_verdict role, the enabled binding's agent must differ from the

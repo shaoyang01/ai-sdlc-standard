@@ -96,7 +96,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   seq += 1;
   const agent = o.agent ?? "codex";
   return Object.freeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -124,6 +124,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     consumedFindingsRef: o.consumedRef ?? null,
     consumedFindingsDigest: o.consumedRef ? o.consumedRef.slice(-64) : null,
     decisionDepth: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "STANDARD" as const : null,
+    decisionStatus: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "CONFIRMED" as const : null,
     decisionScopeId: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `${RUN}:decision:${(o as { _attempt?: number })._attempt ?? attempt(o.capability, o.executionRole)}` : null,
     decisionDeltaRef: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${dg("decision-delta")}` : null,
     decisionDeltaDigest: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? dg("decision-delta") : null,
@@ -131,6 +132,16 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     errorCode: null,
     retryable: null,
     reasonCode: null,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
   }) as unknown as LoopCapabilityExecutionEvent;
 }
 
@@ -290,7 +301,9 @@ async function main(): Promise<void> {
 
   console.log("R5 (H1-4 model): source revision node must equal sourceCapability");
   {
-    expectThrow("INVALID_INPUT", () => createLoopFinding({
+    // G4-R5-H5: the anchor is the EXAMINED revision — cross-node anchors
+    // (solution-design examining the intake product) are legal now.
+    const crossAnchor = createLoopFinding({
       runId: RUN, requirementId: "req-001", sequence: 1,
       sourceCapability: "solution-design",
       sourceRevisionId: `${RUN}:revision:requirement-intake:1`,
@@ -298,7 +311,9 @@ async function main(): Promise<void> {
       severity: "HIGH", category: "SOLUTION",
       evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
       earliestAffectedNodeId: "solution-design", createdAt: TS,
-    }), "finding bound to another node's revision is rejected at construction");
+    });
+    assert(crossAnchor.sourceRevisionId === `${RUN}:revision:requirement-intake:1`,
+      "cross-node discovery anchor accepted (frozen contract §5.1)");
     // The legal shape still validates.
     const legal = createLoopFinding({
       runId: RUN, requirementId: "req-001", sequence: 1,
@@ -389,17 +404,23 @@ async function main(): Promise<void> {
         earliestAffectedNodeId: "solution-design", createdAt: TS,
       })), "appendFinding rejects a non-current source revision");
 
-      // R6: cross-node reference — the model-level node binding rejects it
-      // before the transaction even opens (nothing is persisted).
-      expectThrow("INVALID_INPUT", () => store.appendFinding(createLoopFinding({
-        runId: RUN, requirementId: "REQ-R1-001", sequence: 2,
+      // R6 (G4-R5-H5): a cross-node anchor is LEGAL when it is the examined
+      // ACTIVE current — a design finding may anchor the intake product it
+      // examined. It rejects only when that anchor is not the anchor node's
+      // ACTIVE current. G4-R6-M3: the draft keeps the run's REAL requirement
+      // id — the previous draft carried REQ-R1-002 on run REQ-R1-001, so the
+      // identity check rejected it before the anchor premise was ever
+      // exercised. With the identity isolated, the nonexistent source
+      // revision surfaces its real transition guard.
+      expectThrow("ILLEGAL_TRANSITION", () => store.appendFinding(createLoopFinding({
+        runId: RUN, requirementId: "REQ-R1-001", sequence: 1,
         sourceCapability: "solution-design",
-        sourceRevisionId: intakeRev.record.revisionId,
-      causeKind: "REGRESSION", introducedByRevisionId: intakeRev.record.revisionId,
+        sourceRevisionId: `${RUN}:revision:requirement-intake:9`,
+        causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:requirement-intake:9`,
         severity: "HIGH", category: "SOLUTION",
         evidenceRef: ref("capability_findings", "e"), evidenceDigest: dg("e"),
         earliestAffectedNodeId: "solution-design", createdAt: TS,
-      })), "appendFinding rejects a cross-node source revision");
+      })), "appendFinding rejects a nonexistent cross-node source revision");
 
       // Legal: the intake node's CURRENT revision, matching node. The two
       // rejected drafts above never persisted, so this is sequence 1.

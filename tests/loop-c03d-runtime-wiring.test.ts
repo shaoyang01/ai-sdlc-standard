@@ -118,7 +118,7 @@ function verdictGateway(
       const existing = runStore.listCapabilityExecutions(runId);
       const sequence = existing.length + 1;
       const base = {
-        schemaVersion: 4 as const,
+        schemaVersion: 5 as const,
         runId, capability, executionRole, nodeId: capability,
         attempt: context.attempt,
         bindingId: `binding-hermes-${capability}-formal_verdict`,
@@ -133,9 +133,20 @@ function verdictGateway(
         consumedFindingsRef: typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
         consumedFindingsDigest: typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
         decisionDepth: null as DesignDepth | null,
+        decisionStatus: null,
         decisionScopeId: null as string | null,
         decisionDeltaRef: null as string | null,
         decisionDeltaDigest: null as string | null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
       };
       // started event
       runStore.appendCapabilityExecution(Object.freeze({
@@ -175,6 +186,7 @@ function verdictGateway(
       runStore.appendCapabilityExecution(Object.freeze({
         ...base,
         decisionDepth: verdict.depth,
+        decisionStatus: "CONFIRMED" as const,
         decisionScopeId: scopeId,
         decisionDeltaRef: delta.artifactRef,
         decisionDeltaDigest: delta.digest,
@@ -242,8 +254,12 @@ async function main(): Promise<void> {
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
 
-  // ── T3: runtime PASS_WITH_RISK without acceptance → BLOCKED ──
-  console.log("T3: runtime PASS_WITH_RISK no acceptance → BLOCKED");
+  // ── T3: runtime PASS_WITH_RISK (CONFIRMED) → Decision-086 auto-proceed ──
+  // G4-R5-M1: the old assertion "PWR blocks pending human acceptance"
+  // predates Decision-086 (the verdict's scope-level judgment IS the
+  // acceptance; rework is for blocking findings, not PWR). The current
+  // authority: a CONFIRMED PWR verdict admits and the chain completes.
+  console.log("T3: runtime PASS_WITH_RISK CONFIRMED → proceeds (Decision-086)");
   {
     const { root, runStore, artifactStore } = makeStores("c03d-t3-");
     const gw = verdictGateway(runStore, artifactStore, { gateResult: "PASS_WITH_RISK", depth: "STANDARD" });
@@ -252,11 +268,21 @@ async function main(): Promise<void> {
         requirementId: "REQ-C03D-T3", runStore, artifactStore, gateway: gw,
         bindingRegistry: createRuntimeBindingRegistry(),
       });
-      ok(result.final_status === "failed" && result.chain_status === "BLOCKED",
-        `T3: PASS_WITH_RISK blocks (got ${result.final_status}/${result.chain_status})`);
+      ok(result.final_status === "success" && result.chain_status === "COMPLETED",
+        `T3: CONFIRMED PWR proceeds (got ${result.final_status}/${result.chain_status})`);
       const implExecuted = result.execution_trace.some(
         (e) => e.capability === "implementation");
-      ok(!implExecuted, "T3: implementation never dispatched");
+      ok(implExecuted, "T3: implementation dispatched after the PWR ruling");
+      // Negative probe at the recovery surface: the §4.3 ruling is the
+      // admission authority — a run whose verdict is NOT CONFIRMED never
+      // projects DECIDED (BLOCKED_UNKNOWN), and a completed chain derives
+      // no further dispatch.
+      const recovery = await import("../core/loop-recovery");
+      const ctx = recovery.recoverRunContext(runStore, "REQ-C03D-T3");
+      ok(ctx?.solutionGateDecision?.status === "DECIDED",
+        "T3: recovery projects the CONFIRMED PWR ruling as DECIDED");
+      ok(recovery.deriveDispatchCommand(ctx!) === null,
+        "T3: completed chain derives no further dispatch");
     } finally { rmSync(root, { recursive: true, force: true }); }
   }
 

@@ -4,6 +4,11 @@ set -euo pipefail
 
 usage() {
   cat <<'USAGE'
+DEPRECATED (Decision-088/089 / D-088-01): knowledge-target initialization and the
+governance YAML set moved to scripts/bootstrap-knowledge-target.sh (v2 dual-mode:
+.sdlc root, code-driven fill, audit mode). This speckit-era bootstrap is kept only
+for historical callers and must not be used for new projects.
+
 Usage:
   scripts/bootstrap-speckit-project.sh <target-project-path> [options]
 

@@ -31,12 +31,34 @@ import { historicalRestartAuthorized } from "./loop-regate";
 // decision delta (ref/digest pair) recording what the depth choice changes;
 // every other event must leave all four null. Recovery refuses to derive a
 // DECIDED admission from gateResult alone.
-export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 4 as const;
+//
+// v5 (G4-R5-H1/H3, frozen manual-runtime contract §4.1/§4.3): the formal
+// ruling is a TWO-field fact. A succeeded formal_verdict must carry
+// decisionStatus (CONFIRMED | ESCALATED | BLOCKED_UNKNOWN) and the legal
+// §4.3 combination — CONFIRMED/ESCALATED require a non-null decisionDepth,
+// BLOCKED_UNKNOWN requires decisionDepth === null (explicit null; missing is
+// NOT null). decisionStatus is part of the canonical hash: mutating it on a
+// persisted event is hash-drift. v4 events stay readable (legacy journals);
+// they carry no decisionStatus authority — admission consumers require the
+// field, so v4 verdicts can never authorize forward movement under v5 rules.
+//
+// v5 also adds the D-087 node business terminal: status "blocked" records a
+// process-completed attempt whose node declared BLOCKED (envelope nodeStatus).
+// It is a terminal with the output artifact persisted as evidence, but
+// nextStepEligibility is always BLOCKED — no downstream dispatch, no node
+// revision (revision materialization only consumes "succeeded" producers).
+export const LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION = 5 as const;
+
+/** Historical event schema versions accepted on read (never written). */
+export const LOOP_CAPABILITY_EXECUTION_HISTORICAL_SCHEMA_VERSIONS = [4] as const;
 
 export const DECISION_DEPTHS = ["LIGHT", "STANDARD", "DEEP"] as const;
 export type DecisionDepth = (typeof DECISION_DEPTHS)[number];
 
-export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed";
+export const DECISION_STATUSES = ["CONFIRMED", "ESCALATED", "BLOCKED_UNKNOWN"] as const;
+export type DecisionStatus = (typeof DECISION_STATUSES)[number];
+
+export type LoopCapabilityExecutionStatus = "started" | "succeeded" | "failed" | "blocked";
 export type LoopCapabilityGateResult = "PASS" | "FAIL" | "PASS_WITH_RISK" | "NOT_APPLICABLE";
 export type LoopNextStepEligibility = "ELIGIBLE" | "INELIGIBLE" | "BLOCKED";
 
@@ -76,6 +98,7 @@ export type LoopCapabilityExecutionEvent = Readonly<{
    * every other event carries all four as null.
    */
   decisionDepth: DecisionDepth | null;
+  decisionStatus: DecisionStatus | null;
   decisionScopeId: string | null;
   decisionDeltaRef: string | null;
   decisionDeltaDigest: string | null;
@@ -83,7 +106,32 @@ export type LoopCapabilityExecutionEvent = Readonly<{
   errorCode: string | null;
   retryable: boolean | null;
   reasonCode: string | null;
+  // E4-T1 durable process evidence. Every field is nullable; a deterministic
+  // shadow event carries ALL of them null. Only a real process attempt
+  // populates them, and they are part of the canonical hash (no fork): a
+  // persisted invocation/process/staging/promotion fact cannot be rewritten
+  // without hash drift. No dynamic argv CONTENT is stored — invocationDigest
+  // is the sha256 of the normalized invocation shape only.
+  processInvocationDigest: string | null;
+  processExitCode: number | null;
+  processSignal: ProcessSignal | null;
+  processDurationMs: number | null;
+  processTruncated: boolean | null;
+  stagingRef: string | null;
+  stagingDigest: string | null;
+  promotionRef: string | null;
+  promotionDigest: string | null;
+  /** Anchor for the E4-T4 machine-readable human_action_required artifact. */
+  humanActionRef: string | null;
 }>;
+
+// E4-T1: closed allowlist of the process signals a real runner may record as
+// the terminating signal. Arbitrary strings are rejected.
+export const PROCESS_SIGNALS = [
+  "SIGHUP", "SIGINT", "SIGQUIT", "SIGABRT", "SIGKILL", "SIGALRM", "SIGTERM",
+  "SIGPIPE",
+] as const;
+export type ProcessSignal = (typeof PROCESS_SIGNALS)[number];
 
 const EVENT_FIELDS = [
   "schemaVersion", "executionEventId", "runId", "sequence", "capability", "executionRole", "nodeId",
@@ -92,8 +140,11 @@ const EVENT_FIELDS = [
   "inputArtifactRef", "inputArtifactVersion", "inputDigest", "outputArtifactRef",
   "outputArtifactVersion", "outputDigest", "gateResult", "unresolvedFindingsRef",
   "unresolvedFindingsDigest", "consumedFindingsRef", "consumedFindingsDigest",
-  "decisionDepth", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
+  "decisionDepth", "decisionStatus", "decisionScopeId", "decisionDeltaRef", "decisionDeltaDigest",
   "nextStepEligibility", "errorCode", "retryable", "reasonCode",
+  "processInvocationDigest", "processExitCode", "processSignal", "processDurationMs",
+  "processTruncated", "stagingRef", "stagingDigest", "promotionRef", "promotionDigest",
+  "humanActionRef",
 ] as const;
 
 const AGENTS: readonly AgentName[] = ["kimi", "codex", "hermes"];
@@ -102,7 +153,7 @@ const ADAPTER_BY_AGENT: Readonly<Record<AgentName, string>> = Object.freeze({
   codex: "codex-real-dispatch",
   hermes: "hermes-cli",
 });
-const STATUSES: readonly LoopCapabilityExecutionStatus[] = ["started", "succeeded", "failed"];
+const STATUSES: readonly LoopCapabilityExecutionStatus[] = ["started", "succeeded", "failed", "blocked"];
 const GATE_RESULTS: readonly LoopCapabilityGateResult[] = ["PASS", "FAIL", "PASS_WITH_RISK", "NOT_APPLICABLE"];
 const ELIGIBILITY_VALUES: readonly LoopNextStepEligibility[] = ["ELIGIBLE", "INELIGIBLE", "BLOCKED"];
 const CONTROL_RE = /[\x00-\x1f\x7f-\x9f]/;
@@ -181,8 +232,19 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   if (utilTypes.isProxy(value)) invalid("capability execution event must not be a Proxy");
   const event = readPlainDataRecord(value, "capability execution event");
   exactFields(event);
-  if (event.schemaVersion !== LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION) {
+  if (event.schemaVersion !== LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION &&
+      !(LOOP_CAPABILITY_EXECUTION_HISTORICAL_SCHEMA_VERSIONS as readonly number[]).includes(event.schemaVersion as number)) {
     invalid("capability execution schema version is unsupported");
+  }
+  // v5 (G4-R5-H1): only v5 events carry decisionStatus authority. v4
+  // (historical) events may only read it as null-or-canonical — they never
+  // gain admission authority from it (consumers require the field on v5).
+  const isV5Event = event.schemaVersion === LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION;
+  if (
+    event.decisionStatus !== null &&
+    (typeof event.decisionStatus !== "string" || !DECISION_STATUSES.includes(event.decisionStatus as DecisionStatus))
+  ) {
+    invalid("decisionStatus must be a canonical decision status or null");
   }
   text(event.executionEventId, "executionEventId");
   const runId = text(event.runId, "runId");
@@ -263,9 +325,12 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   if (!isVerdictRole && (event.consumedFindingsRef !== null || event.consumedFindingsDigest !== null)) {
     invalid("only the formal_verdict role may bind a consumed Finding Ledger");
   }
-  // v4 (Round 2 review H1): the MATERIALIZED depth decision. The choice is
-  // an immutable fact ON the verdict event — never inferred downstream from
-  // gateResult — and no other execution may carry it.
+  // v4/v5 (Round 2 review H1 + G4-R5-H3): the MATERIALIZED decision. The
+  // choice is an immutable fact ON the verdict event — never inferred
+  // downstream from gateResult — and no other execution may carry it.
+  // v5 combination table (frozen contract §4.3): CONFIRMED/ESCALATED require
+  // a non-null decisionDepth; BLOCKED_UNKNOWN requires decisionDepth === null
+  // (an explicit null — a missing depth is a different fact and fails).
   const hasDepth = event.decisionDepth !== null;
   const hasScope = event.decisionScopeId !== null;
   const hasDelta = event.decisionDeltaRef !== null || event.decisionDeltaDigest !== null;
@@ -283,8 +348,31 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   if (deltaRef !== null && deltaRef.digest !== deltaDigest) {
     invalid("decision delta reference and digest must match");
   }
+  if (isV5Event) {
+    // v5: decisionStatus rides ONLY on a succeeded formal_verdict event.
+    if (isSucceededVerdict) {
+      if (event.decisionStatus === null) {
+        invalid("succeeded formal_verdict must materialize decisionStatus");
+      }
+      if (event.decisionStatus === "BLOCKED_UNKNOWN") {
+        if (hasDepth) {
+          invalid("BLOCKED_UNKNOWN requires decisionDepth === null (frozen contract §4.3)");
+        }
+      } else if (!hasDepth) {
+        invalid("CONFIRMED/ESCALATED requires a non-null decisionDepth (frozen contract §4.3)");
+      }
+    } else if (event.decisionStatus !== null) {
+      invalid("only a succeeded formal_verdict may carry decisionStatus");
+    }
+  }
   if (isSucceededVerdict) {
-    if (!hasDepth || !hasScope || !hasDelta) {
+    if (!hasScope || !hasDelta) {
+      invalid("succeeded formal_verdict must materialize decisionScopeId and a decision delta");
+    }
+    if (isV5Event && event.decisionStatus !== "BLOCKED_UNKNOWN" && !hasDepth) {
+      invalid("succeeded formal_verdict must materialize decisionDepth");
+    }
+    if (!isV5Event && !hasDepth) {
       invalid("succeeded formal_verdict must materialize decisionDepth, decisionScopeId and a decision delta");
     }
     void scopeId;
@@ -303,6 +391,53 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   const errorCode = nullableText(event.errorCode, "errorCode");
   const reasonCode = nullableText(event.reasonCode, "reasonCode");
   if (event.retryable !== null && typeof event.retryable !== "boolean") invalid("retryable must be boolean or null");
+  // E4-T1 durable process evidence (all nullable, fail-closed). A deterministic
+  // shadow event leaves every one of these null.
+  const invocationDigest = nullableDigest(event.processInvocationDigest, "processInvocationDigest");
+  const exitRaw = event.processExitCode;
+  if (
+    exitRaw !== null &&
+    (typeof exitRaw !== "number" || !Number.isSafeInteger(exitRaw) || exitRaw < 0 || exitRaw > 255)
+  ) {
+    invalid("processExitCode must be an integer in 0..255 or null");
+  }
+  const signalRaw = event.processSignal;
+  if (
+    signalRaw !== null &&
+    (typeof signalRaw !== "string" || !PROCESS_SIGNALS.includes(signalRaw as ProcessSignal))
+  ) {
+    invalid("processSignal must be a canonical signal or null");
+  }
+  if (exitRaw !== null && signalRaw !== null) {
+    invalid("a process terminates by exit code OR signal, never both");
+  }
+  const durationRaw = event.processDurationMs;
+  if (
+    durationRaw !== null &&
+    (typeof durationRaw !== "number" || !Number.isSafeInteger(durationRaw) || durationRaw < 1)
+  ) {
+    invalid("processDurationMs must be a positive safe integer or null");
+  }
+  if (event.processTruncated !== null && typeof event.processTruncated !== "boolean") {
+    invalid("processTruncated must be boolean or null");
+  }
+  const stagingRef = nullableArtifactRef(event.stagingRef, "stagingRef");
+  const stagingDigestField = nullableDigest(event.stagingDigest, "stagingDigest");
+  const promotionRef = nullableArtifactRef(event.promotionRef, "promotionRef");
+  const promotionDigestField = nullableDigest(event.promotionDigest, "promotionDigest");
+  if ((stagingRef === null) !== (stagingDigestField === null)) invalid("staging ref and digest must appear together");
+  if (stagingRef !== null && stagingRef.digest !== stagingDigestField) invalid("staging reference and digest must match");
+  if ((promotionRef === null) !== (promotionDigestField === null)) invalid("promotion ref and digest must appear together");
+  if (promotionRef !== null && promotionRef.digest !== promotionDigestField) invalid("promotion reference and digest must match");
+  if (promotionRef !== null && stagingRef === null) invalid("a promotion requires its staging evidence");
+  const humanActionRefText = nullableText(event.humanActionRef, "humanActionRef");
+  const hasProcessEvidence = invocationDigest !== null || exitRaw !== null ||
+    signalRaw !== null || durationRaw !== null || event.processTruncated !== null;
+  // Any process fact implies a real invocation: evidence is either absent
+  // (shadow) or complete (an invocation digest anchors it).
+  if (hasProcessEvidence && invocationDigest === null) {
+    invalid("real process evidence requires a process invocation digest");
+  }
   if (event.executionEventId !== `${runId}:capability:${sequence}:${event.status}`) {
     invalid("executionEventId must match run, sequence and status");
   }
@@ -311,9 +446,12 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (
       outputRef !== null || outputVersion !== null || outputDigest !== null || event.gateResult !== null ||
       findingRef !== null || event.nextStepEligibility !== null || errorCode !== null ||
-      event.retryable !== null || reasonCode !== null
+      event.retryable !== null || reasonCode !== null ||
+      invocationDigest !== null || event.processExitCode !== null || event.processSignal !== null ||
+      event.processDurationMs !== null || event.processTruncated !== null ||
+      stagingRef !== null || promotionRef !== null || humanActionRefText !== null
     ) {
-      invalid("started capability execution must not contain result fields");
+      invalid("started capability execution must not contain result or process-evidence fields");
     }
     // The consumed-ledger claim is part of the dispatch claim itself so a
     // recovered verdict cannot swap ledgers between start and terminal.
@@ -321,6 +459,9 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
   } else if (event.status === "succeeded") {
     if (outputRef === null || outputVersion === null || outputDigest === null) {
       invalid("succeeded capability execution requires output ref, version and digest");
+    }
+    if (hasProcessEvidence && (exitRaw !== 0 || signalRaw !== null)) {
+      invalid("a succeeded real process must exit 0 with no terminating signal");
     }
     if (event.gateResult === null || event.nextStepEligibility === null) {
       invalid("succeeded capability execution requires Gate and next-step eligibility");
@@ -350,10 +491,36 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
     if (gateRole !== "adversarial_scan" && findingRef !== null && event.nextStepEligibility === "ELIGIBLE") {
       invalid("unresolved findings must not make the next step eligible");
     }
+  } else if (event.status === "blocked") {
+    // v5 (D-087 node business result): a process-completed attempt whose node
+    // declared BLOCKED. The blocker report stays a first-class output
+    // artifact; the business outcome never admits downstream work.
+    if (outputRef === null || outputVersion === null || outputDigest === null) {
+      invalid("blocked capability execution requires output ref, version and digest");
+    }
+    if (hasProcessEvidence && (exitRaw !== 0 || signalRaw !== null)) {
+      invalid("a blocked real process must exit 0 with no terminating signal");
+    }
+    if (event.gateResult === null || event.nextStepEligibility === null) {
+      invalid("blocked capability execution requires Gate and next-step eligibility");
+    }
+    if (errorCode !== null || event.retryable !== null || reasonCode !== null) {
+      invalid("blocked capability execution must not contain failure fields");
+    }
+    if (event.nextStepEligibility !== "BLOCKED") {
+      invalid("a blocked node business result must block the next step");
+    }
+    if (isVerdictRole) {
+      invalid("a formal_verdict execution cannot end blocked — it renders a decision instead");
+    }
+    if (isScanRole && findingRef === null) {
+      invalid("adversarial_scan must persist its Finding Ledger");
+    }
   } else {
     if (outputRef !== null || outputVersion !== null || outputDigest !== null || event.gateResult !== null || findingRef !== null) {
       invalid("failed capability execution must not contain successful result fields");
     }
+    if (promotionRef !== null) invalid("a failed execution must not carry promotion evidence");
     if (errorCode === null && reasonCode === null) invalid("failed capability execution requires an error or reason code");
     if (event.nextStepEligibility !== "BLOCKED") invalid("failed capability execution must block the next step");
     if (typeof event.retryable !== "boolean") invalid("failed capability execution requires retryable");
@@ -363,6 +530,15 @@ export function validateLoopCapabilityExecutionEvent(value: unknown): void {
 /** Fixed-order canonical representation used by the run-journal hash. */
 export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityExecutionEvent): string {
   validateLoopCapabilityExecutionEvent(event);
+  // G4-R5-H1: decisionStatus enters the canonical hash ONLY for v5 events.
+  // v4 (historical) events keep their exact pre-v5 canonical form so their
+  // persisted hashes still verify — reinterpreting a v4 event's hash would
+  // condemn every legacy journal as corrupt. v5 events are tamper-evident on
+  // the ruling: mutating decisionStatus in persisted storage drifts the hash.
+  const decision =
+    event.schemaVersion === LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION
+      ? { decisionStatus: event.decisionStatus }
+      : {};
   return JSON.stringify({
     schemaVersion: event.schemaVersion,
     executionEventId: event.executionEventId,
@@ -395,6 +571,7 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     // is part of the canonical hash — a persisted verdict's scope/depth/
     // delta cannot be rewritten without hash-drift detection.
     decisionDepth: event.decisionDepth,
+    ...decision,
     decisionScopeId: event.decisionScopeId,
     decisionDeltaRef: event.decisionDeltaRef,
     decisionDeltaDigest: event.decisionDeltaDigest,
@@ -402,6 +579,19 @@ export function canonicalizeLoopCapabilityExecutionEvent(event: LoopCapabilityEx
     errorCode: event.errorCode,
     retryable: event.retryable,
     reasonCode: event.reasonCode,
+    // E4-T1: process evidence is part of the canonical hash — a persisted
+    // invocation/process/staging/promotion fact cannot be rewritten without
+    // hash-drift detection.
+    processInvocationDigest: event.processInvocationDigest,
+    processExitCode: event.processExitCode,
+    processSignal: event.processSignal,
+    processDurationMs: event.processDurationMs,
+    processTruncated: event.processTruncated,
+    stagingRef: event.stagingRef,
+    stagingDigest: event.stagingDigest,
+    promotionRef: event.promotionRef,
+    promotionDigest: event.promotionDigest,
+    humanActionRef: event.humanActionRef,
   });
 }
 
@@ -512,7 +702,7 @@ export function validateLoopCapabilityExecutionChain(
         ) {
           invalid("only a retryable failed capability may be retried");
         }
-      } else if (previous.status === "succeeded") {
+      } else if (previous.status === "succeeded" || previous.status === "blocked") {
         const previousIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
           (point) =>
             point.capability === previous.capability &&
@@ -524,8 +714,15 @@ export function validateLoopCapabilityExecutionChain(
             point.capability === event.capability &&
             point.executionRole === event.executionRole,
         );
+        // G4-R5-H2 (Decision-087 rollback of Decision-083 remnants): the old
+        // human ACCEPTED_RISK-proof admission branch is retired. Admission of
+        // the canonical next step is carried by the event's own
+        // nextStepEligibility — derived from the verdict's §4.3 ruling
+        // (CONFIRMED) at write time. Persisted events are immutable; there
+        // is no post-hoc rederivation that can admit a BLOCKED verdict.
         const isCanonicalNext =
-          previous.nextStepEligibility === "ELIGIBLE" && nextPoint !== undefined &&
+          previous.nextStepEligibility === "ELIGIBLE" &&
+          nextPoint !== undefined &&
           event.capability === nextPoint.capability &&
           event.executionRole === nextPoint.executionRole;
         // WP4: a backward jump is a generation restart and is legal only at
@@ -554,14 +751,34 @@ export function validateLoopCapabilityExecutionChain(
         const liveExact =
           isNewAppendEvent &&
           restartTarget !== null && thisIndex === restartTarget;
+        // G4-R5-H4 (D-087): a blocked node business result is a completed
+        // attempt with a blocker report — it never admits downstream (its
+        // nextStepEligibility is BLOCKED, so isCanonicalNext is false), but
+        // what may FOLLOW it is either its own re-attempt on the unchanged
+        // dispatch claim (same slot, next attempt, identical input triple and
+        // consumed-ledger claim — the recovery authority re-derives the same
+        // command) or an authorized backward jump (upstream reflow), so the
+        // blocked terminal cannot brick the chain.
+        const blockedRetryOk =
+          previous.status === "blocked" &&
+          event.capability === previous.capability &&
+          event.executionRole === previous.executionRole &&
+          event.attempt === previous.attempt + 1 &&
+          event.inputArtifactRef === previous.inputArtifactRef &&
+          event.inputArtifactVersion === previous.inputArtifactVersion &&
+          event.inputDigest === previous.inputDigest &&
+          event.consumedFindingsRef === previous.consumedFindingsRef &&
+          event.consumedFindingsDigest === previous.consumedFindingsDigest;
         const isAuthorizedRestart =
           !isCanonicalNext &&
+          !blockedRetryOk &&
           thisIndex < previousIndex + 1 &&
           (liveExact || historicalOk || historicalFeedbackOk);
-        if (!isCanonicalNext && !isAuthorizedRestart) {
+        if (!isCanonicalNext && !isAuthorizedRestart && !blockedRetryOk) {
+
           invalid("capability execution must follow the canonical eligible chain");
         }
-        if (!isCanonicalNext) {
+        if (!isCanonicalNext && !blockedRetryOk) {
           // Generation restart: the rebuilt point consumes the REUSED
           // upstream output — the last succeeded execution of the point
           // immediately before the restart target. A restart landing on
@@ -598,6 +815,16 @@ export function validateLoopCapabilityExecutionChain(
               invalid("restart input must match the reused upstream output");
             }
           }
+        } else if (blockedRetryOk) {
+          // G4-R6-H4: the three transition shapes are mutually exclusive
+          // branches. A same-point blocked re-attempt validates ONLY its
+          // unchanged dispatch claim (identical input triple, consumed
+          // ledger and +1 attempt — blockedRetryOk above). The canonical
+          // advance rules in the next branch compare the new input against
+          // the predecessor's blocked OUTPUT — a fact a retry never
+          // consumes — so applying them here rejected every legal blocked
+          // re-drive with "capability input must match the predecessor's
+          // effective output".
         } else {
         // v2 (A2, G1): the formal_verdict dispatch must go to a different
         // agent than the adversarial_scan that produced the consumed ledger.

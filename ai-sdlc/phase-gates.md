@@ -101,7 +101,7 @@ Gate 是阶段准入条件，不是建议。
 - 新逻辑失败、超时、异常时是否影响原流程。
 - 是否改变返回值、状态、事务、日志、MQ、缓存或 DB 写入。
 - 状态流转、数据来源、异常处理、测试方案是否完整。
-- 输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = DECIDED/BLOCKED_UNKNOWN）。
+- 输出 Gate Result 与设计深度裁决（depth = LIGHT/STANDARD/DEEP；decision_status = CONFIRMED/ESCALATED/BLOCKED_UNKNOWN）。
 - `BLOCKED_UNKNOWN` 不进入实现。
 - 对抗扫描与正式裁决必须由不同 Agent binding 执行（Decision-044）；同一 Agent 执行两角色即 fail-closed。
 - 下游审核必须记录被审阅技术方案的稳定路径和内部 Version。
@@ -124,7 +124,7 @@ Gate 是阶段准入条件，不是建议。
 - 异常处理、幂等、事务边界是否符合方案。
 - 是否引入兼容性、性能或安全风险。
 - 是否审阅了当前实现记录 Version。
-- 新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效；否则不阻塞本轮 closure（作为后续 improvement）。
+- 新 blocking finding 必须证明由本轮修复直接引入或证明 baseline 失效；证明不成立时仍按 `causeKind=IMPROVEMENT` 登记 OPEN finding——与 REGRESSION 同等驱动返工波并阻断完成（G4-R5-H8），不存在"后续 improvement 不阻 closure"的旁路（G4-R6-M4 同步）。
 - 方案缺口必须按根因回流 `solution-design` / `task-planning`，不得只修代码。
 
 ### knowledge-sync 准入
@@ -132,7 +132,7 @@ Gate 是阶段准入条件，不是建议。
 - 当前 generation 七节点 current revisions 有效；无未关闭 blocking finding。
 - 输入不得包含 stale revision、未关闭 blocking finding、旧 specs-run 或历史 sync 结果。
 - 原始测试/线上反馈不得直接进入 knowledge-sync，必须先经 requirement-intake。
-- `PASS_WITH_RISK` 只消费具有当前证据的 `ACCEPTED_RISK`；Critical 与未接受 High 始终阻塞。
+- `PASS_WITH_RISK` 按 Decision-086 自动推进：verdict scope 级裁决即验收；OPEN blocking finding 按 §5.2 canonical order 阻断下游；实现类 finding 经 direct rework + code-review 复验关闭。Critical 与未关闭 High 始终阻塞。
 
 ## 非 Gate 阶段总结
 

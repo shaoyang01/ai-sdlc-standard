@@ -1,0 +1,558 @@
+{
+  "nonregular": [
+    {
+      "mode": "adoption",
+      "kind": "symlink",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "symlink",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "symlink",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "symlink",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "dangling",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "dangling",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "dangling",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "dangling",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "fifo",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "fifo",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "fifo",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "fifo",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "socket",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "socket",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "socket",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "adoption",
+      "kind": "socket",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "symlink",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "symlink",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "symlink",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "symlink",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "dangling",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "dangling",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "dangling",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "dangling",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "fifo",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "fifo",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "fifo",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "fifo",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "socket",
+      "mixed": false,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "socket",
+      "mixed": false,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "socket",
+      "mixed": true,
+      "flag": "--plan",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    },
+    {
+      "mode": "legacy",
+      "kind": "socket",
+      "mixed": true,
+      "flag": "--apply",
+      "rc": 1,
+      "c10": true,
+      "unchanged": true
+    }
+  ],
+  "noncorpus-special": {
+    "rc": 0,
+    "pipe_not_classified": true
+  },
+  "empty": [
+    {
+      "kind": "absent",
+      "unsafe": false,
+      "flag": "--plan",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": false,
+      "flag": "--dry-run",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": true,
+      "flag": "--plan",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": true,
+      "flag": "--dry-run",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "absent",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": false,
+      "flag": "--plan",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": false,
+      "flag": "--dry-run",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": true,
+      "flag": "--plan",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": true,
+      "flag": "--dry-run",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "excluded-only",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": false,
+      "flag": "--plan",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": false,
+      "flag": "--dry-run",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": false,
+      "flag": "--apply",
+      "rc": 0,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": true,
+      "flag": "--plan",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": true,
+      "flag": "--dry-run",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    },
+    {
+      "kind": "empty-directories",
+      "unsafe": true,
+      "flag": "--apply",
+      "rc": 1,
+      "unbound": false,
+      "semantic_output": true
+    }
+  ],
+  "ordinary-ownership": [
+    {
+      "folder": "business_domain",
+      "delete": false,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/business_domain/a.md"
+      ]
+    },
+    {
+      "folder": "business_domain",
+      "delete": true,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/business_domain/a.md (destination no longer present)"
+      ]
+    },
+    {
+      "folder": "reports",
+      "delete": false,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/legacy/.specify/reports/a.md"
+      ]
+    },
+    {
+      "folder": "reports",
+      "delete": true,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/legacy/.specify/reports/a.md (destination no longer present)"
+      ]
+    },
+    {
+      "folder": "memory",
+      "delete": false,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/memory/a.md"
+      ]
+    },
+    {
+      "folder": "memory",
+      "delete": true,
+      "rc": 1,
+      "source_restored": true,
+      "prefix_preserved": true,
+      "current_preserved": true,
+      "conflicts": [
+        ".sdlc/memory/a.md (destination no longer present)"
+      ]
+    }
+  ]
+}

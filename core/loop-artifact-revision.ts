@@ -39,10 +39,16 @@ export type LoopArtifactRevisionValidity = (typeof LOOP_ARTIFACT_REVISION_VALIDI
 // role and records NOT_APPLICABLE.
 export const LOOP_ARTIFACT_GATE_CAPABILITIES = ["solution-gate"] as const;
 
-// The revision artifact kinds are exactly the canonical LoopArtifactKind
-// values. The list is restated here so this model stays import-pure (the
-// artifact store module owns filesystem code); the compile-time check below
-// fails closed if the canonical union ever drifts.
+// Revision-allowed artifact kinds. The list is restated here so this model
+// stays import-pure (the artifact store module owns filesystem code); the
+// compile-time check below fails closed if the canonical union ever drifts.
+//
+// S2 (W6b3): one array, two different questions — "is this a canonical kind at
+// all?" (finding evidence refs) and "may this kind carry a revision?" (below).
+// Non-revision consumers must read it through LOOP_ARTIFACT_CANONICAL_KINDS so
+// the call site says which question it is asking; the two are deliberately NOT
+// copy-pasted into separate literals, because a second copy can drift. Split
+// them the day the revision subset actually narrows.
 export const LOOP_ARTIFACT_REVISION_KINDS = [
   "code_patch",
   "test_summary",
@@ -61,10 +67,20 @@ export const LOOP_ARTIFACT_REVISION_KINDS = [
   "task_plan",
   "implementation_record",
   "knowledge_sync_result",
+  // C03-E W6b2 (E4-T4): the human boundary artifact. It is not a node product
+  // and therefore has no entry in LOOP_ARTIFACT_NODE_PRODUCT_PROJECTION; it is
+  // listed here because this array doubles as the canonical-kind registry that
+  // the compile-time drift check below and loop-finding-lifecycle.ts consult.
+  "human_action_required",
 ] as const;
 type ArtifactKindDrift = Exclude<LoopArtifactKind, (typeof LOOP_ARTIFACT_REVISION_KINDS)[number]>;
 const _artifactKindListComplete: [ArtifactKindDrift] extends [never] ? true : never = true;
 void _artifactKindListComplete;
+
+// The canonical-kind reading of the same set (S2): same object, so it cannot
+// drift from the revision allowlist. Used by consumers that only need to know
+// whether a kind is canonical — see loop-finding-lifecycle.ts.
+export const LOOP_ARTIFACT_CANONICAL_KINDS = LOOP_ARTIFACT_REVISION_KINDS;
 
 // The unique canonical node product projection (v2 contract §2, A4): each
 // canonical node has exactly one product artifact kind and one stable-path
@@ -155,7 +171,13 @@ export const LOOP_ARTIFACT_INDEX_NODE_CAPABILITIES: Readonly<Record<string, Node
     "06 知识同步": "knowledge-sync",
   });
 
-export const LOOP_ARTIFACT_INDEX_STATUSES = ["draft", "active", "stale", "replaced"] as const;
+// G4-R5-M2 (frozen contract §6.2.4, mapping table frozen there): the manifest
+// entry's lifecycle status is projected FROM the revision validity —
+// ACTIVE→"current", STALE/SUPERSEDED→"stale" — and the manual face may
+// additionally annotate a reflow-pending node as "actionable" (§5.4). The
+// pre-freeze draft/active/replaced vocabulary is retired: an index row
+// carrying it is not a canonical manifest row.
+export const LOOP_ARTIFACT_INDEX_STATUSES = ["current", "stale", "actionable"] as const;
 export type LoopArtifactIndexStatus = (typeof LOOP_ARTIFACT_INDEX_STATUSES)[number];
 
 export type LoopArtifactIndexRow = Readonly<{
@@ -726,12 +748,19 @@ export function crossBindArtifactIndexRow(
   if (record.version !== currentRevision.semver) {
     return stop("VERSION_DRIFT", "manifest version does not match the journal current revision");
   }
+  // G4-R6-M4: the FROZEN §6.2.4 mapping, verbatim — ACTIVE↔"current",
+  // STALE/SUPERSEDED↔"stale". The former "actionable wherever stale"
+  // extension widened the frozen contract by equating ANY non-ACTIVE
+  // revision with the manual face's reflow-pending annotation, without the
+  // rework context that annotation requires. A manifest "actionable" row is
+  // STATUS_DRIFT in the runtime cross-bind; a legal manual actionable
+  // annotation is judged by its real rework context in the manual-runtime
+  // layers, never inferred from non-ACTIVE validity alone.
   const statusMatches =
-    (currentRevision.validity === "ACTIVE" && (status === "draft" || status === "active")) ||
-    (currentRevision.validity === "STALE" && status === "stale") ||
-    (currentRevision.validity === "SUPERSEDED" && status === "replaced");
+    (currentRevision.validity === "ACTIVE" && status === "current") ||
+    (currentRevision.validity !== "ACTIVE" && status === "stale");
   if (!statusMatches) {
-    return stop("STATUS_DRIFT", "manifest status does not match the runtime validity mapping");
+    return stop("STATUS_DRIFT", "manifest status does not match the frozen revision-validity mapping");
   }
   if (isLoopArtifactGateCapability(capability) && result !== currentRevision.gateResult) {
     return stop("RESULT_DRIFT", "Gate row result does not match the journal Gate result");

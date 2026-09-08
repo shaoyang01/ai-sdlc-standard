@@ -30,6 +30,7 @@ import {
   type RuntimeCapabilityGateway,
 } from "../runtime";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway } from "./fixtures/multi-agent-fake-gateway";
 import { LoopCapabilityEntry } from "../core/loop-capability-entry";
 import { LoopArtifactStore } from "../core/loop-artifact-store";
 import { LoopRunStore } from "../core/loop-run-store";
@@ -367,7 +368,7 @@ async function main(): Promise<void> {
         const nowFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === nodeId)!;
         ok(nowFact.revisionId === reusedBefore.get(nodeId), `${nodeId} current reused read-only`);
       }
-      for (const nodeId of ["implementation", "code-review", "knowledge-sync"] as const) {
+      for (const nodeId of ["implementation", "code-review"] as const) {
         const nowFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === nodeId)!;
         ok(nowFact.revisionId !== reusedBefore.get(nodeId) && nowFact.validity === "ACTIVE",
           `${nodeId} was rebuilt to a fresh ACTIVE current`);
@@ -376,17 +377,31 @@ async function main(): Promise<void> {
           `the superseded ${nodeId} revision remains auditable`,
         );
       }
+      // G4-R7-B4 (§7.3 A4): the tail is not admitted while the finding is OPEN.
+      const ksFact = afterWave.currentArtifactMap.find((fact) => fact.nodeId === "knowledge-sync")!;
+      ok(ksFact.revisionId === reusedBefore.get("knowledge-sync"),
+        "knowledge-sync is not admitted while the finding is OPEN (A4)");
       ok(afterWave.openFindings.length === 1 && afterWave.openFindings[0]!.findingId === findingId,
         "re-running agents never auto-closes a finding (invariant 8)");
       // RESOLVED orchestration: resolution requires the rebuilt ACTIVE current.
       const implCurrent = afterWave.currentArtifactMap.find((fact) => fact.nodeId === "implementation")!;
       env.runStore.resolveFinding(first.run_id, findingId, {
+        resolvedByNodeId: "implementation",
         resolvedByRevisionId: implCurrent.revisionId,
         resolutionEvidenceRef: `loop-artifact:v1:${implCurrent.artifactKind}:sha256:${implCurrent.digest}`,
         resolutionEvidenceDigest: implCurrent.digest,
       });
       const resolvedRecovery = recoverRunContext(env.runStore, requirementId)!;
-      ok(resolvedRecovery.openFindings.length === 0 && resolvedRecovery.findingGate.status === "ELIGIBLE",
+      ok(resolvedRecovery.openFindings.length === 0,
+        "evidence-bound closure clears the OPEN blocking set");
+      const fourth = await run("build an order export", { requirementId, runStore: env.runStore, artifactStore: env.artifactStore, gateway: env.gateway, bindingRegistry: createRuntimeBindingRegistry() });
+      ok(fourth.final_status === "success" && fourth.chain_status === "COMPLETED",
+        "the tail rebuilds and completes after the itemized closure");
+      const finalRecovery = recoverRunContext(env.runStore, requirementId)!;
+      const ksCurrent = finalRecovery.currentArtifactMap.find((fact) => fact.nodeId === "knowledge-sync")!;
+      ok(ksCurrent.revisionId !== reusedBefore.get("knowledge-sync") && ksCurrent.validity === "ACTIVE",
+        "knowledge-sync rebuilt to a fresh ACTIVE current after the closure");
+      ok(finalRecovery.findingGate.status === "ELIGIBLE",
         "evidence-bound closure restores eligibility");
     } finally {
       rmSync(env.root, { recursive: true, force: true });
@@ -586,7 +601,7 @@ async function main(): Promise<void> {
         sequence: executions.length + 1,
         capability: "solution-design" as const,
         nodeId: "solution-design",
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         inputArtifactRef: executions[1]!.outputArtifactRef,
         inputArtifactVersion: executions[1]!.outputArtifactVersion,
         inputDigest: executions[1]!.outputDigest,
@@ -889,6 +904,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -902,6 +918,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.now() + 20000).toISOString(),
       });
       // …then the facts move UNDER it: a causal regression invalidates the
@@ -930,7 +956,9 @@ async function main(): Promise<void> {
         capability: "solution-design" as const,
         nodeId: "solution-design",
         executionRole: "primary" as const,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         attempt: 2,
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -971,7 +999,7 @@ async function main(): Promise<void> {
         codexRunner: createCodexFakeRunner({ scenario: "success_code_patch" }),
         capabilityTracing: tracing,
       };
-      const stableGateway = new ExecutionGateway(mutableOptions);
+      const stableGateway = new MultiAgentFakeGateway(mutableOptions);
       const stableOptions = {
         runStore: env.runStore,
         artifactStore: env.artifactStore,
@@ -995,7 +1023,7 @@ async function main(): Promise<void> {
         gateway: stableGateway, bindingRegistry: createRuntimeBindingRegistry(), maxDispatches: 2,
       });
       ok(result.chain_status === "READY" && result.execution_trace.length === 4,
-        "the codex-served points dispatched against the construction-time snapshot");
+        "the Q1-bound points dispatch against the construction-time snapshot");
       const events = env.runStore.listCapabilityExecutions(result.run_id);
       ok(events.length === 4, "executions journal into the ORIGINAL run store");
       const withOutput = events.find((event) => event.outputArtifactRef !== null)!;
@@ -1126,11 +1154,11 @@ async function main(): Promise<void> {
         nodeId: "solution-design",
         executionRole: "primary" as const,
         attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex",
-        executorAdapter: "codex-real-dispatch",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -1138,6 +1166,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -1151,6 +1180,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: claimTs,
       });
       envB.runStore.claimNextCapabilityExecution(designStarted);
@@ -1210,11 +1249,11 @@ async function main(): Promise<void> {
         nodeId: "solution-design",
         executionRole: "primary" as const,
         attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex",
-        executorAdapter: "codex-real-dispatch",
+        executorAgent: "kimi",
+        executorAdapter: "kimi-cli",
         executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
@@ -1222,6 +1261,7 @@ async function main(): Promise<void> {
         consumedFindingsRef: null,
         consumedFindingsDigest: null,
         decisionDepth: null,
+        decisionStatus: null,
         decisionScopeId: null,
         decisionDeltaRef: null,
         decisionDeltaDigest: null,
@@ -1235,6 +1275,16 @@ async function main(): Promise<void> {
         errorCode: null,
         retryable: null,
         reasonCode: null,
+        processInvocationDigest: null,
+        processExitCode: null,
+        processSignal: null,
+        processDurationMs: null,
+        processTruncated: null,
+        stagingRef: null,
+        stagingDigest: null,
+        promotionRef: null,
+        promotionDigest: null,
+        humanActionRef: null,
         createdAt: claimTs,
       }));
       const dispatchesBefore = pointDispatchCounts(env.runStore, runId);
@@ -1475,18 +1525,22 @@ async function main(): Promise<void> {
         sequence: 3, status: "started" as const, runId,
         capability: "solution-design" as const, nodeId: "solution-design",
         executionRole: "primary" as const, attempt: 1,
-        bindingId: "binding-codex-solution-design-primary",
+        bindingId: "binding-kimi-solution-design-primary",
         bindingVersion: "2.0.0",
         bindingRegistryVersion: createRuntimeBindingRegistry().version,
-        executorAgent: "codex", executorAdapter: "codex-real-dispatch", executorVersion: "1.0.0",
+        executorAgent: "kimi", executorAdapter: "kimi-cli", executorVersion: "1.0.0",
         inputArtifactRef: intakeCurrent.artifactRef,
         inputArtifactVersion: intakeCurrent.semver,
         inputDigest: intakeCurrent.digest,
         consumedFindingsRef: null, consumedFindingsDigest: null,
-        decisionDepth: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
+        decisionDepth: null, decisionStatus: null, decisionScopeId: null, decisionDeltaRef: null, decisionDeltaDigest: null,
         outputArtifactRef: null, outputArtifactVersion: null, outputDigest: null,
         gateResult: null, unresolvedFindingsRef: null, unresolvedFindingsDigest: null,
         nextStepEligibility: null, errorCode: null, retryable: null, reasonCode: null,
+        processInvocationDigest: null, processExitCode: null, processSignal: null,
+        processDurationMs: null, processTruncated: null,
+        stagingRef: null, stagingDigest: null, promotionRef: null, promotionDigest: null,
+        humanActionRef: null,
         createdAt: new Date(Date.parse(tailTs) + 5).toISOString(),
       }));
       const aliasArtifacts = new LoopArtifactStore({

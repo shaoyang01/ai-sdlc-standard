@@ -29,6 +29,7 @@ import {
   type CodexRunner,
 } from "../execution/codex-real-dispatch-runner";
 import { ExecutionGateway } from "../execution/gateway";
+import { MultiAgentFakeGateway } from "./fixtures/multi-agent-fake-gateway";
 
 import { materializeProducerRevision } from "../runtime";
 import {
@@ -110,6 +111,7 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     consumedFindingsRef: null,
     consumedFindingsDigest: null,
     decisionDepth: null,
+    decisionStatus: null,
     decisionScopeId: null,
     decisionDeltaRef: null,
     decisionDeltaDigest: null,
@@ -117,6 +119,16 @@ function event(overrides: Partial<LoopCapabilityExecutionEvent> = {}): LoopCapab
     errorCode: null,
     retryable: null,
     reasonCode: null,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
     ...overrides,
   });
 }
@@ -147,8 +159,10 @@ function tracedGateway(
   artifactStore: LoopArtifactStore,
   codexRunner: CodexRunner = createCodexFakeRunner({ scenario: "success_code_patch" }),
 ): ExecutionGateway {
-  return new ExecutionGateway({
-    env: { SDLC_EXECUTION_MODE: "codex", SDLC_CODEX_REAL_DISPATCH: "enabled" },
+  // C03-E W1 (Q1): route every node to its bound agent's specialized fake
+  // runner (Kimi/Codex/Hermes) instead of dropping non-Codex agents onto the
+  // shadow adapter.
+  return new MultiAgentFakeGateway({
     codexRunner,
     capabilityTracing: {
       runStore,
@@ -310,15 +324,16 @@ async function main(): Promise<void> {
     v6Store.createRun(identity(migrationRoot));
     v6Store.close();
     const v6db = new Database(v6Path);
-    ok(v6db.pragma("user_version", { simple: true }) === 7, "fresh store declares format v7");
+    ok(v6db.pragma("user_version", { simple: true }) === 8, "fresh store declares format v8 (G4-R5-H1: decision_status column)");
     v6db.close();
     const reopened = new LoopRunStore(v6Path);
     reopened.init();
     ok(reopened.getSnapshot("run-wp4b-001") !== undefined, "v6 run remains readable");
     reopened.close();
 
-    // Known historical formats 1..5 are rejected — never migrated.
-    for (const historical of [1, 2, 3, 4, 5, 6]) {
+    // Known historical formats 1..7 are rejected — never migrated (G4-R5-H1:
+    // v7 journals cannot gain decisionStatus authority, so no migration).
+    for (const historical of [1, 2, 3, 4, 5, 6, 7]) {
       const historicalPath = join(migrationRoot, `historical-${historical}.db`);
       const seed = new Database(historicalPath);
       seed.pragma(`user_version = ${historical}`);
@@ -330,10 +345,10 @@ async function main(): Promise<void> {
     // A declared version above the supported one is a future format.
     const futurePath = join(migrationRoot, "future.db");
     const futureSeed = new Database(futurePath);
-    futureSeed.pragma("user_version = 8");
+    futureSeed.pragma("user_version = 9");
     futureSeed.close();
     const futureRejected = new LoopRunStore(futurePath);
-    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 8 is rejected as a future format");
+    throwsCode("UNSUPPORTED_FUTURE_FORMAT", () => futureRejected.init(), "format 9 is rejected as a future format");
 
     // An unversioned database that already carries LOOP business tables is
     // history, never a fresh store; an empty v0 database initializes fresh.
@@ -348,7 +363,7 @@ async function main(): Promise<void> {
     new Database(freshPath).close();
     const freshStore = new LoopRunStore(freshPath);
     freshStore.init();
-    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 7, "empty unversioned database initializes fresh to v7");
+    ok(new Database(freshPath).pragma("user_version", { simple: true }) === 8, "empty unversioned database initializes fresh to v8");
     freshStore.close();
 
     // Inside the declared v6 format, drift is STORE_CORRUPT — not a format
@@ -489,6 +504,7 @@ async function main(): Promise<void> {
         outputDigest: reviewDigest,
         gateResult: "NOT_APPLICABLE",
         decisionDepth: "STANDARD" as const,
+        decisionStatus: "CONFIRMED" as const,
         decisionScopeId: "run-wp4b-001:decision:1",
         decisionDeltaRef: reviewRef,
         decisionDeltaDigest: reviewDigest,
@@ -507,6 +523,7 @@ async function main(): Promise<void> {
         outputDigest: reviewDigest,
         gateResult: "PASS_WITH_RISK",
         decisionDepth: "STANDARD" as const,
+        decisionStatus: "CONFIRMED" as const,
         decisionScopeId: "run-wp4b-001:decision:1",
         decisionDeltaRef: reviewRef,
         decisionDeltaDigest: reviewDigest,
@@ -542,6 +559,14 @@ async function main(): Promise<void> {
   try {
     mkdirSync(join(gateRoot, "repo"));
     const gateIdentity = identity(gateRoot);
+    // Q1 makes formal_verdict=hermes by default; to exercise the same-agent
+    // pre-dispatch firewall we force formal_verdict back onto codex (the
+    // adversarial_scan agent) so scan and verdict share one agent.
+    const sameAgentRegistry = replaceBinding(
+      INITIAL_BINDING_REGISTRY,
+      "binding-hermes-solution-gate-formal_verdict",
+      "binding-codex-solution-gate-formal_verdict",
+    ).registry;
     const gateArtifacts = new LoopArtifactStore({
       controlRoot: gateIdentity.controlRoot,
       repositoryPath: gateIdentity.repositoryPath,
@@ -598,7 +623,7 @@ async function main(): Promise<void> {
       capabilityTracing: {
         runStore: gateStore,
         artifactStore: gateArtifacts,
-        bindingRegistry: INITIAL_BINDING_REGISTRY,
+        bindingRegistry: sameAgentRegistry,
         executorVersions: { codex: "1.0.0", kimi: "1.0.0", hermes: "1.0.0" },
         now: () => TS,
       },
@@ -631,7 +656,7 @@ async function main(): Promise<void> {
     const gateEntry = new LoopCapabilityEntry({
       runStore: gateStore,
       artifactStore: gateArtifacts,
-      bindingRegistry: INITIAL_BINDING_REGISTRY,
+      bindingRegistry: sameAgentRegistry,
       gateway: gateGateway,
       now: () => TS,
     });
@@ -665,14 +690,9 @@ async function main(): Promise<void> {
     const chainStore = new LoopRunStore(join(chainRoot, "journal.db"), { artifactStore: chainArtifacts });
     chainStore.init();
     chainArtifacts.init();
-    // v2: the formal_verdict slot is bound to a second agent so the scan and
-    // verdict roles of one solution-gate round are provably executed by
-    // different agents.
-    const chainRegistry = replaceBinding(
-      INITIAL_BINDING_REGISTRY,
-      "binding-codex-solution-gate-formal_verdict",
-      "binding-hermes-solution-gate-formal_verdict",
-    ).registry;
+    // Q1 (C03-E W1): INITIAL_BINDING_REGISTRY already binds scan=codex and
+    // verdict=hermes to different agents, so no replacement is needed.
+    const chainRegistry = INITIAL_BINDING_REGISTRY;
     const stubNow = (): string => TS;
     const chainTracing = {
       runStore: chainStore,
@@ -714,6 +734,16 @@ async function main(): Promise<void> {
             typeof context.consumedFindingsRef === "string" ? context.consumedFindingsRef : null,
           consumedFindingsDigest:
             typeof context.consumedFindingsDigest === "string" ? context.consumedFindingsDigest : null,
+          processInvocationDigest: null,
+          processExitCode: null,
+          processSignal: null,
+          processDurationMs: null,
+          processTruncated: null,
+          stagingRef: null,
+          stagingDigest: null,
+          promotionRef: null,
+          promotionDigest: null,
+          humanActionRef: null,
         };
         chainStore.appendCapabilityExecution(Object.freeze({
           ...base,
@@ -730,6 +760,7 @@ async function main(): Promise<void> {
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
           decisionDepth: null,
+          decisionStatus: null,
           decisionScopeId: null,
           decisionDeltaRef: null,
           decisionDeltaDigest: null,
@@ -773,6 +804,7 @@ async function main(): Promise<void> {
           consumedFindingsRef: base.consumedFindingsRef,
           consumedFindingsDigest: base.consumedFindingsDigest,
           decisionDepth: isVerdictPoint ? ("STANDARD" as const) : null,
+          decisionStatus: isVerdictPoint ? ("CONFIRMED" as const) : null,
           decisionScopeId,
           decisionDeltaRef: decisionDelta?.artifactRef ?? null,
           decisionDeltaDigest: decisionDelta?.digest ?? null,

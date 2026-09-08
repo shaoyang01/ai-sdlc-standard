@@ -1,0 +1,289 @@
+# Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
+
+> Version: 1.0.0
+> Status: ACCEPTED（2026-09-05，独立复审 R13 轮最终建议 FREEZE @ v0.13.0 工作区字节，Current User 裁决冻结；本版并入非阻塞引用更正与保证 B 裁决记录，语义与 v0.13.0 无变化）——冻结为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
+> 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
+> 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
+
+## 1. 定位与权威关系
+
+1. 本合同是**七节点流程语义的唯一权威**：节点顺序、输入输出、稳定路径、深度语义、Finding/Ledger/Gate 生命周期、manifest 职责、发布协议、失败码、回流与准入。手动 Skill prompt 与 LOOP runtime 代码消费同一份合同；实现机制可以不同，**语义必须等价**。
+2. 冲突时本合同优先于：各 `skills/sdlc-*/SKILL.md` 的流程性条款、`execution/gateway.ts` 等运行时代码、以及 §10 同步清单中标注"替代"的既有合同条款。未标注替代的内容性条款（如 artifact-flow 的产物内容要求、Skill 的领域指令）继续有效。
+3. 本合同**只定义语义，不授权实现**：G3（手动面落地）与 G5（runtime 落地）分别按冻结计划 §6 申请授权；§8 变更清单即其范围依据。
+4. 变更控制：语义修订走 Revision Record；已冻结字段（§3–§7）的修改须同步更新 §8.2 负向矩阵与 §10 同步清单。
+
+## 2. 冻结不变量
+
+- I-A 单轨 7+1：`requirement-intake → solution-design → solution-gate → task-planning → implementation → code-review → knowledge-sync`；`docflow-writer` 提供模板职能，不是流程节点。
+- I-B solution-gate 双 binding 隔离：`adversarial_scan` 与 `formal_verdict` 不得由同一 Agent binding 执行。
+- I-C 人工 Git 边界：任何执行面不产生业务仓 commit/push/PR。
+- I-D PWR 自动推进（Decision-086）：verdict 的 scope 级判断即风险验收，无 risk acceptance proof 仪式；**code-review 实现类 finding 直接返工 implementation，不重走 Gate**。
+- I-E 失败封闭：类型不清/证据不足 → BLOCKED，零部分推进。
+- I-F 知识保护：节点不得无证据覆盖既有确认知识；受控知识维护（有验证证据的更新）按 `ai-sdlc/business-domain-compatible-update.md` 执行。
+- I-G 单一生命周期权威：runtime 运行状态以 journal 为机器权威；`manifest.md` 为唯一人工投影（§6）；不存在第三份生命周期权威。
+
+## 3. 域一：节点输入/输出与稳定路径（冻结表；canonical 文件名）
+
+产物根为 `library/{requirement_id}/`。下表为唯一合法稳定路径集合；版本与生命周期状态由文件头元数据 + `manifest.md` 表达（§5），禁止以 `-R1/-R2`、`_R1` 等轮次后缀派生新文件名。
+
+| 节点 | 输入（当前版本） | 输出稳定路径 | 准入谓词（§7.3） |
+| --- | --- | --- | --- |
+| requirement-intake | 用户原始输入 | `00-需求资料/{id}_需求摘要.md`；`00-需求资料/intake.manifest.json`（§6.1 对象一）；`library/{id}/manifest.md`（**本节点创建**） | 归一化事实完备；深度提案产出（§4） |
+| solution-design | `{id}_需求摘要.md`（current）；`requiredDepth` + 深度提案（§4） | `01-技术方案/{id}_技术方案.md`（含 `depthCoverageLedger`） | 摘要 current；**不等待 Gate** |
+| solution-gate / adversarial_scan | 技术方案 current | `02-方案审核/{id}_FindingLedger.md`（行式追加，§5） | 方案 current；异 binding |
+| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current 且 `scannedDesignVersion` 匹配（§5.4）；异 binding |
+| task-planning | Gate Result（current）+ 技术方案（current） | `03-任务规划/{id}_任务计划.md` | A1（§7.3） |
+| implementation | 任务计划（current） | `04-实现记录/{id}_实现记录.md` + 生产代码变更 | A2（§7.3） |
+| code-review | 实现记录（current）+ 代码变更证据（§5.5） | `05-代码审核/{id}_代码审核.md` | A3（§7.3） |
+| knowledge-sync | 代码与验证证据 + routed 声明 | `06-知识同步/{id}_知识同步结果.md` + `.sdlc/business_domain/**`（受 G1 规格约束） | A4（§7.3） |
+
+**代码变更证据绑定**：implementation 在实现记录中固定 `{baseRevision, reviewedRevision, changeDigest}`（content-addressed）；code-review 消费同一标识并回写审核结果——两执行面审的是同一份变更。
+
+## 4. 域二：深度语义（封闭状态机）
+
+### 4.1 字段
+
+| 字段 | 取值 | 产生者 | 语义 |
+| --- | --- | --- | --- |
+| `decisionScope` | FULL_REQUIREMENT \| DELTA_CHANGE | requirement-intake | 沿用 complexity-routing 的 Decision Scope |
+| `requestedDepth` | LIGHT \| STANDARD \| DEEP | requirement-intake | 首轮要求档位**实际值**（§4.2 判定表或用户显式指定） |
+| `initialDepthBasis` | `user_requested` \| `normalized_proposal` \| `PROVISIONAL_STANDARD` | requirement-intake | `requestedDepth` 的来源标签，与档位值成对记录 |
+| `requiredDepth` | LIGHT \| STANDARD \| DEEP | 初值=requestedDepth；仅 formal_verdict 可上调 | 当前生效要求档位 |
+| `depthCoverageLedger` | §4.4 清单 × 已覆盖/未覆盖 | solution-design | 未覆盖项必须显式列出 |
+| `decisionDepth` | LIGHT \| STANDARD \| DEEP \| null | **仅** formal_verdict | 最终持守档位；null 仅与 BLOCKED_UNKNOWN 组合 |
+| `decisionStatus` | CONFIRMED \| ESCALATED \| BLOCKED_UNKNOWN | **仅** formal_verdict | 见 §4.3 |
+
+### 4.2 归一深度判定表（**唯一触发枚举**；intake 提案权威；用户显式指定永远最高优先）
+
+判定输入限**归一化产物中当前可判定的事实**。`decisionScope` 一并记录。T1 为**唯一**强触发枚举——`complexity-routing.md` 不再自维护触发清单，直接引用本表（§10 C1）：
+
+| 序 | 强触发因子（T1，任一即 DEEP） |
+| --- | --- |
+| F1 | 状态机、状态流转、任务生命周期或单据生命周期变化 |
+| F2 | DB schema、关键数据写入、数据迁移、回填或数据一致性变化 |
+| F3 | MQ 生产、消费、重试、幂等、顺序或补偿变化 |
+| F4 | 定时任务、监听器、异步任务、批处理或流程编排变化 |
+| F5 | 事务边界、幂等边界、补偿策略或回滚策略复杂 |
+| F6 | 跨系统接口 |
+| F7 | 不可逆操作 |
+| F8 | 权限、资金、库存、履约、计费、结算等高影响域 |
+| F9 | 新流程或大幅改变既有主流程 |
+
+| 序 | 条件 | `requestedDepth` |
+| --- | --- | --- |
+| T1 | F1–F9 任一命中 | DEEP |
+| T2 | 多模块/多服务/跨仓协作，且 F1–F9 全部不命中（纯协作拆分） | STANDARD |
+| T3 | 单模块内展示或逻辑变更，边界明确，无 T1 因子 | LIGHT |
+| T4 | 以上均无法判定 | `PROVISIONAL_STANDARD`（来源标签；档位按 STANDARD 准备，附"判定不足"理由） |
+
+**分层权威**：本表是 **intake 提案权威**；formal_verdict 是**唯一正式裁决点**，依方案揭示的风险可上调（ESCALATED）——上调依据是 §4.3 的风险判定，**不构成第二张 intake 判定表**。`complexity-routing.md` 的档位**内容**要求保留为 §4.4 规范来源（内容要求与触发枚举是两个维度）。
+
+### 4.3 状态机（唯一合法转换）
+
+1. **首轮**：solution-design 按 `requiredDepth` 立即产出方案 + 覆盖台账；不等待 Gate。
+2. **verdict 求值**：输出且仅输出以下组合之一：
+   - `CONFIRMED` + `decisionDepth=requiredDepth`：满足当前要求 → 可进入下游；
+   - `CONFIRMED` + `decisionDepth < requiredDepth`：方案为超集，verdict 判定低档已足够——无害降持，记录即可；
+   - `ESCALATED` + `decisionDepth=requiredDepth'`（>requiredDepth）：要求上调，回流 solution-design；
+   - `BLOCKED_UNKNOWN` + `decisionDepth=null`：关键事实缺失 → 按 finding 指向回流（intake 或 solution-design），不可进入下游。
+3. **升档回流**：ESCALATED 即时使旧方案/旧 Gate/全部下游 stale（§5.4）；solution-design 只生产新旧 `requiredDepth` 清单的**缺口增量**并更新台账；Re-Gate 对照**上调后的 requiredDepth** 判定 → 可 CONFIRMED。
+4. **合法组合表**：`(CONFIRMED, LIGHT/STANDARD/DEEP, 准入)`、`(ESCALATED, LIGHT/STANDARD/DEEP, 禁止)`、`(BLOCKED_UNKNOWN, null, 禁止)`。无其他合法状态。
+
+### 4.4 档位内容要求清单（`depthCoverageLedger` 规范来源）
+
+引用 `ai-sdlc/complexity-routing.md` 档位定义（§10 C1 修订版）：LIGHT 精简主干；STANDARD 覆盖架构、接口、数据、异常、兼容性与验证；DEEP 强制状态机/DB/MQ/事务/回滚/代表数据/边界场景章节。该清单是台账逐项标注的唯一规范来源；修订即本合同修订。
+
+## 5. 域三：Finding 全链生命周期（G2-R3-H2：登记与发现节点解耦，覆盖全部"发现节点×根因类别"合法组合）
+
+### 5.1 登记（发现记录在产物内容内；状态生命周期在产物之外的权威记录）
+
+**两类记录、两个承载，digest 边界（G2-R9-H1）**：
+
+1. **发现记录**：发现节点在其**产出产物的 finding 段**登记它发现的 finding——作为该节点输出内容的组成部分（in-band），随产物 revision 一次成形（引用现役类别×来源矩阵，`ai-sdlc/loop-finding-lifecycle.md`：类别×来源的合法组合以该矩阵为准，本合同不另造分类体系）。发现记录是**历史事实**，登记后随产物内容不可变。
+2. **生命周期记录（status 的唯一权威承载）**：finding 的状态迁移**不写入任何产物文件**——runtime 面由现役 finding store 持久操作提交（`appendFinding`/`resolveFinding`/`acceptFindingRisk`，含 durable 证明记录 `loop_finding_proofs`，`loop-finding-lifecycle.md` §4/§5——**不需要**新 capability 执行、新事件系统或产物文件编辑）；手动面由 **manifest `findingIndex` 本身**作为权威记录（经 publisher 写入，§6.2）。
+3. 因此：产物文件的 finding 段只含发现时点的事实（digest 随该产物 revision 固定）；关闭复验等状态迁移**不触碰产物字节**——产物 digest 不因 finding 状态迁移改变（消除"追加行改字节 vs entry 保持 D0"的矛盾；旧版"来源 finding 段追加状态行"的表述废止）。
+4. `finding_id = {requirement_id}-F{两位序号}`，全 requirement 单一序列，发现登记即占用，**不可变**。状态迁移的**当前状态表示**按各面现役持久原语：runtime = finding 行 status 字段的 guarded UPDATE + 证明记录追加（`loop-finding-lifecycle.md` §5，审计史 = durable 证明记录）；手动 = findingIndex 行 status 由 publisher 更新（行内携带关闭/接受依据与责任主体字段，见上条——**可追溯保证**：发现事实、修复/接受依据、责任主体、绑定 revision 均可核验）。
+5. 每条 finding 携带：`{finding_id, discoveredAt(发现节点), rootCauseCategory(现役类别), earliestAffectedNodeId(回流目标), sourceRevision, evidenceRef, status, fixedBy?}`；状态迁移后在生命周期记录中追加绑定字段：`closedBy?`（关闭复验者，或 scan 来源 ACCEPTED 时的 formal_verdict）、`closureEvidenceRef?/closureEvidenceDigest?`（修复或风险接受依据的引用与 digest）、`closureBoundRevisionId?`（**按状态双语义**：RESOLVED=修复依据对应的 revision，runtime 即 `resolveFinding` 的 `resolvedByRevisionId`；ACCEPTED=已有 formal_verdict PWR 裁决/接受依据对应的 revision——不是解决 revision，不要求新增修复 revision 或节点运行）。发现节点 ≠ 回流目标是**合法且常见**组合（例：code-review 发现方案缺口 → discoveredAt=code-review，earliestAffectedNodeId=solution-design）。
+6. `earliestAffectedNodeId` 值域 = 七节点全集，回流映射枚举闭合（§7.3）。
+7. 生命周期记录（runtime=store、手动=findingIndex）经 publisher 汇入 **manifest `findingIndex`**——下游只消费该索引。
+8. **手动面审计保证的边界（G2-R11-M1）**：手动面 findingIndex 保存**当前生命周期状态及其关闭/接受依据**（行内字段：`closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`——覆盖发现事实引用、修复或风险接受依据、关闭复验者或 formal_verdict 裁决主体、依据绑定的 revision）；不可变发现记录保存**发现时点的事实**（产物 finding 段 + `sourceRevision`/`evidenceRef`）。业务仓 Git 历史仅提供**用户实际提交过的** manifest 版本，不保证覆盖每次 publisher 更新；publisher 不执行 commit，Git 提交不是状态生效或下游准入的前置条件。**2026-09-05 Current User 裁决：接受本边界——保证 A 为手动面审计保证的最终口径，保证 B（每次发布的完整快照留存）不纳入冻结要求；如未来需要完整发布历史，另行立项与授权。**
+
+### 5.2 修复者、关闭验证者与状态处置（G2-R4-H2）
+
+- `status ∈ OPEN → RESOLVED | ACCEPTED`；当前状态承载于生命周期记录（runtime=finding 行 status 字段，经现役 guarded UPDATE 原语迁移 + 证明记录追加；手动=findingIndex 行 status，经 publisher 更新，行内证据字段承载可追溯依据——**业务仓 Git 历史仅提供用户实际提交过的 manifest 版本，不保证覆盖每次 publisher 更新；publisher 不执行 commit，Git 提交不是状态生效或下游准入的前置条件**）。**不采用**"同 ID 追加状态行"表示——现役 `resolveFinding`/`acceptFindingRisk` 即既有持久原语，不另造追加协议。
+- **修复者 = `earliestAffectedNodeId` 节点**：执行返工/修订，并在其产物中登记返工完成证据（不等于关闭）。
+- **关闭验证者 = 发现节点（discoveredAt）**：复验修复后在**生命周期记录**登记 RESOLVED（runtime=`resolveFinding`，`resolvedByRevisionId` 绑定 `earliestAffectedNodeId` 或下游节点当前 ACTIVE revision 并携带 resolution 证据 ref/digest——现役 §5 语义；手动=findingIndex 行）。"实现类 finding 由 code-review 复验关闭"仅指 discoveredAt=code-review 的来源；其他发现节点（如 knowledge-sync）按本通则自行复验。
+- **关闭复验是 finding 生命周期管理动作，不是一次节点运行**：验证者直接对照 finding 的 `evidenceRef`/验收基准与修复者产出的修复证据（digest 绑定）复核——**不依赖 §7.3 的下游准入谓词**（准入谓词管制的是"节点产出新周期产物进入下游"，不管制 finding 生命周期管理），因此不会出现"OPEN finding 阻断了自己的关闭复验"的死锁。独立验证责任保留：修复者不得自行登记 RESOLVED。
+- **关闭复验动作的三步收尾（G2-R6-H1；v0.9.0 按 G2-R9-H1 修订——状态迁移持久于生命周期记录，产物零触碰）**：①复验通过后在**生命周期记录**登记 RESOLVED（runtime=`resolveFinding` 持久操作 + durable 证明，现役模型、无新执行；手动=findingIndex 行）；②触发 publisher 发布（§6.2）：findingIndex 与生命周期记录对齐（runtime 面为 store 差量追平；`projectedThrough`/entries 均不变——产物与 journal 执行面零参与）；③此后 §7.3 准入谓词读到 RESOLVED，阻断解除；产物完整性校验对原 digest 持续成立。复验动作未触发发布前，阻断持续（关闭事实以 manifest findingIndex 为准）。
+- **ACCEPTED 仅适用于 scan 来源**（formal_verdict 的 PWR scope 判断，I-D）：记录于**生命周期记录**（runtime=`acceptFindingRisk` store 操作 + durable 证明——不写 Gate Ledger；手动=findingIndex 行经 publisher）并投影至 manifest finding 索引。Gate Ledger 只保留 scan 的**发现事实**与必要引用，不承载后续状态改写。非 scan 来源的 finding 只有 RESOLVED 或维持 OPEN（阻断其下游）两条路——不存在第二套风险接受仪式。
+- OPEN finding 的阻断范围由 §7.3 准入表定义（仅阻断 `earliestAffectedNodeId` 下游的准入），不扩大到无关节点。
+
+### 5.3 Gate Ledger 的专属边界
+
+`{id}_FindingLedger.md` 是 **solution-gate 的设计阶段台账**：只承载 adversarial_scan 登记的方案类 finding。其他来源的 finding 登记在发现节点自己的产物 finding 段（§5.1），不经由 Gate Ledger——代码返工 therefore 不产生任何 Gate 仪式（I-D）。所有来源的 finding 统一汇入 manifest finding 索引（§6.2），下游消费索引而非逐文件扫描。
+
+### 5.4 版本绑定、失效传播与发布时点
+
+- Gate Result 头部绑定 `{designVersion, ledgerDigest, scannedDesignVersion, verdictBinding, decisionDepth, decisionStatus, gateVersion}`；**`scannedDesignVersion == designVersion` 为 verdict 产出前置**——Ledger 所审方案与 Gate 所裁方案必须是同一修订。
+- `ESCALATED`/`FAIL` 的失效传播与新 Gate 条目在**同一 manifest 修订**（§6.2 单次原子写入）中生效；stale 产物不可作为下游准入输入；回流目标节点完成新产出前保持 `actionable`。
+- runtime 面：verdict 发布的 journal 事件 ref 记入 manifest 条目；下游准入（§7.3）校验 `projectedThrough`（§6.2）已覆盖该事件——runtime 看到的提交边界与 manifest 一致。
+
+### 5.5 证据身份
+
+implementation/code-review 的代码变更证据 = `{baseRevision, reviewedRevision, changeDigest}`（content-addressed）；不新增固定 diff 文件。
+
+## 6. 域四/五：manifest 三对象与自证投影协议（G2-R3-H3）
+
+### 6.1 三个对象，互不替代
+
+| 对象 | 唯一职责 | 创建者 | 更新者 |
+| --- | --- | --- | --- |
+| `00-需求资料/intake.manifest.json` | runtime 入口确认与触发（`loop-intake-manifest:v1`） | requirement-intake | 不随流程演进 |
+| `library/{id}/manifest.md` | 七节点生命周期人工投影（§6.2 格式） | requirement-intake（创建职责唯一） | **publisher**（§6.2） |
+| `.sdlc/business_domain/knowledge-target.yaml` | 项目级长期知识路由（G1 规格） | 初始化器 | absent → candidate_pending_confirmation → routed |
+
+### 6.2 自证投影协议（手动与 runtime 共用格式；三级有序判别；按执行面适配；重放确定）
+
+1. **格式（自证 + 投影基线）**：manifest = `head`（schema_version/requirement_id/publishSeq/`projectedThrough`/updated_at）+ `entries`（每节点 `{node, status, artifactPath, version, digest, updatedAt, sourceEventRef}`）+ **`findingIndex`**（§5 全来源 finding 及状态，§5.2——手动面即权威记录，runtime 面为 finding store 的投影）+ `repairRecords[]` + **`manifestDigest = sha256(规范化 head+entries+findingIndex+repairRecords)`**。digest 内嵌——文件自带完整性证据，不存在 manifest 之外的 digest 记录。
+   - runtime 面：`projectedThrough` = 已投影的最后一个 journal 事件序号；`sourceEventRef` = 事件标识。
+   - 手动面：`projectedThrough = MANUAL`；`publishSeq` = 手动完成声明的**单调递增序列号**（每个结构化完成声明携带 seq）；`updated_at` = 该声明确认时刻。手动面不读 journal——协议中涉及 journal 的步骤对手动面跳过，追平输入改为"自上次 publishSeq 以来的完成声明"。
+2. **三级有序判别（顺序固定，互斥；每次发布前执行）**：
+   - **第 1 级 损坏**：self-digest 校验失败或解析失败 → `MANIFEST_CORRUPT_STOP`（不静默修复、不重建，DP4）。
+   - **第 2 级 真分叉**（两项校验，任一不通过 → `JOURNAL_MANIFEST_MISMATCH_STOP`，不得进入第 3 级）：
+     (a) **journal 前缀**：对 `≤ projectedThrough` 的已投影前缀逐事件按 §6.2.4 映射推导条目并与 manifest entries 比对——不一致即分叉（finding 状态迁移不经过 journal 执行事件、不影响 entries，故前缀推导为纯执行映射——G2-R9-H2 闭合）。
+     (b) **findingIndex 权威交叉验证（有序互斥判别；对权威生命周期记录；G2-R10-H2）**——对每行按以下顺序判定，首个命中的分支决定结果：
+     - **第 1 步 身份字段**：不可变身份/来源/证据字段（`finding_id`、`discoveredAt`、`rootCauseCategory`、`earliestAffectedNodeId`、`sourceRevision`、`evidenceRef`）必须与权威记录逐字段一致——不一致 → `JOURNAL_MANIFEST_MISMATCH_STOP`（身份漂移不可用"领先"解释）。
+     - **第 2 步 状态一致（投影字段整行交叉绑定；G2-R12-H1）**：`status` 与权威记录一致时，**该行仍须通过投影字段交叉绑定**——runtime 面先经现役已验证读接口取得该 finding 的当前记录及其证明绑定，按**固定字段映射**生成期望索引行并逐字段比对：
+       - RESOLVED 行：`closedBy`←关闭复验者、`closureEvidenceRef`/`closureEvidenceDigest`←resolution 证据 ref/digest、`closureBoundRevisionId`←`resolvedByRevisionId`；
+       - ACCEPTED 行（runtime 映射）：`closedBy`←`riskAcceptedBy`、`closureEvidenceRef`/`closureEvidenceDigest`←风险接受证据 ref/digest（runtime 接受路径无 `resolvedByRevisionId` 对应字段，该项不参与 runtime 映射；手动面该字段的语义见 §5.2 手动生命周期动作规则）。
+       索引行中该状态适用的任一投影字段（责任主体、依据 ref/digest、绑定 revision）与期望行漂移 → `JOURNAL_MANIFEST_MISMATCH_STOP`。store 内部证明与不变量验证继续复用现役机制（`loop-finding-lifecycle.md` §8 读回验证），publisher 仅执行投影交叉绑定、不重复实现 store 内部不变量。手动面自洽校验：状态迁移后的行**携带** `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId` 字段，各状态适用的字段语义按 §5.1 第 5 条状态双语义（`closureBoundRevisionId`：RESOLVED 绑定修复依据 revision；ACCEPTED 绑定 formal_verdict PWR 裁决依据 revision），status 一致不豁免证据字段完备性；动作校验机制见本项手动生命周期动作规则。
+     - **第 3 步 合法状态前进**：status 不一致时，仅当 (i) 索引 status 为合法前驱（OPEN）且权威 status 为合法后继，(ii) 后继的持久依据有效，(iii) 不可变身份/来源字段与生命周期新增的关闭/接受依据字段（`closedBy`/`resolutionEvidence`/`riskAcceptedBy` 等——这些是合法迁移**新增**的字段，不要求在 OPEN 前态中存在）之外无其他漂移 → 判定**合法落后**，列入第 3 级追平输入。合法后继与依据要求：
+       - **OPEN → RESOLVED**：runtime 面须有 `resolveFinding` durable 证明记录；手动面须为符合独立关闭复验规则（§5.2）的已发布生命周期动作。
+       - **OPEN → ACCEPTED**：仅限 scan 来源 + formal_verdict 合法 PASS_WITH_RISK 裁决；runtime 面须有 `acceptFindingRisk` durable 证明（含 `riskAcceptedBy` 与依据 ref/digest）；手动面须为符合上述条件的已发布生命周期动作。
+     - **投影关系**：现役 finding store 机器枚举 `ACCEPTED_RISK` 投影为本合同的 `ACCEPTED`（映射不改现役枚举；未知权威状态值不得当作合法后继，一律 STOP）。
+     - 任何其他不一致（含索引 status 超前于权威、无有效依据的后继、身份字段漂移）→ `JOURNAL_MANIFEST_MISMATCH_STOP`。
+     - 比较对象 = **findingIndex 的当前状态行**（每 finding 恰一行，当前 status）；历史不在索引中（runtime 审计史=证明记录；手动面=findingIndex 行内证据字段承载可追溯依据，Git 历史仅提供用户实际提交过的 manifest 版本、不构成每次发布的快照保证）。
+     - runtime 权威 = **finding store 当前状态**（`loop_findings` 行 + durable 证明，由既有 `appendFinding`/`resolveFinding`/`acceptFindingRisk` 提交，非新事件系统）；手动面：findingIndex **本身即权威记录**（§5.1）——第 2 级(b) 退化为自洽校验：每行字段完备（含状态迁移后的 `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`，`closureBoundRevisionId` 按 §5.1 第 5 条状态双语义：RESOLVED=修复依据 revision、ACCEPTED=PWR 裁决依据 revision）、状态迁移合法（OPEN→RESOLVED 按独立关闭复验规则；OPEN→ACCEPTED 仅允许 scan 来源且满足 formal_verdict PWR 条件的动作）、非 scan 来源无 ACCEPTED 行。**手动生命周期动作语义（G2-R11-H1-C）**：动作以结构化形式提交给 publisher；publisher 校验身份字段、允许的状态转换、责任主体（关闭复验者 / formal_verdict 裁决）及依据完整性后纳入发布——**原子发布后持久生效**，无预写 findingIndex、无先发布后验证；相同已生效动作重放不重复迁移（幂等），与已生效记录不一致的动作不得以幂等名义接受（拒绝）。
+   - **第 3 级 待投影**：输入 = journal 尾段事件 **+ 权威生命周期记录相对 findingIndex 的差量**（runtime=finding store 当前状态中的未投影迁移，含关闭复验的 RESOLVED 与 PWR 接受的 ACCEPTED；手动=生命周期管理动作，§5.2）→ publisher 按序追平（幂等）。**无尾段且 findingIndex 无差量 → no-op，原样退出**；任一存在 → 发布。**混合输入（V9）**：journal 尾段与生命周期差量并存时，两类更新合入**同一次原子发布**——entries 按尾段执行映射更新（checkpoint 正常推进），findingIndex 按权威生命周期记录对齐；任一分支的独立表述（如"entries 不变"）仅适用于该输入**单独**出现的发布，不得在混合发布中丢弃另一类更新。
+   - 手动面：第 2 级(a)跳过（无 journal），(b)照常执行（自洽校验，见上）；第 3 级输入为完成声明 + 生命周期记录差量/生命周期管理动作（runtime 输入来自已验证 finding store；两者都不得从不可变产物的 finding 段读取当前状态作为权威）。
+3. **追平发布（幂等纯函数；三类输入的进度与绑定规则，G2-R7-H2）**：输入 = (校验通过的当前 manifest, journal 尾段事件, 权威生命周期记录差量, 新完成声明)。
+   - **runtime 尾段**：entries/findingIndex 按事件映射生成；`publishSeq`/`projectedThrough` 推进到已处理末事件；`updated_at` = 最后已投影事件时间戳。
+   - **手动新完成声明**：按声明生成/更新条目；`publishSeq` 推进到声明 seq，**`projectedThrough` 保持 `MANUAL`**；`updated_at` = 声明确认时刻。
+   - **finding 生命周期差量**（runtime：finding store 与索引的差；手动：生命周期管理动作）：findingIndex 对齐权威记录（§6.2.2(b) 方向性比对）；**`entries` 全部不变**（状态迁移不触碰产物文件，entry version/digest 不动，产物完整性对原 digest 持续成立）；`publishSeq`/`projectedThrough` 均不推进；`updated_at` 不变。同输入重放产出逐字节同一 manifest（幂等无需独立计数）。
+   - self-digest 重算；**原子 rename**。同输入重放产出**逐字节同一 manifest**；崩溃后文件为旧或新，均自洽，重跑即追平——每个崩溃点的恢复结果唯一。
+4. **runtime 投影字段映射（对齐现役 journal/revision 模型）**：journal terminal 事件字段 `nodeId/status/executionEventId` → entry `{node, status, sourceEventRef}`；产物三元组经 `outputArtifactRef`（content-addressed）由 artifact store/revision 解析出 `outputArtifactPath + outputArtifactVersion + outputDigest` → entry `{artifactPath, version, digest}`。**状态映射**：执行事件 status（SUCCEEDED/FAILED/BLOCKED…）是执行事实，映射为 entry 的完成/失败事实；entry 的生命周期状态（current/stale/actionable，§5.4）由 revision 状态（ACTIVE/STALE/SUPERSEDED）映射——ACTIVE→current，STALE/SUPERSEDED→stale；两枚举不混用，映射表冻结于本条。**findingIndex 投影自权威生命周期记录**（runtime=finding store 当前状态；手动=publisher 消费生命周期管理动作），状态迁移随之投影——不限于 verdict 载荷；迁移行不携带产物 digest（产物 digest 由 entry 原值绑定，G2-R8-M1）。findingIndex 的权威交叉验证见 §6.2.2(b)（整行绑定 + 方向性规则；独立计数已删除）。Agent 自由文本不得直写。
+5. **修复记录的唯一位置与重放处理（G2-R6-M1）**：修复记录**唯一存放于顶层 `repairRecords[]`**（不写入 entries）。修复记录仅在人工修复动作时写入 `repairRecords` 并计入其后所有 `manifestDigest`；发布追平/重放**不追加、不改动**修复记录——重放对含修复记录的 manifest 同样逐字节确定。
+6. **人工修复后的可信基线重建（G2-R7-M1：hash 收尾——先写完 repairRecords 再算 digest）**：人工修复 = ①修正 `entries`/`findingIndex`；②按实际产物重算各 entry 的 artifact digest；③runtime 面将 `projectedThrough` 重设为当前 journal 末尾；④**写入**修复记录（who/when/reason/correctedEntries + ②③的基线重设事实）至顶层 `repairRecords[]`；⑤**最后**重算 `manifestDigest`（覆盖 head/entries/findingIndex/repairRecords 全部内容）并原子 rename 发布。**信任重建判据**：self-digest 自洽（⑤后必然成立，因 repairRecords 先于 digest 写入）+ 全部 entry digest 与实际产物核验通过 + runtime 面 journal 交叉校验通过——三者全过，下一次发布按正常协议进行。人工修复后**不做**普通前缀校验（修复基线已重设）。修复记录写入后、digest 计算前不得再追加任何内容。
+7. **无 manifest 的存量 requirement = 只读归档知识源**（DP4）：不重建；新流程复用其目录 → `BLOCKED_AMBIGUOUS`。
+
+## 7. 域六：PWR、失败码、回流映射与统一准入
+
+### 7.1 PWR
+
+PWR 自动推进：formal_verdict 的 PASS_WITH_RISK scope 级判断即风险接受裁决。被接受的 scan 来源 finding，其当前状态记录于**生命周期记录**：runtime 通过既有 `acceptFindingRisk` 持久操作提交状态及对应依据（durable 证明）；手动面由 publisher 更新 findingIndex。Gate Ledger 只保留不可变发现事实与引用，不回写后续状态。接受状态与风险引用经 publisher 随行至下游，不要求额外人工接受、审批或仪式产物。非 scan 来源无 ACCEPTED 路径（见 §5.2）；envelope 不得强制 `riskAcceptanceRefs` 非空。
+
+### 7.2 失败码
+
+`GATE_FAIL` / `BLOCKED_UNKNOWN` / `BLOCKED_AMBIGUOUS` / `MANIFEST_CORRUPT_STOP` / `JOURNAL_MANIFEST_MISMATCH_STOP` / `ADMISSION_DENIED`。区分：`BLOCKED_UNKNOWN` 仅指 verdict 无法分级/判定；`BLOCKED_AMBIGUOUS` 指结构歧义（双根、无 manifest 复用）；文件级终止用 `MANIFEST_CORRUPT_STOP`/`JOURNAL_MANIFEST_MISMATCH_STOP`；下游准入拒绝用 `ADMISSION_DENIED`。
+
+### 7.3 回流映射与统一准入
+
+**回流映射（枚举闭合 = 七节点全集）**：`earliestAffectedNodeId` 直接命名回流节点——requirement-intake（需求事实/范围）、solution-design（方案，变更即重走 Gate）、solution-gate（裁决过程缺陷 → 重跑 gate）、task-planning（计划）、implementation（实现返工，code-review 实现类 finding 直达返工不重走 Gate，I-D）、code-review（审核缺陷 → 重跑 code-review）、knowledge-sync（知识条目）。
+
+**统一准入表**（`current` = manifest 中 current 且 digest 一致；runtime 面另要求 §5.4 的 `projectedThrough` 覆盖校验）：
+
+| 准入 | 谓词 A（裁决面） | 谓词 B（产物面） |
+| --- | --- | --- |
+| A1 task-planning | Gate Result current ∧ `decisionStatus=CONFIRMED` ∧ gateResult ∈ {PASS, PASS_WITH_RISK} ∧ 无 OPEN blocking（§5.2 阻断范围） | 技术方案 current |
+| A2 implementation | 任务计划 current ∧ PWR 风险 refs 随行 | — |
+| A3 code-review | 实现记录 current | 证据绑定（§5.5）完整 |
+| A4 knowledge-sync | code-review current ∧ 无 OPEN blocking（ACCEPTED 不阻断） | routed 声明；非 routed → PROPOSAL_ONLY |
+
+`ESCALATED`/`BLOCKED_UNKNOWN` 的 Gate Result 不满足 A1（即使字面 PASS/PWR）。旧准入条款按 §10 废止。
+
+## 8. 变更清单与负向矩阵
+
+### 8.1 变更清单
+
+| # | 文件 | 变更 | 落点 |
+| --- | --- | --- | --- |
+| C1 | `ai-sdlc/complexity-routing.md` | 触发枚举单一化（引用 §4.2 T1，删除自维护清单）；纯协作限定传播至 Delta 表；decision_status 枚举替换；决策字段对齐 §4.1 | **G2 收口（已随本修订完成）** |
+| C2 | `skills/sdlc-requirement-intake/SKILL.md` | manifest 创建 + §4.2 判定表 + 深度字段输出；移除 runtime recovery context 依赖 | G3 |
+| C3 | `skills/sdlc-solution-design/SKILL.md` | Core Rule 10 → §4.3 首轮解耦 + 覆盖台账 | G3 |
+| C4 | `skills/sdlc-solution-gate/SKILL.md` | 稳定路径 + §4.3 组合 + `scannedDesignVersion` 绑定 + 移除 runtime 推进权依赖 | G3 |
+| C5 | `skills/sdlc-task-planning/SKILL.md` | A1 准入引用 + 移除 runtime 依赖 | G3 |
+| C6 | `skills/sdlc-code-review/SKILL.md` | 清除 PWR 接受者/证据残留 + A3 引用 + 全链 finding 登记职责 | G3 |
+| C7 | `skills/sdlc-docflow-writer/SKILL.md` | manifest 直写 → publisher 调用 | G3 |
+| C8 | `skills/sdlc-implementation/SKILL.md` | **C8-a：`SKILL.md:15` runtime 依赖移除（单列）**；证据绑定输出 | G3 |
+| C8-b | 其余 `skills/sdlc-*/SKILL.md`（knowledge-sync） | publisher 更新条款 + §7.3 准入引用 + finding 登记职责 | G3 |
+| C9 | `templates/**` | Ledger/Gate 头部元数据 + 覆盖台账模板 + 各产物 finding 段模板 | G3 |
+| C10 | manifest publisher 工具 | §6.2 自证投影协议实现（含修复基线重建） | G3 |
+| C11 | `ai-sdlc/artifact-flow.md` | 逐条标注：路径保留；DECIDED/深度前置/准入条款替代 | G3 |
+| C12 | `ai-sdlc/artifact-versioning.md` / `artifact-storage.md` | superseded 正文保留映射；manifest 必需性对齐；旧深度状态清理 | G3 |
+| C13 | `ai-sdlc/development-path-governance.md` / `lifecycle.md` / `phase-gates.md` / `project-type-contract-artifact-matrix.md` | DECIDED→新状态映射；knowledge-sync 准入对齐 A4；accepted-risk evidence 移除 | G3 |
+| C14 | `ai-sdlc/loop-finding-lifecycle.md` | 类别×来源矩阵引用至 §5.1；finding id/状态迁移映射至 §5.2；**`resolveFinding`/`acceptFindingRisk` 即生命周期记录的持久提交操作（publisher 消费其 store 状态投影 findingIndex）** | G5 |
+| C15 | `ai-sdlc/loop-artifact-revision.md` / `loop-recovery-protocol.md` | STALE 吸收态复用声明（**finding 状态迁移不产生产物新修订、不触发 STALE→SUPERSEDED 边，产物零触碰**）+ `projectedThrough`/投影基线映射 | G5 |
+| C16 | `execution/gateway.ts` | 移除 `decisionDepth:"STANDARD"` 硬编码（549/565），消费 verdict 真实深度 | G5 |
+| C17 | `core/node-output-envelope.ts` | 移除 riskAcceptanceRefs 非空强制 | G5 |
+| C18 | journal→manifest projector + recovery | §6.2 自证投影协议实现（entries 按 journal 前缀、findingIndex 按 finding store 差量追平）+ mismatch STOP_AND_REPORT + formal_verdict 重复 Finding 来源处理 | G5 |
+| C19 | `ai-sdlc/shared-business-domain-governance.md` / `standard-package-resolution.md` | G1 根语义引用同步 | G3 |
+| C20 | tests/validator 承重点 | §8.2 表"承重落点"列逐项落地 | G3/G5 |
+
+### 8.2 负向矩阵
+
+| # | 断言 | 规范输入 | 违规变异（应变红） | 判定 | 承重落点 |
+| --- | --- | --- | --- | --- | --- |
+| N1 | 无硬编码 `decisionDepth:"STANDARD"`；非 STANDARD verdict 输入产出对应深度 | 非 STANDARD verdict 事件 fixture | 恢复 549/565 硬编码 | 输出深度断言 + 字面扫描 | G5 gateway 测试 |
+| N2 | 产物目录无轮次后缀派生文件（模式 `[-_]R[0-9]+`） | 多轮 Re-Gate fixture | 生成 `_R1`/`-R2` Gate 文件 | 稳定路径 validator/fixture 文件名断言 | G3 路径 validator + fixture |
+| N3 | scan 与 verdict 异 binding；同 binding 拒绝 | 同 binding 双角色执行 fixture | 去除 binding 比较 | 拒绝断言（执行记录实际两次 binding） | G3 执行记录 + G5 binding 校验 |
+| N4 | 首轮无 Gate 输入仍可产出待审方案 | 无 verdict 历史的新需求 fixture | 恢复深度前置条款/准入 | 时序断言 + prompt 条款扫描 | G3 harness + G5 节点准入 |
+| N5 | Agent 自由文本不落 manifest；无 manifest 存量目录复用被拒 | 直写尝试 + 复用尝试 fixture | publisher 绕过 / 移除 DP4 前置阻断 | 拒绝断言（两个独立变异各自变红） | G3 publisher + intake |
+| N6 | PWR 无 riskAcceptanceRefs 非空强制、无仪式产物；**ACCEPTED 经生命周期记录投影随行（V2）：Gate Ledger 不回写、非 scan 来源拒绝 ACCEPTED（V4）；手动合法 PWR 动作（携带 PWR 裁决依据绑定的 closureBoundRevisionId）首次发布成功、原样重放 no-op，缺失/错误绑定拒绝** | PWR fixture + scan finding OPEN + `acceptFindingRisk` 已提交；非 scan ACCEPTED 尝试 fixture；手动 PWR 动作 fixture（含缺失/错误绑定变体） | 恢复 envelope 强制；恢复 ACCEPTED 回写 Gate Ledger（§7.1 旧语义）；删除 §6.2.2(b) 第 3 步 ACCEPTED 后继；删除手动 `closureBoundRevisionId` 要求 | envelope 断言 + 下游准入场景 + 逐字段凭据校验拦截 + 手动行完备性校验 | G5 envelope 测试 + G3/G5 准入 |
+| N7 | 三态可区分：自洽待投影（追平）/ 真分叉（STOP）/ 损坏（STOP）；两种 STOP 码不得互换；**有序判别分支承重（V5 反向状态 STOP、V7 无效依据 STOP、V6 非键字段篡改 STOP、V6′ 同状态关闭依据篡改 STOP）** | journal 领先 fixture / journal 分叉 fixture / self-digest 破坏 fixture / 反向状态 fixture / 无证明后继 fixture / 已关闭且 status 不变、仅改 closureEvidenceRef 并重算 self-digest 的 fixture | 分别移除 projectedThrough 比对、分叉比对、self-digest 校验、身份字段校验、合法状态前进的证明校验、第 2 步投影字段交叉绑定 | 各独立变异变红为对应码；V5/V7 在缺证明/反向分支上 STOP；V6′ 由第 2 步投影交叉绑定拦截 | G5 projector/recovery 注入测试 + G3 publisher 校验 |
+| N8 | 升档回流=台账缺口补齐：漏补必需项、删除已确认内容分别变红 | 升档 fixture（要求清单 + 已确认内容清单） | 漏补 / 删除受保护内容 | 台账覆盖断言 + 受保护内容 diff 断言 | G3/G5 升档 fixture |
+| N9 | 第三份 Gate 权威文件被拒；历史 evidence 引用不误杀 | 第三权威文件 + 历史 evidence fixture | 引入第三文件 / 误杀历史引用 | 稳定路径表比对 + evidence 排除断言 | G3 路径 validator + G5 投影 |
+
+## 9. 复审裁决的落地注记（不构成本轮授权）
+
+FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与 `projectedThrough` 语义（含修复基线重建）；C18 projector 的三态判定按 §6.2.2；C2/C4 深度字段输出按 §4.1 结构化承载；§10 C1 已随本修订完成，G3 检查其消费一致性；N 系列承重落点见 §8.2。
+
+## 10. 现役合同同步清单
+
+| 文件:条款 | 冲突 | 处置 | 落点 |
+| --- | --- | --- | --- |
+| `complexity-routing.md:19-21` | DECIDED/BLOCKED_UNKNOWN 旧枚举；裁决点表述 | 已重写：CONFIRMED/ESCALATED/BLOCKED_UNKNOWN；intake=提案、gate=唯一正式裁决 | C1 @ G2 收口（完成） |
+| `complexity-routing.md:95-111` 触发清单 | 自维护第二套档位规则 | 已删除自维护清单，引用 §4.2 T1 唯一枚举；纯协作限定传播至 Delta 表 | C1 @ G2 收口（完成） |
+| `complexity-routing.md:138,153-155,176-177,188` | 现役 DECIDED | 已全部替换为 CONFIRMED/ESCALATED | C1 @ G2 收口（完成） |
+| `complexity-routing.md` 决策字段节 | 字段集过时 | 已对齐 §4.1 七字段并声明 §4.1 为唯一权威 | C1 @ G2 收口（完成） |
+| `node-capability-contract.md:52` | 规范源声明覆盖流程语义 | 规范源声明限定：流程语义/深度状态机以本合同为权威 | C1 同族 @ G3 |
+| `skills/sdlc-implementation/SKILL.md:15` | runtime recovery context 依赖 | **C8-a 单列**：移除 | C8-a @ G3 |
+| `skills/sdlc-solution-design/SKILL.md:24` | 首轮深度循环 | C3 承载（Core Rule 10 → §4.3） | C3 @ G3 |
+| `artifact-flow.md:29,78,86` | DECIDED；按已裁决深度生成 | 路径保留；状态/前置条款替代 | C11 @ G3 |
+| `artifact-versioning.md:29,107,135` | 旧文件名/旧状态；旧正文不保留 | 历史保存映射：superseded 版本正文保留于产物目录、仅标 superseded | C12 @ G3 |
+| `artifact-storage.md:85,101,262` | manifest 可 not_applicable | 对齐 intake 全创建；旧状态/风险准入清理 | C12 @ G3 |
+| `development-path-governance.md:34` / `lifecycle.md:54` | 依赖 DECIDED | CONFIRMED/ESCALATED 映射 | C13 @ G3 |
+| `phase-gates.md:132` | OPEN blocking + ACCEPTED_RISK proof | 废止，对齐 A4 | C13 @ G3 |
+| `loop-finding-lifecycle.md:17,29,33,87` | 类别×来源矩阵未接线；风险证明；回流映射 | 矩阵引用至 §5.1；映射至 §5.2；ACCEPTED 无仪式；回流枚举对齐 §7.3 | C14 @ G5 |
+| `loop-artifact-revision.md:63,74` / `loop-recovery-protocol.md:47` | STALE 吸收态；深度结构 | 声明复用 + `projectedThrough`/投影基线映射 | C15 @ G5 |
+| `project-type-contract-artifact-matrix.md:88` | DECIDED + accepted-risk evidence | 移除，对齐 §7 | C13 @ G3 |
+| `change-control.md:111,246` | 需求问题回 intake（保留）；manifest 临时小节写入 | 回流保留；写入改为 publisher 输入 | C10/C13 @ G3 |
+| `skills/sdlc-code-review/SKILL.md:26` | PWR 接受者/证据 | 清除 + 全链 finding 登记职责 | C6 @ G3 |
+| `skills/sdlc-docflow-writer/SKILL.md:92,157` | manifest 直写 | 改 publisher 调用 | C7 @ G3 |
+| `shared-business-domain-governance.md:8` / `standard-package-resolution.md:22` | 旧 `.specify` 活动根/profile 解析 | G1 根语义引用同步（不重开旧根路由） | C19 @ G3 |
+
+## 11. Revision Record
+
+- 1.0.0（2026-09-05）：**冻结**。Current User 依据 R13 轮 FREEZE 建议（绑定 v0.13.0 字节）裁决 G2 合同冻结；本版仅并入两项非语义变更：①G2-R14-L1 引用更正（字段双语义引用 §5.1 第 5 条、动作机制引用手动生命周期动作规则、职责仍引 §5.2）；②保证 B 裁决入案（§5.1 第 8 条：接受保证 A 为手动面审计最终口径）。修订史 R1–R13 见下。
+- 0.13.0（2026-09-05）：按 G2-R13-H1 修订——撤销 v0.12.0 将 runtime"ACCEPTED 不要求 closureBoundRevisionId"误扩展为手动面"不携带"的规则：手动 ACCEPTED 行**携带**该字段，语义按状态区分（RESOLVED=修复依据 revision；ACCEPTED=formal_verdict PWR 裁决依据 revision，非 resolvedByRevisionId、不要求新增修复 revision）；runtime 映射条款改为仅声明 runtime 接受路径无该对应字段、手动语义见 §5.2；手动自洽校验与 §5.2 引用同一字段规则（不再维护两份清单）；保证 A 的"依据绑定 revision 可追溯"承载恢复；N6 增手动合法 PWR 正例（首次发布成功/重放 no-op/缺失错误绑定拒绝）。
+- 0.12.0（2026-09-05）：按 G2-R12-H1 修订——第 2 步（状态一致）重写为**投影字段整行交叉绑定**：runtime 经现役已验证读接口取得 finding 当前记录及证明绑定，按固定字段映射生成期望索引行（RESOLVED：closedBy/closureEvidence*/resolvedByRevisionId；ACCEPTED：closedBy←riskAcceptedBy/closureEvidence*，不要求 closureBoundRevisionId）并逐字段比对，任一适用投影字段漂移 → MISMATCH_STOP（堵住"status 一致、仅篡改 closureEvidenceRef 并重算 self-digest"的反例）；store 内部不变量验证仍归现役读回机制，publisher 仅做投影交叉绑定；N7 增 V6′ 承重变体。
+- 0.11.0（2026-09-05）：按 G2-R11-H1/M1 修订——H1 PWR ACCEPTED 路径端到端闭合：§7.1 与 §5.2 写入语义统一（ACCEPTED 录生命周期记录：runtime=`acceptFindingRisk`+durable 证明；手动=publisher；Gate Ledger 仅不可变发现事实，不回写）；§6.2.2(b) 第 3 步补 OPEN→ACCEPTED 合法后继（限 scan 来源 + formal_verdict PWR 裁决 + 有效依据；现役 `ACCEPTED_RISK`→`ACCEPTED` 投影映射，未知值一律 STOP）；区分不可变字段与生命周期新增依据字段（不误杀从空到有的关闭依据）；手动面动作校验语义（提交 publisher、校验后原子发布生效、无预写、重放幂等/不一致拒绝）；L160 残留称谓统一为生命周期记录差量/生命周期管理动作；N6/N7 扩充 V2/V4/V5/V6/V7 承重案例；第 2 级判别补混合发布显式规则（两类输入合入同一次原子发布、互不覆盖）与第 2 步证据绑定说明（runtime 由 store 事务不变量保证、手动要求行内依据字段完备）。M1 手动审计保证边界（G2-R11-M1）：区分两类保证——findingIndex 行内字段保证发现事实/关闭/接受依据/责任主体/绑定 revision 可追溯（保证 A）；业务仓 Git 历史仅提供用户实际提交过的 manifest 版本、不保证每次发布的完整快照（不承诺保证 B）；publisher 不执行 commit、Git 提交非状态生效或准入前置条件；§5.1 字段表扩展 `closedBy`/`closureEvidenceRef`/`closureEvidenceDigest`/`closureBoundRevisionId`。
+- 0.10.0（2026-09-05）：按 G2-R10-H1/H2 修订——H1 承载切换贯穿全部写入条款：ACCEPTED 改录生命周期记录（runtime=`acceptFindingRisk`+durable 证明，不写 Gate Ledger；Gate Ledger 仅保留 scan 发现事实）；状态表示按各面现役原语（runtime=guarded UPDATE 状态字段+证明追加；手动=publisher 更新 findingIndex 行，审计史=业务仓 git 历史），删除无差别的"同 ID 追加状态行"表述；§6.2.3 输入称谓同步。H2 第 2 级(b) 改为**有序互斥判别**（身份字段一致→状态一致→合法状态前进（OPEN→后继+证明）→其余 STOP），比较对象=索引当前状态行；手动生命周期动作=提交 publisher、原子发布后生效、无预写。
+- 0.9.0（2026-09-05）：按 G2-R9-H1/H2 修订——**两类记录承载分离**（G2-R9-H1）：发现记录=产物 finding 段（in-band，随 revision 固定）；生命周期记录=产物之外的权威（runtime=finding store 经既有 `resolveFinding`/`appendFinding` 持久操作 + durable 证明，手动=manifest findingIndex 本身）；状态迁移零触碰产物字节，产物 digest 持续成立。`findingIndexRev` **删除**（G2-R9-H2）：交叉验证改为对权威记录的方向性整行比对（runtime=store 当前状态；手动=自洽校验），落后=追平/一致=no-op/无凭据=STOP 三态由内容寻址与方向性比对区分，无需自证计数。合成前缀推导撤销（迁移不经 journal 执行事件，前缀推导回归纯执行映射）。悬空 §5.5' 引用清除。C14/C15/C18 适配更新。
+- 0.8.0（2026-09-05）：按 G2-R8-H1/M1 修订——finding 状态迁移重定义为生命周期元数据（**不产生产物新修订**：无内容变更即无新 revision，规避现役四项绑定的成功执行要求；entry version/digest 不动，完整性对原 digest 成立）；`findingIndexRev` 独立投影计数（单调校验入第 2 级(b)）；第 2 级(a) 前缀推导改为"journal 推导 + 已发布 finding 迁移"合成（关闭发布后下一次发布不误判分叉）；L150 残句清除；C14/C15/C18 适配落实。0.7.0 的"状态迁移=产物新修订"设计撤销。
+- 0.7.0（2026-09-05）：按 G2-R7-H1/H2/M1 修订——finding 状态迁移=来源产物新修订（findingIndex 发布同步更新 entry version/digest，完整性绑定不豁免）；§6.2.2(b) 凭据校验扩展为整行绑定（堵非键字段篡改）；发布三向进度规则（runtime 尾段/手动声明/纯 finding 差量分别定义 publishSeq/projectedThrough 行为，手动冲突消除）；人工修复 hash 收尾（repairRecords 先于 digest 写入）。
+- 0.6.0（2026-09-05）：按 G2-R6-H1/M1 修订——发布判别第 2 级扩展 findingIndex 权威交叉验证、第 3 级输入扩展 finding 段差量（含关闭复验 RESOLVED）、no-op 条件收紧；关闭复验三步收尾（登记→发布→阻断解除）；repairRecords 统一顶层唯一位置并恢复人工修复基线重建规则；发布重放确定性保留。
+- 0.5.0（2026-09-05）：按 G2-R5-H1/H2/L1 修订——§6.2 重写为三级有序判别（损坏→前缀分叉→待投影追平，含已追平 no-op 与逐崩溃点恢复结果）+ 手动面适配（MANUAL/声明序列号/声明确认时刻）+ 修复记录重放确定性 + 现役状态映射表；§5.2 关闭复验定义为 finding 生命周期管理动作（准入豁免、独立验证责任保留）；第 34 行引用更正 §5.4。
+- 0.4.0（2026-09-05）：按 G2-R3-H1/H2/H3/M1 修订——H1 深度触发枚举单一化（T1 唯一清单 F1–F9，complexity-routing 引用不自维护；纯协作限定传播至 Delta 表）；H2 finding 登记与发现节点解耦（复用现役类别×来源矩阵，全组合合法，处置者=回流目标节点，Gate Ledger 限定为设计阶段台账）；H3 manifest 增加 `projectedThrough` 投影基线 + 三态判别（自洽待投影/真分叉/损坏）+ 幂等重放规则（publishSeq=projectedThrough、时间取事件时间戳）+ runtime 准入投影覆盖校验；M1 恢复完整 C1–C20/N1–N9 表、N7 三态化、C8-a 单列、残留引用更正。
+- 0.3.0（2026-09-05）：按 G2-R2 修订（G2-R3 复审：深度规范同步、全链 finding、投影恢复仍不闭合；字段拆分/A1 拒绝/自证 digest 方向被确认成立并保留）。
+- 0.2.0（2026-09-05）：按 G2-R1 全量修订。
+- 0.1.0（2026-09-05）：初稿 PROPOSED。

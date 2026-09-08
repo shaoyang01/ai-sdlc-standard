@@ -7,7 +7,7 @@ Stop when:
 - Implementation is not verified.
 - Source artifacts are missing or stale.
 - Target path is unclear.
-- L1/L2 are unconfirmed for a missing `.specify/business_domain/**` L4 target.
+- L1/L2 are unconfirmed for a missing `.sdlc/business_domain/**` L4 target.
 - L4 id cannot be reserved for create-if-missing.
 - naming_pattern_source, shape_profile_source, or shape_confidence is missing for create-if-missing.
 - standard template fallback is attempted without explicit fallback conditions.
@@ -20,12 +20,10 @@ Stop when:
 - Proposed fact is only valid for a one-off requirement.
 - Proposed fact depends on unresolved review or test feedback.
 - Sync would require modifying production code, spec, plan, or tasks.
-- Standard entry coverage audit is `BLOCKED` when the sync target is `.specify/business_domain/**`.
-- Duplicate sync risk: pipeline sync already executed for the same facts.
-- Duplicate sync risk: library sync already executed for the same facts.
+- Standard entry coverage audit is `BLOCKED` when the sync target is `.sdlc/business_domain/**`.
+- Duplicate sync risk: a previous sync already recorded the same facts (manifest sync record / duplicate sync guard).
 - Same stable fact already synced to the target document.
-- Unknown rail (rail not identifiable from context or user confirmation).
-- Unknown sync source mode (mode not `speckit_driven`, `library_driven`, or `hybrid`).
+- Unknown sync provenance (facts not traceable to `library/{requirement_id}/` artifacts, code state, or verification evidence).
 - Unknown business_domain naming pattern (cannot determine target document naming convention).
 - Target L4 ambiguous (multiple candidate L4 documents or none identifiable).
 - Target shape unknown (existing document structure not understood).
@@ -59,17 +57,15 @@ Stop when:
 - missing implementation evidence for direct update
 - missing verification evidence for direct update
 - duplicate sync guard unresolved
-- pipeline_sync_executed=true and result=synced without supplemental authorization
-- implementation evidence missing in library_driven mode
-- verification evidence missing in library_driven mode
+- manifest sync record already shows `result: synced` without supplemental authorization
 - 02-方案审核 missing / failed / blocked
 - manifest source freshness conflict
 - library artifact current effective version unknown
-- source_of_truth unclear in library_driven mode
+- sync provenance unclear (library, code and verification sources conflict or are untraceable)
 
 ## Entry Coverage Blocking
 
-Before writing stable facts to `.specify/business_domain/**`, run the standard strict audit when `.specify/entry-coverage-profile.yaml` exists:
+Before writing stable facts to `.sdlc/business_domain/**`, run the standard strict audit when `.sdlc/entry-coverage-profile.yaml` exists:
 
 ```bash
 ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> --strict
@@ -78,7 +74,7 @@ ${AI_SDLC_STANDARD_HOME}/scripts/audit-entry-coverage.rb <target-project-path> -
 Block Sync when:
 
 - the runner exits non-zero;
-- `.specify/reports/entry_coverage/entry_coverage_report.md` status is `BLOCKED` or `PENDING`;
+- `.sdlc/reports/entry_coverage/entry_coverage_report.md` status is `BLOCKED` or `PENDING`;
 - `unarchived_entries.md`, `unarchived_services.md`, or `cross_domain_conflicts.md` contains blocking rows relevant to the sync target.
 
 If business-domain documents are intentionally not initialized yet, route to business-domain bootstrap or owner confirmation before Sync writes long-term facts.

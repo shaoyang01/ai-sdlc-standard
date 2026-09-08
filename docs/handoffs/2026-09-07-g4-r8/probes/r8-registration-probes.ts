@@ -1,0 +1,12 @@
+import {makeHarness,closeHarness,scriptedAdapter,runOnce,runIdOf,events,finding} from './r7-harness';
+import Database from 'better-sqlite3';
+import {join} from 'node:path';
+const pwr={gateResult:'PASS_WITH_RISK',decisionStatus:'CONFIRMED',decisionDepth:'STANDARD',findings:[]};
+async function severity(){for(const [declared,registered] of [['HIGH','MEDIUM'],['CRITICAL','HIGH']]){const h=makeHarness('r8-severity-'+declared);try{
+ const append=h.runStore.appendCapabilityExecutionWithFindings.bind(h.runStore);h.runStore.appendCapabilityExecutionWithFindings=((e:any,r:any)=>append(e,e.executionRole==='adversarial_scan'?{...r,findings:r.findings.map((f:any)=>({...f,severity:registered}))}:r)) as any;
+ const {adapter}=scriptedAdapter(new Map([['solution-gate:adversarial_scan',[{findings:[finding('F',declared,'SOLUTION')]}]],['solution-gate:formal_verdict',[pwr]]]));const r=await runOnce(h,adapter);const scan=events(h).find(e=>e.status==='succeeded'&&e.executionRole==='adversarial_scan')!;console.log('SEVERITY',JSON.stringify({declared,registered,ledger:JSON.parse(h.artifactStore.read(scan.unresolvedFindingsRef!,scan.unresolvedFindingsDigest!).toString()),stored:h.runStore.listFindings(runIdOf(h)).map(f=>({severity:f.severity,status:f.status})),result:{status:r.final_status,chain:r.chain_status}}));
+ }finally{closeHarness(h)}}}
+async function batches(){for(const status of ['BLOCKED','SUCCEEDED'])for(const cats of [[],['IMPLEMENTATION'],['IMPLEMENTATION','IMPLEMENTATION'],['IMPLEMENTATION','PLANNING'],['IMPLEMENTATION','IMPLEMENTATION','IMPLEMENTATION','IMPLEMENTATION']]){const h=makeHarness('r8-batch-'+status+cats.length+cats.join(''));try{
+ const {adapter}=scriptedAdapter(new Map([['solution-gate:formal_verdict',[{...pwr,gateResult:'PASS'}]],['code-review:primary',[{nodeStatus:status,findings:cats.map((c,i)=>finding('F'+i,'HIGH',c))}]]]));let result:any;try{const r=await runOnce(h,adapter,8);result={status:r.final_status,chain:r.chain_status}}catch(e){result={code:(e as any).code,message:(e as Error).message}}const id=runIdOf(h),db=new Database(join(h.root,'journal.db'));const edges=db.prepare('SELECT finding_id,node_id FROM loop_finding_invalidations').all();db.close();console.log('BATCH',JSON.stringify({status,cats,result,terminal:events(h).at(-1)?.errorCode,findings:h.runStore.listFindings(id).map(f=>({id:f.findingId,status:f.status})),edges}));
+ }finally{closeHarness(h)}}}
+(async()=>{await severity();await batches()})().catch(e=>{console.error(e);process.exit(1)});

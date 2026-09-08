@@ -71,7 +71,7 @@
 `crossBindArtifactIndexRow(row, currentRevision)` 为纯函数：调用方提供解析后的 Index 行（node/stablePath/version/status/result）与该节点的 journal current revision（无为 `null`）：
 
 - stablePath 与 version 必须与 current revision 精确一致；
-- manifest status 与 runtime validity 映射一致：current ACTIVE ↔ `draft`/`active`；STALE ↔ `stale`；SUPERSEDED ↔ `replaced`；
+- manifest status 与 runtime validity 按**冻结映射表**（主合同 §6.2.4，G4-R5-M2 对齐；G4-R6-M4 收敛回冻结边界）一致：revision `ACTIVE` ↔ `current`；`STALE`/`SUPERSEDED` ↔ `stale`。`actionable` 是手动面的回流待返工标注，由真实返工上下文判定（manual-runtime 语义合同 §5.4）——runtime 交叉绑定**不**把任意非 ACTIVE 行等同 `actionable`，manifest 行携带 `actionable` 即 `STATUS_DRIFT`。冻结前的 `draft`/`active`/`replaced` 词表废止，携带即 `INVALID_INPUT`；
 - Gate 行（v2 仅 `02 方案审核`）的 result 必须等于 revision 的 `gateResult`；非 Gate 行的 result 不参与交叉绑定（DocFlow 评审结果归 manifest 侧所有）；
 - 任一漂移返回 `STOP` 诊断（`NODE_NOT_MAPPED`/`CURRENT_REVISION_MISSING`/`NODE_MISMATCH`/`STABLE_PATH_DRIFT`/`VERSION_DRIFT`/`STATUS_DRIFT`/`RESULT_DRIFT`），不静默选边；调用方输入形状非法时 fail-closed（`INVALID_INPUT`）。
 

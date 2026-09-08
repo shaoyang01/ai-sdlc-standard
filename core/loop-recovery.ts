@@ -25,9 +25,11 @@ import {
   type CapabilityExecutionRole,
   type NodeCapabilityId,
 } from "../loop/types";
-import { planRegateFromFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
+import { planRegateFromFacts, reduceBlockedPointIndexes, reduceGateRoundFacts, type CurrentRevisionFacts, type RegatePlan } from "./loop-regate";
 import {
   findPendingRevisionProducerExecution,
+  LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+  type DecisionStatus,
   type LoopCapabilityExecutionEvent,
   type LoopCapabilityExecutionStatus,
   type LoopCapabilityGateResult,
@@ -53,6 +55,64 @@ export interface NodeExecutionRecord {
   inputDigest?: string | null;
   outputArtifactRef?: string | null;
   outputDigest?: string | null;
+}
+
+/**
+ * E4-T2 durable recovery classification. A fresh operator (or a resuming
+ * entry) decides the next move from the journal alone; this is the single
+ * machine-readable answer to "what kind of recovery does the interrupted
+ * attempt require". Null only when there is nothing to recover (a completed
+ * chain or a run that has not dispatched a capability yet).
+ */
+export type RecoveryClassification =
+  | "SAFE_RETRY"
+  | "VERIFY_STAGED"
+  | "HUMAN_INPUT_REQUIRED"
+  | "CLEANUP_REQUIRED"
+  | "TERMINAL_FAILED_BLOCKED";
+
+export const RECOVERY_CLASSIFICATIONS: readonly RecoveryClassification[] = Object.freeze([
+  "SAFE_RETRY",
+  "VERIFY_STAGED",
+  "HUMAN_INPUT_REQUIRED",
+  "CLEANUP_REQUIRED",
+  "TERMINAL_FAILED_BLOCKED",
+]);
+
+/**
+ * Pure classifier (unit-tested directly). The ordering is the precedence:
+ * an explicit human request and a staged-but-unpromoted result outrank a
+ * generic cleanup, and only a REAL process (non-null invocation digest) that
+ * failed without staging anything implies a possibly-dirty attempt workspace
+ * that must be isolated/cleaned rather than blindly retried. A deterministic
+ * shadow failure carries no process evidence and is therefore SAFE_RETRY
+ * when retryable — the pre-E4 "no side effects ⇒ retry" assumption stays
+ * valid ONLY while no real process ran.
+ */
+export function classifyCapabilityRecovery(input: {
+  chainStatus: RunRecoveryContext["capabilityChainStatus"];
+  last: LoopCapabilityExecutionEvent | null;
+  hasPendingRevisionMaterialization: boolean;
+}): RecoveryClassification | null {
+  const { chainStatus, last, hasPendingRevisionMaterialization } = input;
+  if (chainStatus === "COMPLETED") return null;
+  // An open terminal→revision window is closed by replaying materialization
+  // from journal facts (no re-dispatch, no external side effect): safe.
+  if (hasPendingRevisionMaterialization) return "SAFE_RETRY";
+  if (last === null) return null;
+  if (last.humanActionRef !== null) return "HUMAN_INPUT_REQUIRED";
+  if (last.status === "failed" && last.stagingRef !== null && last.promotionRef === null) {
+    return "VERIFY_STAGED";
+  }
+  if (last.status === "failed" && last.processInvocationDigest !== null && last.stagingRef === null) {
+    return "CLEANUP_REQUIRED";
+  }
+  if (last.status === "started") return "SAFE_RETRY";
+  if (last.status === "failed" && last.retryable === true) return "SAFE_RETRY";
+  if (last.status === "failed") return "TERMINAL_FAILED_BLOCKED";
+  // A succeeded tail whose forward pointer was cut (e.g. BLOCKED gate /
+  // depth decision) cannot self-advance: terminal-blocked, needs adjudication.
+  return "TERMINAL_FAILED_BLOCKED";
 }
 
 export interface RunRecoveryContext {
@@ -86,15 +146,23 @@ export interface RunRecoveryContext {
   executionPointStates: readonly ExecutionPointRecoveryState[];
   lastCapabilityExecution: LoopCapabilityExecutionEvent | null;
   /**
+   * E4-T2: the single machine-readable recovery class of the interrupted
+   * attempt, or null when nothing needs recovery (COMPLETED / not started).
+   */
+  recoveryClassification: RecoveryClassification | null;
+  /**
    * WP4: durable convergence projection — the v2 finding gate over ALL
    * open/closed findings and current validity. COMPLETED chains with a
    * BLOCKED gate are not done.
    */
   findingGate: { status: "ELIGIBLE" | "BLOCKED"; blockingFindingIds: readonly string[] };
   /**
-   * WP4: depth decision bound to the latest formal_verdict round.
-   * PASS → DECIDED; FAIL / missing / PASS_WITH_RISK without a current
-   * ACCEPTED_RISK proof → BLOCKED_UNKNOWN (implementation must not start).
+   * G4-R5-H2 (frozen contract §7.3 A1): depth decision bound to the latest
+   * formal_verdict round. DECIDED only when the verdict event itself carries
+   * decisionStatus=CONFIRMED with an admitting Gate Result (PASS /
+   * PASS_WITH_RISK), a materialized depth/scope/delta, and an identity-bound
+   * current Gate revision. ESCALATED / BLOCKED_UNKNOWN / FAIL / unbound →
+   * BLOCKED_UNKNOWN (task-planning must not start).
    */
   solutionGateDecision: {
     status: "DECIDED" | "BLOCKED_UNKNOWN";
@@ -267,11 +335,24 @@ export interface ExecutionPointRecoveryState {
   effectiveOutputArtifactVersion: string | null;
   effectiveOutputDigest: string | null;
   gateResult: LoopCapabilityGateResult | null;
+  /** W-GW-DIAG P-K: the verdict round's materialized decision scope. */
+  decisionScopeId: string | null;
+  /** G4-R5-H1: the verdict round's §4.3 decision status (v5 events only). */
+  decisionStatus: DecisionStatus | null;
   nextStepEligibility: LoopNextStepEligibility | null;
   retryable: boolean | null;
   /** v3 (Round 1): the persisted Finding Ledger of a scan round. */
   unresolvedFindingsRef: string | null;
   unresolvedFindingsDigest: string | null;
+  /**
+   * E5-W1 (S05 controlled retry budget): number of CONTROLLED business
+   * failures at this point since its last succeeded attempt — failed
+   * terminals with `retryable === true` and `errorCode !==
+   * "ATTEMPT_INTERRUPTED"`. Crash-recovery interruptions never count: the
+   * budget bounds failure-driven re-dispatches only (plan §7 S05 "同 binding
+   * 最多一次受控重试"), enforced by deriveDispatchCommand.
+   */
+  controlledFailuresSinceSuccess: number;
 }
 
 const NODE_EXECUTION_KINDS = ["stage_started", "stage_succeeded", "stage_failed"] as const;
@@ -417,6 +498,18 @@ function recoverRunContextInTransaction(
         (event) => event.capability === capability && event.executionRole === executionRole,
       );
       const { last, lastSucceeded } = stateForEvents(events);
+      // E5-W1 (S05): controlled business failures since the point's last
+      // succeeded attempt — the suffix after lastSucceeded (all events when
+      // the point never succeeded). Crash interruptions (ATTEMPT_INTERRUPTED)
+      // are excluded: they are recovery re-drives, not controlled retries.
+      const lastSucceededSequence = lastSucceeded?.sequence ?? -1;
+      const controlledFailuresSinceSuccess = events.filter(
+        (event) =>
+          event.sequence > lastSucceededSequence &&
+          event.status === "failed" &&
+          event.retryable === true &&
+          event.errorCode !== "ATTEMPT_INTERRUPTED",
+      ).length;
       return Object.freeze({
         capability,
         executionRole,
@@ -429,13 +522,19 @@ function recoverRunContextInTransaction(
         effectiveOutputArtifactVersion: lastSucceeded?.outputArtifactVersion ?? null,
         effectiveOutputDigest: lastSucceeded?.outputDigest ?? null,
         gateResult: lastSucceeded?.gateResult ?? null,
+        decisionScopeId: last?.decisionScopeId ?? null,
+        decisionStatus: last?.decisionStatus ?? null,
         nextStepEligibility: last?.nextStepEligibility ?? null,
         retryable: last?.retryable ?? null,
         unresolvedFindingsRef: lastSucceeded?.unresolvedFindingsRef ?? null,
         unresolvedFindingsDigest: lastSucceeded?.unresolvedFindingsDigest ?? null,
+        controlledFailuresSinceSuccess,
       });
     },
   );
+  const findings = capabilityExecutions.length > 0
+    ? store.listFindings(state.identity.runId)
+    : [];
   let nextExecutionPoint: RunRecoveryContext["nextExecutionPoint"] = null;
   let linearStopIdx: number | null = null;
   const pointIndexOf = (point: { capability: NodeCapabilityId; executionRole: CapabilityExecutionRole }): number =>
@@ -453,6 +552,15 @@ function recoverRunContextInTransaction(
       nextExecutionPoint = pointState.retryable === true ? point : null;
       break;
     }
+    if (pointState.status === "blocked") {
+      // G4-R5-H4 (D-087): a blocked node business result is a completed
+      // attempt with a blocker report — the recovery re-drives the SAME
+      // point (the chain validator accepts the unchanged-claim re-attempt
+      // and the upstream-refreshed re-attempt). Downstream work never
+      // derives from a blocked terminal.
+      nextExecutionPoint = point;
+      break;
+    }
     if (pointState.status === "started") {
       nextExecutionPoint = null;
       break;
@@ -462,15 +570,16 @@ function recoverRunContextInTransaction(
       break;
     }
     if (pointState.nextStepEligibility !== "ELIGIBLE") {
+      // G4-R5-H2: eligibility is carried by the event itself (derived from
+      // the verdict's §4.3 ruling at write time). There is no post-hoc
+      // rederivation that can admit a BLOCKED terminal — the reflow paths
+      // (Re-Gate wave, feedback restart) are the only ways forward.
       nextExecutionPoint = null;
       break;
     }
   }
   let regateTargetIndex: number | null = null;
   let regateOverrideApplied = false;
-  const findings = capabilityExecutions.length > 0
-    ? store.listFindings(state.identity.runId)
-    : [];
   // Round 3 review F2: derive the pending revision materialization from the
   // same verified reads the rest of this context consumes — a succeeded
   // producer without its node revision keeps the terminal→revision window
@@ -489,12 +598,6 @@ function recoverRunContextInTransaction(
   for (const fact of regateFacts) {
     currentByNode.set(fact.nodeId, { validity: fact.validity, generation: fact.generation });
   }
-  const pointLastAttempts = new Map<string, number>(
-    executionPointStates.map((state) => [
-      `${state.capability}:${state.executionRole}`,
-      state.lastAttempt,
-    ]),
-  );
   // WP4 H3: external feedback re-enters ONLY through a verified WP1
   // FEEDBACK_DRIVEN_CHANGE record; it drives a full new generation
   // regardless of whether any finding exists.
@@ -511,6 +614,27 @@ function recoverRunContextInTransaction(
     latestFeedback === undefined || latestFeedback.previousGeneration === null
       ? null
       : { previousGeneration: latestFeedback.previousGeneration };
+  // G4-R5: succeeded execution points whose own terminal blocked their
+  // eligibility are the wave's mandatory re-drives (see planRegateFromFacts).
+  // G4-R6-H5: blocked points and gate-round facts come from the ONE shared
+  // reduction over the journal (latest terminal per execution point) —
+  // byte-identical to the store's chain-context reduction, never a second
+  // diverging fact base.
+  const blockedPointIndexes = reduceBlockedPointIndexes(capabilityExecutions);
+  const designCurrentFact = regateFacts.find((fact) => fact.nodeId === "solution-design") ?? null;
+  const designCurrentRevision = designCurrentFact === null
+    ? undefined
+    : artifactRevisions.find((item) => item.revisionId === designCurrentFact.revisionId);
+  const gateRoundFacts = reduceGateRoundFacts(
+    capabilityExecutions,
+    designCurrentFact !== null && designCurrentRevision !== undefined
+      ? {
+          artifactRef: designCurrentFact.artifactRef,
+          semver: designCurrentRevision.semver,
+          digest: designCurrentFact.digest,
+        }
+      : null,
+  );
   const plan = planRegateFromFacts(
     findings.map((finding) => ({
       findingId: finding.findingId,
@@ -521,8 +645,9 @@ function recoverRunContextInTransaction(
       createdAt: finding.createdAt,
     })),
     currentByNode,
-    pointLastAttempts,
+    gateRoundFacts,
     feedbackChange,
+    blockedPointIndexes,
   );
   if (plan.kind === "regate" && plan.restartPointIndex !== null) {
     regateTargetIndex = plan.restartPointIndex;
@@ -605,37 +730,28 @@ function recoverRunContextInTransaction(
       gateCurrentRevision !== undefined &&
       gateCurrentRevision.producerExecutionId === lastVerdict.executionEventId;
     const boundRef = lastVerdict.status === "succeeded" ? lastVerdict.outputArtifactRef : null;
-    // PASS_WITH_RISK is DECIDED only with an ACCEPTED_RISK proof from the
-    // SAME decision scope: the risk-accepted finding's source revision must
-    // carry the same generation as the verdict round (same wave).
-    let pwrProofSameScope = false;
-    if (lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK") {
-      // Round 2 review H2: same decision scope means the ACCEPTED_RISK
-      // closure names THIS verdict round's decisionScopeId — a generation
-      // comparison alone would let any old acceptance authorize any new
-      // verdict on equal-generation products.
-      pwrProofSameScope =
-        lastVerdict.decisionScopeId !== null &&
-        findings.some((finding) =>
-          finding.status === "ACCEPTED_RISK" &&
-          finding.riskAcceptedScopeId !== null &&
-          finding.riskAcceptedScopeId === lastVerdict.decisionScopeId);
-    }
-    // Round 2 review H1: the depth choice must be MATERIALIZED on the
-    // verdict event itself — gateResult alone never admits implementation.
-    const decisionMaterialized =
-      lastVerdict.decisionDepth !== null && lastVerdict.decisionScopeId !== null;
-    if (lastVerdict.status === "succeeded" && !boundToCurrentGate) {
-      solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
-    } else if (
-      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS" &&
-      decisionMaterialized
-    ) {
-      solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
-    } else if (
-      lastVerdict.status === "succeeded" && lastVerdict.gateResult === "PASS_WITH_RISK" &&
-      decisionMaterialized && pwrProofSameScope
-    ) {
+    // G4-R5-H2 (frozen contract §7.3 A1): admission authority is the
+    // verdict's OWN §4.3 ruling — decisionStatus must be CONFIRMED and the
+    // Gate Result must be an admitting one (PASS / PASS_WITH_RISK). An
+    // ESCALATED or BLOCKED_UNKNOWN ruling never satisfies A1, even when the
+    // literal Gate Result reads PASS/PWR, and v4-historical events (no
+    // decisionStatus authority) never gain it post hoc. Decision-086 PWR
+    // auto-proceed survives as the write-time derivation: a CONFIRMED PWR
+    // verdict adjudicated its scan ledger in the same terminal transaction.
+    // G4-R6-H1: the version check is an ENFORCED invariant, not a comment.
+    // A v4 (historical) event's canonical form does not cover
+    // decisionStatus, so its ruling column is unprotected — it must never
+    // satisfy A1, no matter what the column reads. Only a v5 event (whose
+    // decisionStatus is inside the canonical hash) carries admission
+    // authority. There is no default-to-CONFIRMED anywhere.
+    const decisionAdmits =
+      lastVerdict.status === "succeeded" &&
+      lastVerdict.schemaVersion === LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION &&
+      lastVerdict.decisionStatus === "CONFIRMED" &&
+      (lastVerdict.gateResult === "PASS" || lastVerdict.gateResult === "PASS_WITH_RISK") &&
+      lastVerdict.decisionDepth !== null &&
+      lastVerdict.decisionScopeId !== null;
+    if (lastVerdict.status === "succeeded" && boundToCurrentGate && decisionAdmits) {
       solutionGateDecision = { status: "DECIDED", boundVerdictArtifactRef: boundRef };
     } else {
       solutionGateDecision = { status: "BLOCKED_UNKNOWN", boundVerdictArtifactRef: null };
@@ -677,6 +793,13 @@ function recoverRunContextInTransaction(
             ? "BLOCKED"
             : "READY";
   const nextCapability = nextExecutionPoint?.capability ?? null;
+  // E4-T2: derive the single recovery class from the already-finalized chain
+  // status, last event and pending-revision window.
+  const recoveryClassification = classifyCapabilityRecovery({
+    chainStatus: capabilityChainStatus,
+    last: lastCapabilityExecution,
+    hasPendingRevisionMaterialization: pendingRevisionProducer !== null,
+  });
   // C02-WP5 (G6): surface the full recovery facts — generation authority,
   // latest change record, per-node current revision identity map, open
   // findings, invalidated revisions and the Re-Gate plan projection — so a
@@ -743,6 +866,7 @@ function recoverRunContextInTransaction(
     nextExecutionPoint: nextExecutionPoint === null ? null : Object.freeze(nextExecutionPoint),
     executionPointStates: Object.freeze(executionPointStates),
     lastCapabilityExecution,
+    recoveryClassification,
     findingGate: { status: findingGate.status, blockingFindingIds: findingGate.blockingFindings },
     solutionGateDecision,
     pendingRevisionMaterialization: pendingRevisionProducer === null
@@ -856,6 +980,23 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
   if (pointIndex < 0) {
     throw new LoopRunJournalError("STORE_CORRUPT", "recovery context holds a non-canonical execution point");
   }
+  // E5-W1 (S05 controlled retry budget): a point whose tail is a controlled
+  // business failure may be re-dispatched ONCE. A second controlled failure
+  // exhausts the budget — any further dispatch of this point is refused
+  // fail-closed (the tail event itself is the LAST allowed retry target).
+  // Crash-recovery interruptions are not counted (see
+  // controlledFailuresSinceSuccess) and remain unbounded by S05.
+  const nextState = recovery.executionPointStates[pointIndex]!;
+  if (
+    nextState.status === "failed" &&
+    nextState.retryable === true &&
+    nextState.controlledFailuresSinceSuccess >= 2
+  ) {
+    throw new LoopRunJournalError(
+      "ILLEGAL_TRANSITION",
+      `controlled retry budget exhausted (S05): execution point ${next.capability}/${next.executionRole} already consumed its single controlled retry`,
+    );
+  }
   if (pointIndex === 0) {
     // C02-WP5 F2: a recovered run pins the intake dispatch to the ORIGINAL
     // persisted normalized Requirement source — the confirmed-facts anchor.
@@ -885,9 +1026,13 @@ export function deriveDispatchCommand(recovery: RunRecoveryContext): DispatchCom
   }
   const predecessor = LOOP_CAPABILITY_EXECUTION_POINTS[pointIndex - 1]!;
   const predecessorState = recovery.executionPointStates[pointIndex - 1]!;
+  // W-GW-DIAG P-K (Decision-080): a PASS_WITH_RISK verdict whose risks were
+  // accepted (same decisionScopeId) is admitted forward even though its
+  // journaled nextStepEligibility stays BLOCKED — the acceptance IS the
+  // rederivation (legacy BLOCKED events, e.g. run4). Fail-closed without that proof.
   if (
     predecessorState.status !== "succeeded" ||
-    predecessorState.nextStepEligibility !== "ELIGIBLE" ||
+    (predecessorState.nextStepEligibility !== "ELIGIBLE") ||
     predecessorState.effectiveOutputArtifactRef === null ||
     predecessorState.effectiveOutputArtifactVersion === null ||
     predecessorState.effectiveOutputDigest === null

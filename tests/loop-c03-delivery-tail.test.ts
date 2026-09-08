@@ -71,12 +71,16 @@ async function test() {
     assert(blockingDecision.blockingFindings.length === 2, "blocking findings preserved");
   }
 
-  // PASS_WITH_RISK without acceptance → blocked
+  // G4-R6-M2: PASS_WITH_RISK with EMPTY risk refs is ALLOWED — Decision-086
+  // auto-proceed is carried by the verdict's own §4.3 ruling; the risk refs
+  // ride the delta artifact for downstream traceability and are never an
+  // admission gate. The old non-empty requirement here only ever enforced
+  // the runtime's fabricated "PWR-ACCEPTED" placeholder.
   const riskNoAcceptVerdict: SolutionGateVerdict = { ...passVerdict, gateResult: "PASS_WITH_RISK", riskAcceptanceRefs: [] };
   const riskNoAcceptDecision = developmentPathEntryGuard(riskNoAcceptVerdict);
-  assert(riskNoAcceptDecision.allowed === false, "PASS_WITH_RISK without acceptance → blocked");
+  assert(riskNoAcceptDecision.allowed === true, "PASS_WITH_RISK without acceptance refs → allowed (auto-proceed, G4-R6-M2)");
 
-  // PASS_WITH_RISK with acceptance → allowed
+  // PASS_WITH_RISK with real acceptance refs → allowed
   const riskWithAcceptVerdict: SolutionGateVerdict = { ...passVerdict, gateResult: "PASS_WITH_RISK", riskAcceptanceRefs: ["risk-acceptance:001"] };
   const riskWithAcceptDecision = developmentPathEntryGuard(riskWithAcceptVerdict);
   assert(riskWithAcceptDecision.allowed === true, "PASS_WITH_RISK with acceptance → allowed");

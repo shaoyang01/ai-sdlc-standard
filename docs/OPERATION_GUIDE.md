@@ -182,14 +182,16 @@ specs/**
 git commit
 ```
 
-`business_domain` 是长期代码事实文档，使用独立脚本一次性生成骨架：
+`business_domain` 是长期代码事实文档。现役初始化器为 `bootstrap-knowledge-target.sh`（Decision-088/089，双模式一站式：`.sdlc` 根路径、代码驱动候选填充、体检模式）：
 
 ```bash
-"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-business-domain.sh" <target-project-path> --dry-run
-"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-business-domain.sh" <target-project-path>
+"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-knowledge-target.sh" <target-project-path> --dry-run
+"$AI_SDLC_STANDARD_HOME/scripts/bootstrap-knowledge-target.sh" <target-project-path>
 ```
 
-该脚本默认不覆盖已有长期事实文档，不读取旧版 Speckit 文档。
+知识目标落在 `.sdlc/business_domain/**`，机器件落在 `.sdlc/`（knowledge-target.yaml、project-governance-profile.yaml、entry-coverage-profile.yaml、business-domain-map.yaml 模板、门禁包装脚本）。初始化器默认不覆盖已有知识文件，业务语义零虚构（候选态只写代码可验证事实），重复执行 no-op。
+
+> 注：下文的 `bootstrap-business-domain.sh` / `bootstrap-speckit-project.sh` 流程描述为历史版本记录；两个脚本已 DEPRECATED（仅保留历史调用兼容），新项目一律使用上面的 `bootstrap-knowledge-target.sh`。
 
 ### 6.4 检查初始化结果
 

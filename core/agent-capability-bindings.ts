@@ -8,8 +8,11 @@
 // Replacing a binding never changes Requirement ID, artifact schema, finding
 // semantics, Re-Gate routing or the manual Git boundary (LOOP Core Contract
 // §6). Full-capability matrix per Decision-020: every supported agent can
-// execute every required execution role; initial state codex enabled,
-// kimi/hermes disabled pending real-environment review.
+// execute every required execution role. The enabled slot follows Q1
+// (C03-E plan / Decision-070 reachability, Decision-073 wiring): Kimi owns
+// requirement-intake/solution-design/task-planning/knowledge-sync, Codex owns
+// adversarial_scan/implementation, Hermes owns formal_verdict/code-review;
+// every other (slot, agent) binding stays disabled.
 
 import {
   LOOP_CAPABILITY_EXECUTION_POINTS,
@@ -57,8 +60,19 @@ const ADAPTER_BY_AGENT: Record<AgentName, string> = {
 };
 
 const BINDING_VERSION = "2.0.0";
-const BINDING_TIMEOUT_MS = 120_000;
+// Per-class binding wall clock (E5-T1, 2026-08-31 Current User ruling:
+// non-implementation 45 min / implementation 60 min). The binding timer arms
+// before the profile's per-attempt process budget, so it is the effective
+// ceiling of a real dispatch and must mirror the profile budgets in
+// execution/agent-cli-profile.ts (TIMEOUT_BY_CLASS); the drift-guard test in
+// tests/agent-capability-binding.test.ts pins the two sources equal. The
+// former flat 120_000 truncated every profile budget in the real chain
+// (E5 ledger §5-⑨).
+const BINDING_TIMEOUT_NON_IMPL_MS = 45 * 60 * 1000;
+const BINDING_TIMEOUT_IMPL_MS = 60 * 60 * 1000;
 const REGISTRY_VERSION = "1";
+/** Stamped by entry layers (loop-run --from-intake) into production requests. */
+export const BINDING_REGISTRY_VERSION = REGISTRY_VERSION;
 const LOOP_AGENTS: readonly AgentName[] = ["codex", "kimi", "hermes"];
 const BINDING_FIELDS = [
   "bindingId", "capability", "executionRole", "agent", "adapter", "bindingVersion", "inputFormat",
@@ -260,9 +274,33 @@ function deepFreeze<T>(value: T): Readonly<T> {
 
 // ── registry construction ──
 
+// Q1 slot→agent assignment (C03-E plan §6, Decision-070, Decision-073 W1).
+// Exactly one enabled agent per (capability, executionRole) slot. Fail-closed:
+// a slot missing from this map is a build-time error, never a silent codex fallthrough.
+const Q1_SLOT_AGENT: Readonly<Record<string, AgentName>> = Object.freeze({
+  "requirement-intake:primary": "kimi",
+  "solution-design:primary": "kimi",
+  "solution-gate:adversarial_scan": "codex",
+  "solution-gate:formal_verdict": "hermes",
+  "task-planning:primary": "kimi",
+  "implementation:primary": "codex",
+  "code-review:primary": "hermes",
+  "knowledge-sync:primary": "kimi",
+});
+
+function q1SlotAgent(capability: NodeCapabilityId, executionRole: CapabilityExecutionRole): AgentName {
+  const agent = Q1_SLOT_AGENT[`${capability}:${executionRole}`];
+  if (agent === undefined) {
+    throw new Error(`Q1 binding map has no agent for slot ${capability}:${executionRole}`);
+  }
+  return agent;
+}
+
 function buildBindings(): AgentCapabilityBinding[] {
   const bindings: AgentCapabilityBinding[] = [];
   for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    // Fail-closed coverage check: every dispatchable point must have a Q1 agent.
+    q1SlotAgent(point.capability, point.executionRole);
     for (const agent of ["codex", "kimi", "hermes"] as const) {
       bindings.push({
         bindingId: `binding-${agent}-${point.capability}-${point.executionRole}`,
@@ -275,9 +313,12 @@ function buildBindings(): AgentCapabilityBinding[] {
         outputContract: "node-output-contract:v2",
         validator: "node-output-contract:v2",
         allowedSideEffects: ["workspace-local-write", "run-journal-write"],
-        timeoutMs: BINDING_TIMEOUT_MS,
+        // Same class derivation as the real adapter's capabilityClass.
+        timeoutMs: point.capability === "implementation"
+          ? BINDING_TIMEOUT_IMPL_MS
+          : BINDING_TIMEOUT_NON_IMPL_MS,
         failurePolicy: "retry_other_binding",
-        enabled: agent === "codex",
+        enabled: agent === q1SlotAgent(point.capability, point.executionRole),
       });
     }
   }
@@ -285,9 +326,10 @@ function buildBindings(): AgentCapabilityBinding[] {
 }
 
 /**
- * Initial registry: 8 execution points x 3 agents = 24 bindings, codex
- * enabled, kimi/hermes disabled. The registry and every nested object/array
- * are deeply frozen — runtime mutation is impossible.
+ * Initial registry: 8 execution points x 3 agents = 24 bindings. Exactly one
+ * binding is enabled per slot per Q1 (Kimi×4, Codex×2, Hermes×2); the other
+ * 16 stay disabled. The registry and every nested object/array are deeply
+ * frozen — runtime mutation is impossible.
  */
 export const INITIAL_BINDING_REGISTRY: BindingRegistry = deepFreeze({
   version: REGISTRY_VERSION,
@@ -322,6 +364,28 @@ export function getEnabledBinding(
     );
   }
   return enabled[0];
+}
+
+/**
+ * W2 anti-silent-cutover guard (wiring-design §3b): a registry is "Q1-shaped"
+ * iff every one of the eight execution points has the Q1-assigned agent as
+ * its sole enabled binding. Missing slot, non-unique enablement, or a drifted
+ * enabled agent all return false (never throw) so the real capability source
+ * refuses to start instead of silently dispatching on a non-Q1 map.
+ */
+export function isQ1BindingRegistry(registry: BindingRegistry): boolean {
+  for (const point of LOOP_CAPABILITY_EXECUTION_POINTS) {
+    let enabled: AgentCapabilityBinding;
+    try {
+      enabled = getEnabledBinding(registry, point.capability, point.executionRole);
+    } catch {
+      return false;
+    }
+    if (enabled.agent !== q1SlotAgent(point.capability, point.executionRole)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**

@@ -5,11 +5,11 @@
 
 ## Purpose
 
-Define `.specify/business_domain/**` as a **shared long-term knowledge base** governed by the v2 single rail (Decision-044). It is a persistent cross-requirement knowledge store for stable business domain facts. Under v2, `specs/**`（run-level）、sync source modes（`speckit_driven` / `library_driven` / `hybrid`）与 pipeline 状态已随双轨退役（Decision-044/045），不再构成写入 authority；稳定事实的确认与写入统一经 `knowledge-sync` 节点裁决（`APPLY_LOCAL` / `PROPOSAL_ONLY` / `BLOCKED_CONFLICT` / `NO_CHANGE`）。
+Define `.sdlc/business_domain/**` as a **shared long-term knowledge base** governed by the v2 single rail (Decision-044; root path migrated `.specify` → `.sdlc` by Decision-089 and D-088-01 v3 — the old root is retired, archived under `.sdlc/legacy/**`, and never routed). It is a persistent cross-requirement knowledge store for stable business domain facts. Under v2, `specs/**`（run-level）、sync source modes（`speckit_driven` / `library_driven` / `hybrid`）与 pipeline 状态已随双轨退役（Decision-044/045），不再构成写入 authority；稳定事实的确认与写入统一经 `knowledge-sync` 节点裁决（`APPLY_LOCAL` / `PROPOSAL_ONLY` / `BLOCKED_CONFLICT` / `NO_CHANGE`）。
 
 ## Shared Knowledge Base
 
-`.specify/business_domain/**` is the single source of truth for stable business domain knowledge. It is:
+`.sdlc/business_domain/**` is the single source of truth for stable business domain knowledge. It is:
 
 - **Long-term**: Not tied to any single requirement or generation run.
 - **Shared**: Any requirement or generation may read it. Writes are governed: confirmed stable facts are written only via the `knowledge-sync` node — `APPLY_LOCAL`（本地写授权下写入）、`PROPOSAL_ONLY`（无写授权或插入点不确定）、`BLOCKED_CONFLICT`（与既有事实冲突，保留双方证据）、`NO_CHANGE`（无新增稳定事实，不制造空写）。
@@ -49,7 +49,7 @@ Define `.specify/business_domain/**` as a **shared long-term knowledge base** go
 - Do not rename or restructure existing L4 documents without explicit owner authorization.
 - Do not overwrite existing facts without source evidence and revision record.
 - Do not create documents under `99PendingConfirmation` or similar unconfirmed paths.
-- knowledge-sync / LOOP nodes must not treat `.specify/memory/**`, `.specify/workflow/**`, or `.specify/coding_guide/**` as business_domain fact sources or write targets.
+- knowledge-sync / LOOP nodes must not treat `.sdlc/legacy/**`（retired `.specify` roots, archived by the D-088-01 v3 initializer）, `.sdlc/memory/**`, `.sdlc/workflow/**`, or `.sdlc/coding_guide/**` as business_domain fact sources or write targets.
 - Do not default to standard L4 skeleton (`templates/business-domain-l4/*.md`) in existing projects.
 - Do not rewrite existing L4 documents to a fixed template shape.
 - Do not create duplicate L4 candidate for the same domain concept.
@@ -75,7 +75,7 @@ When the naming convention is unclear, ambiguous, or unavailable:
 
 ## Write Provenance
 
-Every write to `.specify/business_domain/**` must record:
+Every write to `.sdlc/business_domain/**` must record:
 
 | Field | Description |
 | --- | --- |
@@ -117,4 +117,4 @@ When shape, naming, L4 id, or semantics are unclear:
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 contract rebaseline (Decision-044/045): removed sync source modes（speckit_driven / library_driven / hybrid）、dual-rail 与 pipeline/specs authority；knowledge write path rewritten to knowledge-sync decision semantics（APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT / NO_CHANGE）；外部系统回执记录为 evidence；preserved `.specify/business_domain/**` write governance（preserve existing shape/facts、conflict proposal、naming & shape rules）。 |
+| 2.0.0 | 2026-08-22 | Draft | C02-WP3.5 contract rebaseline (Decision-044/045): removed sync source modes（speckit_driven / library_driven / hybrid）、dual-rail 与 pipeline/specs authority；knowledge write path rewritten to knowledge-sync decision semantics（APPLY_LOCAL / PROPOSAL_ONLY / BLOCKED_CONFLICT / NO_CHANGE）；外部系统回执记录为 evidence；preserved business_domain write governance（preserve existing shape/facts、conflict proposal、naming & shape rules）。 |

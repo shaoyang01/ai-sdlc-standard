@@ -166,6 +166,7 @@ const RUN_LEVEL_KINDS: readonly LoopRunEventKind[] = [
   "run_failed",
   "run_completed",
   "run_cancelled",
+  "risk_accepted",
 ];
 
 const STAGE_LEVEL_KINDS: readonly LoopRunEventKind[] = [
@@ -477,6 +478,20 @@ export function applyLoopRunEvent(state: LoopRunState, event: LoopRunEvent): Loo
         fixRound: state.fixRound,
         blockingReasonCode: null,
         failureReasonCode: null,
+      });
+    }
+    case "risk_accepted": {
+      // W-GW-DIAG P-K-d (Decision-083): record-type event. The human risk
+      // acceptance is durably persisted via finding rows + hash-verified
+      // proof rows in the appending transaction; this run-stream event marks
+      // the decision without mutating run state (any state may record it —
+      // dispatch admission reads it through the Re-Gate context).
+      if (event.reasonCode === null) illegal("risk_accepted requires reasonCode (verdict decisionScopeId)");
+      return Object.freeze({
+        ...state,
+        lastSequence: base.lastSequence,
+        lastEventId: base.lastEventId,
+        updatedAt: base.updatedAt,
       });
     }
     case "run_paused": {

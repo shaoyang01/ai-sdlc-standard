@@ -1,0 +1,53 @@
+{
+  "evidence_root": "/tmp/d091-r4-b1-9hto_re0",
+  "reproductions": [
+    {
+      "entry": "adoption",
+      "folder": "memory",
+      "target": "/tmp/d091-r4-b1-9hto_re0/adoption-memory",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": null,
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [],
+      "temp_archives": []
+    },
+    {
+      "entry": "adoption",
+      "folder": "coding_guide",
+      "target": "/tmp/d091-r4-b1-9hto_re0/adoption-coding_guide",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": null,
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [],
+      "temp_archives": []
+    },
+    {
+      "entry": "legacy",
+      "folder": "memory",
+      "target": "/tmp/d091-r4-b1-9hto_re0/legacy-memory",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": null,
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [],
+      "temp_archives": []
+    },
+    {
+      "entry": "legacy",
+      "folder": "coding_guide",
+      "target": "/tmp/d091-r4-b1-9hto_re0/legacy-coding_guide",
+      "exit": 1,
+      "source_restored": true,
+      "second_source_restored": true,
+      "self_written_dst_remaining": null,
+      "status": "FAILED_ROLLED_BACK",
+      "conflicts": [],
+      "temp_archives": []
+    }
+  ]
+}

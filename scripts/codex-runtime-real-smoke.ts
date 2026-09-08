@@ -1,16 +1,25 @@
 // Codex Runtime Real Smoke Test (v2 single-rail)
 // ================================================
+// [Q1 STALE — W1, Decision-073 (2026-08-28)] Under the Q1 binding ONLY
+// adversarial_scan and implementation are codex-bound; requirement-intake and
+// solution-design are Kimi slots and formal_verdict is Hermes. This script was
+// written when codex alone had real dispatch: its "three codex-bound points /
+// codexAttempts >= 6" expectation below no longer holds (with only the codex
+// gateway injected, a Q1 run stops fail-closed at the FIRST Kimi node). The
+// script stays unrunnable and unauthorized — the E5 real three-agent canary is
+// a separate grant — and MUST be rewritten to the Q1 three-agent shape before
+// any authorized real run.
+//
 // Manually invoked smoke test for the v2 runtime chain with the real Codex
 // Gateway injected. Requires explicit environment confirmation. Does NOT
 // modify files. Does NOT apply patches. Prints only sanitized summary data.
 //
-// The v2 chain requires the two solution-gate roles on DIFFERENT agents, and
-// only codex has real dispatch today: the real run therefore completes the
-// codex-bound points (requirement-intake, solution-design, adversarial_scan)
-// with real dispatch and must stop fail-closed at the formal_verdict point
-// (bound to hermes) instead of silently reusing the scan agent. PASS means:
-// real codex attempts journaled for every codex-bound point that ran, no
-// fallback reason on them, and the dual-agent boundary held.
+// The v2 chain requires the two solution-gate roles on DIFFERENT agents. Under
+// Q1 only adversarial_scan is a codex-bound point before the gate (pre-Q1 this
+// list also included requirement-intake and solution-design); the run must
+// stop fail-closed at the formal_verdict point (bound to hermes) instead of
+// silently reusing the scan agent. See the Q1 STALE note above before relying
+// on the point/event counts below.
 //
 // Required environment variables:
 //   SDLC_EXECUTION_MODE=codex
@@ -112,12 +121,14 @@ async function main() {
   // The chain cannot legitimately complete on real dispatch today: the
   // verdict slot is bound to hermes (no real capability dispatch), so an
   // honest run must stop around the gate instead of reusing the scan agent.
-  // The three codex-bound points that precede the gate journal six events
-  // (started + succeeded each).
+  // Pre-Q1 the three codex-bound points preceding the gate journaled six
+  // events (started + succeeded each); under Q1 only adversarial_scan is
+  // codex-bound, so this count is STALE pending the E5 three-agent rewrite
+  // (see the Q1 STALE note in the file header).
   const passed =
     result.final_status === "failed" &&
     result.chain_status !== "COMPLETED" &&
-    codexAttempts.length >= 6 &&
+    codexAttempts.length >= 6 && // pre-Q1 threshold; STALE under Q1, see header note
     codexSucceeded.length >= 3 &&
     dualAgentHeld;
 

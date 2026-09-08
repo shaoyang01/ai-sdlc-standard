@@ -15,13 +15,12 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import {
   INITIAL_BINDING_REGISTRY,
-  replaceBinding,
   type BindingRegistry,
 } from "./core/agent-capability-bindings";
 import type { LoopCapabilityExecutionEvent } from "./core/loop-capability-execution";
@@ -35,6 +34,12 @@ import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
 import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
+import { validateLoopRunIdentity } from "./core/loop-run-state";
+import {
+  PRODUCTION_ENTRY_SCHEMA,
+  type ParsedProductionEntry,
+} from "./core/loop-production-entry";
+import type { LoopGitWorkspaceSnapshot } from "./core/loop-git-workspace";
 import {
   developmentPathEntryGuard,
   checkDocumentationGovernanceTailCompletion,
@@ -107,6 +112,22 @@ export interface RuntimeOptions {
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
   /**
+   * Where node capabilities come from (W2, wiring-design §3). Defaults to
+   * "deterministic" — the traced shadow, behaviour unchanged. "real" builds a
+   * RealCapabilityGateway and requires a Q1 registry plus realGatewayDeps; it
+   * fails closed rather than silently dropping back to the shadow.
+   */
+  capabilitySource?: CapabilitySource;
+  /** Real CLI adapter + attempt-workspace resolver; required iff capabilitySource === "real". */
+  realGatewayDeps?: RealCapabilityGatewayDeps;
+  /**
+   * Production ONLY (W3 / E1-T4): a journal-validated identity minted by
+   * parseProductionEntryRequest and supplied through runProduction(). When
+   * absent, run() is the non-production / test entry and mints a local
+   * placeholder identity (unchanged behaviour).
+   */
+  productionIdentity?: LoopRunIdentity;
+  /**
    * WP4 Round 2 review H4 correction: pure LOOP SAFETY BOUND for one run()
    * invocation. Hitting it stops the invocation WITHOUT persisting any
    * durable block — plain linear progress must never be mistaken for a
@@ -134,6 +155,9 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "artifactStore",
   "bindingRegistry",
   "gateway",
+  "capabilitySource",
+  "realGatewayDeps",
+  "productionIdentity",
   "maxDispatches",
   "maxRegateRounds",
 ]);
@@ -164,6 +188,13 @@ function validateRuntimeOptions(options: RuntimeOptions): void {
       );
     }
   }
+  // W2 closed enum for the capability source, and no silent source/gateway conflict.
+  if (options.capabilitySource !== undefined && !isCapabilitySource(options.capabilitySource)) {
+    invalid(`capabilitySource must be "deterministic" | "real", got ${String(options.capabilitySource)}`);
+  }
+  if (options.capabilitySource === "real" && options.gateway !== undefined) {
+    invalid('capabilitySource "real" is mutually exclusive with an injected gateway');
+  }
 }
 
 function invalid(message: string): never {
@@ -185,20 +216,27 @@ function requireSafeId(value: string, label: string): string {
 
 import { createDeterministicCapabilityGateway } from "./execution/gateway";
 export { createDeterministicCapabilityGateway };
+import {
+  createCapabilityGateway,
+  DEFAULT_CAPABILITY_SOURCE,
+  isCapabilitySource,
+  type CapabilitySource,
+} from "./execution/capability-gateway-source";
+import type { RealCapabilityGatewayDeps } from "./execution/real-capability-gateway";
 
-// ─── Default dual-agent registry ──────────────────────
-// The initial registry enables codex for every execution point, which would
-// collide with the v2 rule that one solution-gate round's adversarial_scan
-// and formal_verdict are executed by different agents. The runtime default
-// moves the formal_verdict slot to hermes; callers may inject any registry
-// that keeps the two gate roles on different enabled agents.
+// ─── Default Q1 three-agent registry ──────────────────
+// C03-E W1 (Decision-073): INITIAL_BINDING_REGISTRY now carries the full Q1
+// slot map directly — Kimi owns requirement-intake/solution-design/
+// task-planning/knowledge-sync, Codex owns adversarial_scan/implementation,
+// Hermes owns formal_verdict/code-review — so one solution-gate round's
+// adversarial_scan (codex) and formal_verdict (hermes) already run on
+// different agents. The former "codex everywhere, then move formal_verdict to
+// hermes" replacement is obsolete; the runtime default registry is the
+// initial registry itself. Callers may still inject any registry that keeps
+// the two gate roles on different enabled agents.
 
 export function createRuntimeBindingRegistry(): BindingRegistry {
-  return replaceBinding(
-    INITIAL_BINDING_REGISTRY,
-    "binding-codex-solution-gate-formal_verdict",
-    "binding-hermes-solution-gate-formal_verdict",
-  ).registry;
+  return INITIAL_BINDING_REGISTRY;
 }
 
 // ─── MAIN RUNTIME — v2 SINGLE-RAIL CHAIN RUNNER ───────
@@ -246,9 +284,38 @@ export function materializeProducerRevision(
     .filter((item) => item.nodeId === producer.capability);
   const nodeIdx = NODE_CAPABILITY_IDS.indexOf(producer.capability);
   const upstreamNodeId = nodeIdx > 0 ? NODE_CAPABILITY_IDS[nodeIdx - 1]! : null;
-  const upstreamCurrent = upstreamNodeId === null
-    ? undefined
-    : runStore.getCurrentArtifactRevision(runId, upstreamNodeId);
+  // G4-R5-H5: this producer's OWN finding registration may have invalidated
+  // its upstream current in the same terminal transaction (a code-review
+  // REGRESSION finding stales the implementation product it examined). The
+  // append-time upstream rule admits only ACTIVE upstreams, but the
+  // pending-revision window must still clear — so the revision materializes
+  // with its upstream lineage cut (empty upstreams, schema-legal): the
+  // invalidation edges on the finding record exactly why, and the rebuild
+  // wave authors the lineage-restoring current.
+  let upstreamCurrent: ReturnType<LoopRunStore["getCurrentArtifactRevision"]>;
+  let upstreamInvalidated = false;
+  try {
+    upstreamCurrent = upstreamNodeId === null
+      ? undefined
+      : runStore.getCurrentArtifactRevision(runId, upstreamNodeId);
+  } catch (error) {
+    if (
+      error instanceof LoopRunJournalError && error.code === "STORE_CORRUPT" &&
+      upstreamNodeId !== null
+    ) {
+      const pointer = runStore.listArtifactRevisions(runId)
+        .filter((item) => item.nodeId === upstreamNodeId)
+        .sort((a, b) => b.sequence - a.sequence)[0];
+      if (pointer !== undefined && pointer.validity === "STALE") {
+        upstreamInvalidated = true;
+        upstreamCurrent = undefined;
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
   try {
     runStore.appendArtifactRevision(createLoopArtifactRevision({
       runId,
@@ -267,7 +334,9 @@ export function materializeProducerRevision(
       producerExecutionId: producer.executionEventId,
       producerExecutionRole: producer.executionRole,
       gateResult: producer.gateResult,
-      upstreamRevisionIds: upstreamCurrent === undefined ? [] : [upstreamCurrent.revisionId],
+      upstreamRevisionIds: upstreamInvalidated
+        ? []
+        : upstreamCurrent === undefined ? [] : [upstreamCurrent.revisionId],
       createdAt: now(),
     }));
   } catch (error) {
@@ -299,7 +368,11 @@ export async function run(
   let bootstrapInput: { ref: string; version: string; digest: string } | null = null;
 
   const workspaceRoot = options.workspaceRoot ?? mkdtempSync(join(tmpdir(), "sdlc-runtime-v2-"));
-  mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  // Only the self-built (non-production) path needs a scratch repo dir; when
+  // stores are injected (production / tests) their repository paths are real.
+  if (options.runStore === undefined) {
+    mkdirSync(join(workspaceRoot, "repo"), { recursive: true });
+  }
   if ((options.runStore === undefined) !== (options.artifactStore === undefined)) {
     invalid("runStore and artifactStore must be injected together");
   }
@@ -322,17 +395,17 @@ export async function run(
 
   const bindingRegistry = options.bindingRegistry ?? createRuntimeBindingRegistry();
   const now = (): string => new Date().toISOString();
+  const capabilitySource = options.capabilitySource ?? DEFAULT_CAPABILITY_SOURCE;
   const gateway =
     options.gateway ??
-    createDeterministicCapabilityGateway({ runStore, artifactStore, bindingRegistry, now });
-  const entry = new LoopCapabilityEntry({
-    runStore,
-    artifactStore,
-    bindingRegistry,
-    gateway,
-    now,
-  });
-
+    createCapabilityGateway({
+      source: capabilitySource,
+      runStore,
+      artifactStore,
+      bindingRegistry,
+      now,
+      realDeps: options.realGatewayDeps,
+    });
   // C02-WP5 B1-1: cross-process resume lease — exactly one executor may run
   // the recovery→claim→external-execution→terminal cycle for this journal at
   // any time. Same-process nested invocations (F2 window barriers) reuse the
@@ -341,8 +414,19 @@ export async function run(
   const resumeJournalPath = options.runStore !== undefined
     ? options.runStore.databaseFilePath
     : join(workspaceRoot, "journal.db");
+  const entry = new LoopCapabilityEntry({
+    runStore,
+    artifactStore,
+    bindingRegistry,
+    gateway,
+    now,
+    // E4-T3: the runtime entry owns the lease, so it arms the dispatch-window
+    // firewall. Any future path that reaches this entry without holding the
+    // lease now fails closed instead of claiming and spawning unguarded.
+    requireResumeLeaseJournal: resumeJournalPath,
+  });
   return withResumeLease(resumeJournalPath, async (): Promise<RuntimeResult> => {
-    const identity: LoopRunIdentity = Object.freeze({
+    const localIdentity: LoopRunIdentity = Object.freeze({
       runId: `run-${requirementId}-${Date.now()}`,
       requirementId,
       repository: "local",
@@ -353,6 +437,18 @@ export async function run(
       controlRoot: join(workspaceRoot, "control"),
       createdAt: now(),
     });
+    const identity: LoopRunIdentity = options.productionIdentity ?? localIdentity;
+    if (options.productionIdentity !== undefined) {
+      // Production door (W3 / E1-T4): re-validate through the journal authority
+      // and pin consistency. The non-production local-identity path is untouched.
+      validateLoopRunIdentity(identity);
+      if (identity.requirementId !== requirementId) {
+        invalid("productionIdentity.requirementId must match the run requirementId");
+      }
+      if (identity.expectedBaseSha === "0".repeat(40)) {
+        invalid("production identity must carry a real expectedBaseSha, not the local placeholder");
+      }
+    }
 
     let recovery = recoverRunContext(runStore, requirementId);
     // Round 3 review F2: a crashed or interrupted previous invocation may have
@@ -436,6 +532,39 @@ export async function run(
     ) {
       invalid("maxRegateRounds must be a positive safe integer");
     }
+    // G4-R7-B5 (§7.3 A2): read the latest ruling's PWR risk provenance from
+    // its persisted, digest-verified decision delta. Returns null when there
+    // is no verdict, no delta, a non-v1 delta, or EMPTY refs — provenance is
+    // only ever REAL facts, never a placeholder.
+    const readPwrProvenance = (): {
+      riskAcceptanceRefs: readonly string[];
+      decisionDeltaRef: string;
+      decisionDeltaDigest: string;
+    } | null => {
+      if (journalRunId === null) return null;
+      const verdictEvents = runStore.listCapabilityExecutions(journalRunId)
+        .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict" && e.status === "succeeded");
+      const lastVerdict = verdictEvents[verdictEvents.length - 1] ?? null;
+      if (lastVerdict === null || lastVerdict.decisionDeltaRef === null || lastVerdict.decisionDeltaDigest === null) {
+        return null;
+      }
+      try {
+        const blob = artifactStore.read(lastVerdict.decisionDeltaRef, lastVerdict.decisionDeltaDigest);
+        const delta = JSON.parse(blob.toString("utf8")) as { schema?: unknown; riskAcceptanceRefs?: unknown };
+        if (delta.schema !== "loop-decision-delta:v1" || !Array.isArray(delta.riskAcceptanceRefs)) return null;
+        const refs = (delta.riskAcceptanceRefs as unknown[]).filter(
+          (ref): ref is string => typeof ref === "string" && ref.length > 0,
+        );
+        if (refs.length === 0) return null;
+        return {
+          riskAcceptanceRefs: refs,
+          decisionDeltaRef: lastVerdict.decisionDeltaRef!,
+          decisionDeltaDigest: lastVerdict.decisionDeltaDigest!,
+        };
+      } catch {
+        return null;
+      }
+    };
     let dispatches = 0;
     // C02-WP5 B1: an ACTIVE STARTED claim left by a crashed process is resumed
     // through the existing interrupted-attempt semantics — the recorded input
@@ -457,7 +586,9 @@ export async function run(
           execution_trace: Object.freeze([]),
           next_execution_point: null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -507,7 +638,9 @@ export async function run(
           ),
           next_execution_point: recovery?.nextExecutionPoint ?? null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -539,7 +672,9 @@ export async function run(
           execution_trace: Object.freeze([]),
           next_execution_point: null,
           workspace_root: workspaceRoot,
-          journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
           completed_at: now(),
         });
       }
@@ -602,6 +737,56 @@ export async function run(
           inputDigest = predecessorState.effectiveOutputDigest ?? inputDigest;
         }
       }
+      // G4-R5-H2 (frozen contract §7.3 A1): dispatching task-planning is an
+      // ADMITTED transition — the verdict's §4.3 ruling must be CONFIRMED
+      // with an admitting Gate Result (recovery projects DECIDED) and no
+      // OPEN finding whose §5.2 blocking scope covers task-planning (problem
+      // layers at or upstream of planning). ESCALATED and BLOCKED_UNKNOWN
+      // verdicts never satisfy A1 even when the literal Gate Result reads
+      // PASS/PWR. The refusal is an honest BLOCKED stop (§7 ADMISSION_DENIED),
+      // not an exception that escapes the run.
+      if (next.capability === "task-planning" && journalRunId !== null && recovery !== undefined) {
+        const planningNodeIdx = NODE_CAPABILITY_IDS.indexOf("task-planning");
+        // G4-R7-B4: the A1 blocking scope follows §5.2 — an OPEN finding
+        // blocks the ADMISSION of its earliest node's DOWNSTREAM products,
+        // while the earliest node itself is the rework target that must run
+        // to produce the repair evidence. A finding whose earliest node IS
+        // task-planning therefore must not block the planning re-run; only
+        // strictly-upstream findings (whose scope covers planning as a
+        // downstream product) block it.
+        const blockingOpenFindings = recovery.openFindings.filter(
+          (finding) =>
+            (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+            planningNodeIdx,
+        );
+        if (recovery.solutionGateDecision?.status !== "DECIDED" || blockingOpenFindings.length > 0) {
+          return Object.freeze({
+            requirement_id: requirementId,
+            run_id: journalRunId,
+            final_status: "failed" as const,
+            chain_status: "BLOCKED" as const,
+            blocking_reason_code: "ADMISSION_DENIED" as const,
+            execution_trace: Object.freeze(
+              runStore.listCapabilityExecutions(journalRunId).map((event) => Object.freeze({
+                capability: event.capability,
+                executionRole: event.executionRole,
+                agent: event.executorAgent,
+                attempt: event.attempt,
+                status: event.status,
+                gateResult: event.gateResult,
+                outputArtifactRef: event.outputArtifactRef,
+                outputDigest: event.outputDigest,
+              })),
+            ),
+            next_execution_point: null,
+            workspace_root: workspaceRoot,
+            journal_path: options.runStore === undefined
+              ? join(workspaceRoot, "journal.db")
+              : options.runStore.databaseFilePath,
+            completed_at: now(),
+          });
+        }
+      }
       // C03-D d1: development_path_entry guard (Decision-044 single-rail:
       // solution-gate depth verdict is the sole authority for entering
       // implementation). Invoked BEFORE dispatching the implementation node.
@@ -611,6 +796,32 @@ export async function run(
           .filter((e) => e.capability === "solution-gate" && e.executionRole === "formal_verdict");
         const lastVerdict = verdictEvents.length > 0 ? verdictEvents[verdictEvents.length - 1]! : null;
         const gateDecision = recovery?.solutionGateDecision ?? null;
+        // G4-R6-M2: the risk references are read back from the ruling's OWN
+        // persisted decision delta (digest-verified artifact read) — never a
+        // fabricated placeholder. Empty refs are legal (Decision-086 PWR
+        // auto-proceed; admission authority is the §4.3 ruling itself, and
+        // the delta artifact stays the durable trace for downstream inputs).
+        let pwrRiskRefs: readonly string[] = [];
+        if (
+          lastVerdict !== null && lastVerdict.decisionDeltaRef !== null &&
+          lastVerdict.decisionDeltaDigest !== null
+        ) {
+          try {
+            const deltaBlob = artifactStore.read(lastVerdict.decisionDeltaRef, lastVerdict.decisionDeltaDigest);
+            const delta = JSON.parse(deltaBlob.toString("utf8")) as {
+              schema?: unknown;
+              riskAcceptanceRefs?: unknown;
+            };
+            if (delta.schema === "loop-decision-delta:v1" && Array.isArray(delta.riskAcceptanceRefs)) {
+              pwrRiskRefs = (delta.riskAcceptanceRefs as unknown[]).filter(
+                (ref): ref is string => typeof ref === "string" && ref.length > 0,
+              );
+            }
+          } catch {
+            // A drifted delta yields EMPTY refs — never a placeholder.
+            pwrRiskRefs = [];
+          }
+        }
         const verdict: SolutionGateVerdict = {
           gateResult: (lastVerdict?.gateResult as SolutionGateVerdict["gateResult"]) ?? "FAIL",
           depth: (lastVerdict?.decisionDepth as DesignDepth | null) ?? null,
@@ -620,10 +831,7 @@ export async function run(
           // must NOT block re-entry into implementation (that is the whole point
           // of a rebuild wave). Only BLOCKED_UNKNOWN carries blocking findings.
           blockingFindings: gateDecision?.status === "DECIDED" ? [] : (recovery?.findingGate.blockingFindingIds ?? []),
-          riskAcceptanceRefs: (recovery?.openFindings ?? [])
-            .filter((f) => (f as { status?: string }).status === "ACCEPTED_RISK")
-            .map((f) => (f as { riskAcceptanceEvidenceRef?: string }).riskAcceptanceEvidenceRef ?? "")
-            .filter(Boolean),
+          riskAcceptanceRefs: pwrRiskRefs,
           verdictArtifactRef: gateDecision?.boundVerdictArtifactRef,
         };
         const entryDecision = developmentPathEntryGuard(verdict);
@@ -648,13 +856,73 @@ export async function run(
             ),
             next_execution_point: null,
             workspace_root: workspaceRoot,
-            journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+            // W-GW-DIAG P-I: an injected store still owns a real journal file —
+            // surface its path so operators don't lose the diagnostic anchor.
+            journal_path: options.runStore === undefined
+              ? join(workspaceRoot, "journal.db")
+              : options.runStore.databaseFilePath,
             completed_at: now(),
           });
         }
         implementationDepth = entryDecision.depth;
         resolvedImplementationDepth = entryDecision.depth;
       }
+      // G4-R7-B4 (§7.3 A4): knowledge-sync is admitted only with NO OPEN
+      // blocking finding — checked BEFORE the tail dispatch, not first
+      // executed and only then flipped to BLOCKED by the completion check.
+      // The predicate is OPEN-based: a CLOSED (resolved/accepted) finding
+      // whose downstream tail currents are missing is the NORMAL pre-tail
+      // state (the tail has not produced its products yet) and must not
+      // deadlock the tail's own admission.
+      // G4-R8-F3: the blocking scope follows §5.2, the same rework-target
+      // semantics as A1 — an OPEN finding whose earliest node IS
+      // knowledge-sync names the tail as the rework target itself and must
+      // stay dispatchable to produce its own repair evidence; only strictly
+      // upstream OPEN findings block the tail. This predicate is SHARED with
+      // the direct entry/claim admission boundary (loop-capability-entry).
+      const knowledgeSyncNodeIdx = NODE_CAPABILITY_IDS.indexOf("knowledge-sync");
+      if (
+        next!.capability === "knowledge-sync" && journalRunId !== null &&
+        recovery !== undefined &&
+        recovery.openFindings.some(
+          (finding) =>
+            (NODE_CAPABILITY_IDS as readonly string[]).indexOf(finding.earliestAffectedNodeId) <
+            knowledgeSyncNodeIdx,
+        )
+      ) {
+        return Object.freeze({
+          requirement_id: requirementId,
+          run_id: journalRunId,
+          final_status: "failed" as const,
+          chain_status: "BLOCKED" as const,
+          blocking_reason_code: "ADMISSION_DENIED" as const,
+          execution_trace: Object.freeze(
+            runStore.listCapabilityExecutions(journalRunId).map((event) => Object.freeze({
+              capability: event.capability,
+              executionRole: event.executionRole,
+              agent: event.executorAgent,
+              attempt: event.attempt,
+              status: event.status,
+              gateResult: event.gateResult,
+              outputArtifactRef: event.outputArtifactRef,
+              outputDigest: event.outputDigest,
+            })),
+          ),
+          next_execution_point: null,
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : options.runStore.databaseFilePath,
+          completed_at: now(),
+        });
+      }
+      // G4-R7-B5 (§7.3 A2 随行): the verified PWR risk provenance — the
+      // ruling's digest-checked decision delta and its non-empty risk refs —
+      // rides the ACTUAL downstream dispatch inputs, so it reaches the
+      // adapter's staged/stdin/prompt carriers instead of stopping at the
+      // entry guard. Empty refs stay legal (no fabrication); a missing or
+      // drifted delta yields no provenance block (never a placeholder).
+      const pwrProvenance = journalRunId !== null ? readPwrProvenance() : null;
       const executed = await entry.execute({
         requirementId,
         ...(firstDispatch ? { identity } : {}),
@@ -672,6 +940,11 @@ export async function run(
         input: {
           inputArtifactRef: inputRef,
           ...(implementationDepth !== null ? { designDepth: implementationDepth } : {}),
+          ...(pwrProvenance !== null ? {
+            riskAcceptanceRefs: pwrProvenance.riskAcceptanceRefs,
+            decisionDeltaRef: pwrProvenance.decisionDeltaRef,
+            decisionDeltaDigest: pwrProvenance.decisionDeltaDigest,
+          } : {}),
         },
       });
       firstDispatch = false;
@@ -680,16 +953,30 @@ export async function run(
       if (executed.execution.success !== true) {
         break;
       }
-      // WP4: bind the node product as an artifact revision authored by this
-      // succeeded producer execution. Currents are the facts Re-Gate planning
-      // (and finding source binding) consume; upstream chains to the reused or
-      // rebuilt current of the previous node.
-      // Round 3 review F2: the producer is the EXACT terminal event this
-      // dispatch committed (returned by the gateway/entry), never the journal
-      // tail — a concurrent entry could have advanced the tail meanwhile.
+      // G4-R5-H4: a BLOCKED node business result is a completed attempt with
+      // a blocker report — the invocation stops honestly (the recovery
+      // re-derives the same point on the next resume) and the blocker
+      // product is never materialized as a node revision.
       if (executed.producerTerminalEventId !== null) {
         const produced = runStore.listCapabilityExecutions(journalRunId)
           .find((item) => item.executionEventId === executed.producerTerminalEventId);
+        if (produced !== undefined && produced.status === "blocked") {
+          if (produced.capability !== next.capability || produced.executionRole !== next.executionRole) {
+            throw new LoopRunJournalError(
+              "STORE_CORRUPT",
+              "the dispatched producer terminal event does not match the dispatched point",
+            );
+          }
+          recovery = recoverRunContext(runStore, requirementId);
+          break;
+        }
+        // WP4: bind the node product as an artifact revision authored by this
+        // succeeded producer execution. Currents are the facts Re-Gate planning
+        // (and finding source binding) consume; upstream chains to the reused or
+        // rebuilt current of the previous node.
+        // Round 3 review F2: the producer is the EXACT terminal event this
+        // dispatch committed (returned by the gateway/entry), never the journal
+        // tail — a concurrent entry could have advanced the tail meanwhile.
         if (
           produced === undefined || produced.status !== "succeeded" ||
           produced.capability !== next.capability || produced.executionRole !== next.executionRole
@@ -712,6 +999,15 @@ export async function run(
 
     const events = runStore.listCapabilityExecutions(journalRunId ?? identity.runId);
     let chainStatus = recovery?.capabilityChainStatus ?? "BLOCKED";
+    // G4-R5-H4 (D-087): a blocked node business result is an honest BLOCKED
+    // stop — the recovery keeps the point dispatchable for the re-attempt,
+    // but the invocation's visible status must not read READY.
+    if (
+      recovery !== undefined &&
+      recovery.lastCapabilityExecution?.status === "blocked"
+    ) {
+      chainStatus = "BLOCKED";
+    }
     // WP4 convergence (H2): linear completion is not done. The run finishes
     // successfully only when the finding gate is ELIGIBLE and the depth
     // decision is DECIDED; otherwise it blocks honestly.
@@ -843,11 +1139,500 @@ export async function run(
       }))),
       next_execution_point: recovery?.nextExecutionPoint ?? null,
       workspace_root: workspaceRoot,
-      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : null,
+      journal_path: options.runStore === undefined ? join(workspaceRoot, "journal.db") : options.runStore.databaseFilePath,
       completed_at: now(),
       manual_handoff_status: manualHandoffStatus,
       manual_handoff_reason: manualHandoffReason,
       manual_handoff_artifact_ref: manualHandoffArtifactRef,
     });
   });
+}
+
+// ─── PRODUCTION DOOR — C03-E W3 (E1-T3/T4, wiring §4/§5) ──────────────
+// The single production entry into the chain kernel. It accepts ONLY the
+// frozen product of parseProductionEntryRequest (never raw JSON), runs a
+// read-only preflight BEFORE any dispatch, and then delegates to the same run()
+// kernel with the real identity — no second interpreter. It does NOT create a
+// git worktree (that is workspaceManager.prepare(), deferred to the authorized
+// E5 real activation) and it does NOT select the real capability source.
+
+/** Read-only slice of the git snapshot the production preflight consumes. */
+export type ProductionPreflightSnapshot = Pick<
+  LoopGitWorkspaceSnapshot,
+  "baseDrifted" | "taskHasChanges" | "sourceWipDigestSha256"
+>;
+
+export type ProductionRunErrorCode =
+  | "PRODUCTION_ENTRY_NOT_PARSED"
+  | "PRODUCTION_ENTRY_INVALID_INPUT"
+  | "PRODUCTION_REAL_NOT_AUTHORIZED"
+  | "PRODUCTION_BASE_DRIFT"
+  | "PRODUCTION_DIRTY_SOURCE"
+  | "PRODUCTION_ISOLATION_VIOLATED";
+
+export class ProductionRunError extends Error {
+  constructor(
+    public readonly code: ProductionRunErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProductionRunError";
+  }
+}
+
+/**
+ * G4-R8-F4: the durable fail-closed anchor for a CONFIRMED production
+ * isolation violation. The journal block (run_blocked) is the primary
+ * persistent fact, but the journal itself can be the failing component — a
+ * block write that fails must never be reported as "already durably
+ * blocked". The marker lives under the SAME controlRoot as the journal
+ * (no second control plane), is bound to the requirement identity, and
+ * every later real invocation of that requirement treats its presence as
+ * an un-discharged containment that keeps the run fail-closed with zero
+ * dispatches.
+ */
+const PRODUCTION_CONTAINMENT_MARKER_DIR = "production-containment";
+
+function productionContainmentMarkerPath(identity: LoopRunIdentity): string {
+  return join(identity.controlRoot, PRODUCTION_CONTAINMENT_MARKER_DIR, `${identity.requirementId}.json`);
+}
+
+/**
+ * G4-R9-F4: the marker's three observable states. "absent" means the anchor
+ * verifiably does not exist; "present" means a valid containment marker was
+ * read back; "invalid" means SOMETHING occupies the marker path (or its
+ * content is not a valid marker) and it is undecidable whether an
+ * un-discharged containment is hiding behind it — never equated with
+ * "absent".
+ */
+type ProductionContainmentMarkerState = "present" | "absent" | "invalid";
+
+function readProductionContainmentMarker(identity: LoopRunIdentity): ProductionContainmentMarkerState {
+  let raw: string;
+  try {
+    raw = readFileSync(productionContainmentMarkerPath(identity), "utf8");
+  } catch (error) {
+    // G4-R9-F4: only a verifiable ENOENT is "no marker". An unreadable path
+    // (directory occupying the file path, permission, I/O error) must stay
+    // fail-closed — treating it as "no marker" let a re-entry resume past an
+    // isolation failure whose anchor was smothered.
+    // G4-R10-F4: readFileSync FOLLOWS symlinks, so its ENOENT only proves
+    // the READ TARGET was not found — not that the anchor path is free. A
+    // dangling symlink occupying the marker path is an EXISTING anchor that
+    // cannot be validated: it is "invalid" (occupied), never "absent", or
+    // the re-entry guard skips past an un-discharged containment and a
+    // write would follow the link into its target. The anchor ITSELF is
+    // verified with lstat, which never follows links.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      try {
+        lstatSync(productionContainmentMarkerPath(identity));
+        return "invalid";
+      } catch (anchorError) {
+        return (anchorError as NodeJS.ErrnoException)?.code === "ENOENT" ? "absent" : "invalid";
+      }
+    }
+    return "invalid";
+  }
+  try {
+    const marker = JSON.parse(raw) as { reasonCode?: unknown };
+    return marker?.reasonCode === "PRODUCTION_ISOLATION_VIOLATED" ? "present" : "invalid";
+  } catch {
+    return "invalid";
+  }
+}
+
+function writeProductionContainmentMarker(identity: LoopRunIdentity): void {
+  const path = productionContainmentMarkerPath(identity);
+  // G4-R9-F4: "already contained" means a VALID marker is verifiably in
+  // place. An existing but invalid/unreadable object at the marker path is
+  // an anomaly on the fail-closed anchor — never smoothed over as a
+  // successful write, and never overwritten (the occupier may itself be
+  // evidence).
+  const existing = readProductionContainmentMarker(identity);
+  if (existing === "present") return;
+  if (existing === "invalid") {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but the containment marker path ${path} is ` +
+        `occupied by an invalid or unreadable object and was NOT overwritten. The occupier must ` +
+        `be discharged before this requirement can proceed.`,
+    );
+  }
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+        requirementId: identity.requirementId,
+        discoveredAt: new Date().toISOString(),
+      }),
+    );
+  } catch (error) {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but persisting its containment marker failed: ` +
+        `${(error as Error).message}. The polluted state must be discharged before this run can proceed.`,
+    );
+  }
+  // Write-then-verify: the write only counts as persisted when the anchor
+  // reads back as a valid marker (G4-R9-F4: a silently swallowed write left
+  // the writer and the re-entry guard disagreeing about the same path).
+  if (readProductionContainmentMarker(identity) !== "present") {
+    throw new ProductionRunError(
+      "PRODUCTION_ISOLATION_VIOLATED",
+      `production isolation violation confirmed, but the containment marker at ${path} did not ` +
+        `persist as a valid marker. The polluted state must be discharged before this run can proceed.`,
+    );
+  }
+}
+
+/** The persisted isolation block event, shared by the terminal verification and the marker-driven re-entry guard. */
+function appendProductionIsolationBlockEvent(runStore: LoopRunStore, runId: string, lastSequence: number): void {
+  runStore.appendEvent(Object.freeze({
+    eventId: `${runId}:${lastSequence + 1}:run_blocked`,
+    runId,
+    sequence: lastSequence + 1,
+    kind: "run_blocked" as const,
+    stage: null,
+    attempt: 0,
+    createdAt: new Date().toISOString(),
+    inputDigest: null,
+    outputArtifactRef: null,
+    outputDigest: null,
+    errorCode: null,
+    retryable: null,
+    reasonCode: "PRODUCTION_ISOLATION_VIOLATED",
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
+  }));
+}
+
+export interface ProductionRunDeps {
+  /**
+   * Read-only git preflight (workspaceManager.inspect bound to a manager). It
+   * must NEVER create a worktree. Omit only in tests that isolate the kernel.
+   */
+  inspectWorkspace?: (identity: LoopRunIdentity) => Promise<ProductionPreflightSnapshot>;
+  /**
+   * W-GW-PREP (P-B, Decision-079): optional worktree preparation, wired by the
+   * production entry (LoopGitWorkspaceManager.prepare). When provided, the
+   * kernel prepares BEFORE inspecting — a fresh requirement has no task
+   * worktree yet, and inspect alone would refuse it forever. Requires
+   * inspectWorkspace; preparation is a LOCAL git worktree operation and never
+   * touches remote Git state.
+   */
+  prepareWorkspace?: (identity: LoopRunIdentity) => Promise<unknown>;
+  /** W3: "deterministic" (default); "real" requires injected realGatewayDeps. */
+  capabilitySource?: CapabilitySource;
+  /**
+   * G4-R5-H7: the real-chain assembly surface. Injecting it is what AUTHORIZES
+   * capabilitySource "real" through the production door: the adapter + attempt
+   * workspace resolver are caller-supplied (offline fake adapters verify the
+   * assembly; the real adapter keeps its own operator env authorization for
+   * actual CLI spawning). Omitting it keeps the real door refused.
+   */
+  realGatewayDeps?: RealCapabilityGatewayDeps;
+  /** Inject both or neither; when omitted, real stores are built under controlRoot. */
+  runStore?: LoopRunStore;
+  artifactStore?: LoopArtifactStore;
+  gateway?: RuntimeCapabilityGateway;
+  maxDispatches?: number;
+  maxRegateRounds?: number;
+}
+
+export async function runProduction(
+  parsed: ParsedProductionEntry,
+  requirementText: string,
+  deps: ProductionRunDeps = {},
+): Promise<RuntimeResult> {
+  // (0) Closed door: must be the frozen product of the production-entry parser.
+  const request = (parsed as { request?: unknown })?.request as
+    | { schema?: unknown; mode?: unknown }
+    | undefined;
+  const identity = (parsed as { identity?: LoopRunIdentity })?.identity;
+  if (
+    request?.schema !== PRODUCTION_ENTRY_SCHEMA ||
+    request.mode !== "real" ||
+    identity === undefined
+  ) {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_NOT_PARSED",
+      "runProduction requires the frozen result of parseProductionEntryRequest, never raw JSON",
+    );
+  }
+  if (typeof requirementText !== "string" || requirementText.trim().length === 0) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "requirementText must be a non-empty string");
+  }
+  if (deps.capabilitySource !== undefined && !isCapabilitySource(deps.capabilitySource)) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "capabilitySource must be deterministic|real");
+  }
+  // (1) G4-R5-H7: authorization and ASSEMBLY are separated. The real chain
+  // through the production door requires the caller to inject the real
+  // gateway surface (adapter + attempt-workspace resolver): offline fake
+  // adapters verify the full production assembly without spawning CLIs, and
+  // the real adapter keeps its own operator-env authorization for actual CLI
+  // spawning. A bare capabilitySource "real" with no injected surface stays
+  // refused.
+  if (deps.capabilitySource === "real" && deps.realGatewayDeps === undefined) {
+    throw new ProductionRunError(
+      "PRODUCTION_REAL_NOT_AUTHORIZED",
+      "capability-source real requires injected realGatewayDeps (adapter + attempt workspace); " +
+        "real CLI spawning additionally needs the operator environment confirmations",
+    );
+  }
+  const source: CapabilitySource = deps.capabilitySource ?? DEFAULT_CAPABILITY_SOURCE;
+  if (deps.prepareWorkspace !== undefined && deps.inspectWorkspace === undefined) {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      "prepareWorkspace requires inspectWorkspace (preparation is always verified before dispatch)",
+    );
+  }
+
+  // (2) Read-only preflight BEFORE any dispatch. Duplicate runId is rejected by
+  // the store's createRun uniqueness and concurrent resume by withResumeLease
+  // (STORE_BUSY); base drift / dirty source are checked here.
+  // G4-R5-H7: when the entry wires worktree preparation, the PREPARED
+  // worktree path (workspacePathFor(identity)) — never the business root —
+  // becomes the attempt workspace the real gateway resolves for every
+  // dispatch. An inspect-only preflight (no prepare) leaves the injected
+  // resolver untouched.
+  let attemptWorkspaceRoot: string | null = null;
+  let preflightSnapshot: ProductionPreflightSnapshot | null = null;
+  if (deps.inspectWorkspace !== undefined) {
+    // W-GW-PREP (P-B C1): prepare-then-inspect when the entry wires worktree
+    // preparation — a fresh requirement has no task worktree yet. Without the
+    // hook the preflight stays strictly read-only (injected-stub tests).
+    if (deps.prepareWorkspace !== undefined) {
+      const prepared = await deps.prepareWorkspace(identity);
+      attemptWorkspaceRoot = (prepared as { workspacePath?: unknown } | null | undefined)
+        ?.workspacePath as string | undefined ?? null;
+      if (attemptWorkspaceRoot !== null && typeof attemptWorkspaceRoot !== "string") {
+        throw new ProductionRunError(
+          "PRODUCTION_ENTRY_INVALID_INPUT",
+          "prepareWorkspace returned a non-string workspacePath",
+        );
+      }
+    }
+    const snapshot = await deps.inspectWorkspace(identity);
+    preflightSnapshot = snapshot;
+    if (snapshot.baseDrifted) {
+      throw new ProductionRunError(
+        "PRODUCTION_BASE_DRIFT",
+        `repository base moved away from expectedBaseSha ${identity.expectedBaseSha}`,
+      );
+    }
+    if (snapshot.taskHasChanges) {
+      throw new ProductionRunError(
+        "PRODUCTION_DIRTY_SOURCE",
+        "task branch/worktree has uncommitted changes; refuse to start a production run",
+      );
+    }
+  }
+  // G4-R6-H6: for the real production door, isolation is an ASSEMBLED
+  // constraint, not an optional hook. The run must hold a verified prepared
+  // attempt workspace BEFORE any dispatch: a missing, non-existent,
+  // non-directory, or business-root workspace is refused here, and the
+  // prepared path PINS the resolver below — a caller-injected resolver that
+  // answers with the business root can no longer fall through.
+  if (source === "real") {
+    if (attemptWorkspaceRoot === null || preflightSnapshot === null) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "capability-source real requires a prepared and inspected attempt workspace " +
+          "(prepareWorkspace + inspectWorkspace); dispatching into the business root is not a fallback",
+      );
+    }
+    let preparedStat: import("node:fs").Stats;
+    try {
+      preparedStat = statSync(attemptWorkspaceRoot);
+    } catch {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        `prepared attempt workspace does not exist: ${attemptWorkspaceRoot}`,
+      );
+    }
+    if (!preparedStat.isDirectory()) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "the prepared attempt workspace path is not a directory",
+      );
+    }
+  // G4-R7-B6: the business-root comparison is by PHYSICAL identity —
+  // realpath, not lexically resolved spelling. A symlink alias pointing
+  // back at the repository root previously passed `resolve()` equality
+  // and received real dispatches with the adapter cwd physically at the
+  // business root. Both paths exist at this point (statSync above).
+  // S1 (G4-R8): a missing repositoryPath surfaces as the production entry
+  // error class instead of a raw filesystem ENOENT.
+  let repositoryRealPath: string;
+  try {
+    repositoryRealPath = realpathSync(identity.repositoryPath);
+  } catch {
+    throw new ProductionRunError(
+      "PRODUCTION_ENTRY_INVALID_INPUT",
+      `the repository path does not exist: ${identity.repositoryPath}`,
+    );
+  }
+  if (realpathSync(attemptWorkspaceRoot) === repositoryRealPath) {
+      throw new ProductionRunError(
+        "PRODUCTION_ENTRY_INVALID_INPUT",
+        "the prepared attempt workspace must not be the business repository root",
+      );
+    }
+  }
+
+  // (3) Stores: inject both/neither, else build the shared control-plane journal
+  // under controlRoot (one repository journal; --resume keys by requirementId).
+  if ((deps.runStore === undefined) !== (deps.artifactStore === undefined)) {
+    throw new ProductionRunError("PRODUCTION_ENTRY_INVALID_INPUT", "runStore and artifactStore must be injected together");
+  }
+  let runStore: LoopRunStore = deps.runStore as LoopRunStore;
+  let artifactStore: LoopArtifactStore = deps.artifactStore as LoopArtifactStore;
+  if (deps.runStore === undefined) {
+    artifactStore = new LoopArtifactStore({
+      controlRoot: identity.controlRoot,
+      repositoryPath: identity.repositoryPath,
+    });
+    runStore = new LoopRunStore(join(identity.controlRoot, "journal.db"), { artifactStore });
+    runStore.init();
+    artifactStore.init();
+  }
+
+  // (4) Delegate to the single chain kernel with the real identity — no copy.
+  // G4-R8-F4: BEFORE any dispatch, an un-discharged containment marker from a
+  // previous invocation of this requirement keeps this call fail-closed with
+  // zero dispatches: the journal block is re-attempted (idempotent heal) and
+  // the invocation returns BLOCKED. This is what prevents the write-failure
+  // scenario from leaking: the first invocation propagated its persistence
+  // error, and the marker stops the next call from re-taking the polluted
+  // source state as a clean baseline and reusing the unverified outputs.
+  // G4-R9-F4: an existing-but-invalid/unreadable object at the marker path
+  // is NOT "no marker". With no journal run fact yet it is a FIRST invocation
+  // for this requirement — the run proceeds and the terminal verification
+  // hits the same anchor anomaly through the marker writer. Once a journal
+  // run already exists, the anchor anomaly is an un-discharged containment:
+  // fail closed exactly like a confirmed marker.
+  let containmentHold =
+    source === "real" && deps.inspectWorkspace !== undefined &&
+    readProductionContainmentMarker(identity) === "present";
+  if (
+    source === "real" && deps.inspectWorkspace !== undefined &&
+    !containmentHold && readProductionContainmentMarker(identity) === "invalid"
+  ) {
+    containmentHold = runStore.findLatestRunByRequirement(identity.requirementId) !== undefined;
+  }
+  if (containmentHold) {
+    let runIdForBlock: string | null = null;
+    try {
+      const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+      if (runState !== undefined) {
+        runIdForBlock = runState.identity.runId;
+        if (
+          runState.status === "running" &&
+          (runState.blockingReasonCode === null || runState.blockingReasonCode === undefined)
+        ) {
+          appendProductionIsolationBlockEvent(runStore, runState.identity.runId, runState.lastSequence);
+        }
+      }
+    } catch {
+      // The marker is the fail-closed anchor; a journal heal that fails
+      // again changes nothing about the BLOCKED outcome below.
+    }
+    return Object.freeze({
+      requirement_id: identity.requirementId,
+      run_id: runIdForBlock ?? identity.runId,
+      final_status: "failed" as const,
+      chain_status: "BLOCKED" as const,
+      blocking_reason_code: "PRODUCTION_ISOLATION_VIOLATED" as const,
+      execution_trace: Object.freeze([]),
+      next_execution_point: null,
+      workspace_root: identity.controlRoot,
+      journal_path: deps.runStore === undefined
+        ? join(identity.controlRoot, "journal.db")
+        : runStore.databaseFilePath,
+      completed_at: new Date().toISOString(),
+    });
+  }
+  // G4-R5-H7: the real-chain attempt workspace is BOUND to the prepared
+  // worktree for this identity when one was prepared — a caller-supplied
+  // resolver pointing at the business root can no longer bypass the
+  // prepared-worktree isolation. The binding wraps (never replaces) the
+  // injected resolver so non-workspace resolvers stay verifiable offline.
+  const boundRealGatewayDeps =
+    deps.realGatewayDeps === undefined ? undefined
+      : attemptWorkspaceRoot === null ? deps.realGatewayDeps
+        : {
+            ...deps.realGatewayDeps,
+            // The prepared worktree pins the answer: the injected resolver's
+            // own root choice (e.g. the business root in an old smoke) can no
+            // longer bypass the prepared-worktree isolation.
+            attemptWorkspace: () => attemptWorkspaceRoot!,
+          };
+  const result = await run(requirementText, {
+    requirementId: identity.requirementId,
+    workspaceRoot: identity.controlRoot,
+    runStore,
+    artifactStore,
+    bindingRegistry: createRuntimeBindingRegistry(),
+    productionIdentity: identity,
+    capabilitySource: source,
+    ...(deps.gateway !== undefined ? { gateway: deps.gateway } : {}),
+    ...(boundRealGatewayDeps !== undefined ? { realGatewayDeps: boundRealGatewayDeps } : {}),
+    ...(deps.maxDispatches !== undefined ? { maxDispatches: deps.maxDispatches } : {}),
+    ...(deps.maxRegateRounds !== undefined ? { maxRegateRounds: deps.maxRegateRounds } : {}),
+  });
+  // G4-R7-B7: the post-run containment verification runs for EVERY exit of
+  // a real invocation (completed, blocked or failed) — an isolation failure
+  // is not a property of the returned object but a FACT about the run. It is
+  // therefore persisted durably (run_blocked / PRODUCTION_ISOLATION_VIOLATED)
+  // so a later resume of the same run cannot treat the polluted source state
+  // as the new clean baseline and reuse the run's outputs as a success. The
+  // preflight has inspected once; this is the second and final inspection.
+  // G4-R8-F4: the containment marker is written BEFORE the journal block is
+  // attempted, so even a journal write failure leaves a durable fail-closed
+  // anchor for this requirement. A failing block write is NEVER reported as
+  // "already durably blocked": the persisted facts are re-read, and only a
+  // confirmed durable block allows the BLOCKED return — otherwise the
+  // persistence error propagates and the caller sees the real failure.
+  if (source === "real" && deps.inspectWorkspace !== undefined && preflightSnapshot !== null) {
+    const post = await deps.inspectWorkspace(identity);
+    const rootSideEffects =
+      post.baseDrifted || post.sourceWipDigestSha256 !== preflightSnapshot.sourceWipDigestSha256;
+    if (rootSideEffects) {
+      writeProductionContainmentMarker(identity);
+      try {
+        const runState = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+        if (
+          runState !== undefined && runState.status === "running" &&
+          (runState.blockingReasonCode === null || runState.blockingReasonCode === undefined)
+        ) {
+          appendProductionIsolationBlockEvent(runStore, runState.identity.runId, runState.lastSequence);
+        }
+      } catch (error) {
+        const persisted = runStore.findLatestRunByRequirement(identity.requirementId)?.state;
+        const durablyBlocked =
+          persisted !== undefined && persisted.status !== "running" &&
+          persisted.blockingReasonCode === "PRODUCTION_ISOLATION_VIOLATED";
+        if (!durablyBlocked) {
+          throw new ProductionRunError(
+            "PRODUCTION_ISOLATION_VIOLATED",
+            `production isolation violation confirmed at terminal verification, but persisting its durable run block failed: ` +
+              `${(error as Error).message}. The containment marker under controlRoot keeps every later invocation of ` +
+              `this requirement fail-closed; the polluted state must be discharged before this run can proceed.`,
+          );
+        }
+      }
+      return Object.freeze({
+        ...result,
+        final_status: "failed" as const,
+        chain_status: "BLOCKED" as const,
+        blocking_reason_code: "PRODUCTION_ISOLATION_VIOLATED" as const,
+        next_execution_point: null,
+        completed_at: new Date().toISOString(),
+      });
+    }
+  }
+  return result;
 }

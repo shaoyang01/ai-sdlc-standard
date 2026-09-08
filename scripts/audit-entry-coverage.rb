@@ -8,10 +8,10 @@ require "set"
 require "time"
 require "yaml"
 
-DEFAULT_REPORT_DIR = ".specify/reports/entry_coverage"
-DEFAULT_PROFILE_PATH = ".specify/entry-coverage-profile.yaml"
-DEFAULT_BUSINESS_DOMAIN_ROOT = ".specify/business_domain"
-DEFAULT_L4_PATTERN = ".specify/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md"
+DEFAULT_REPORT_DIR = ".sdlc/reports/entry_coverage"
+DEFAULT_PROFILE_PATH = ".sdlc/entry-coverage-profile.yaml"
+DEFAULT_BUSINESS_DOMAIN_ROOT = ".sdlc/business_domain"
+DEFAULT_L4_PATTERN = ".sdlc/business_domain/**/[0-9][0-9][0-9][0-9][0-9][0-9]*.md"
 
 DEFAULT_EXCLUDE_PATTERNS = [
   "**/target/**",

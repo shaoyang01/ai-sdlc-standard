@@ -47,10 +47,17 @@ const SERIAL_TAIL = new Set([
 ]);
 
 function discoverTestFiles() {
-  return readdirSync(TESTS_DIR)
+  const ts = readdirSync(TESTS_DIR)
     .filter((name) => name.endsWith('.test.ts'))
     .sort()
     .map((name) => `tests/${name}`);
+  // D-090-02/G3: shell-based fixture suites run serially before the TS matrix
+  // (bash 3.2 + ruby stdlib only; not loadable by the TS runner).
+  const shell = readdirSync(TESTS_DIR)
+    .filter((name) => name.endsWith('.test.sh'))
+    .sort()
+    .map((name) => `tests/${name}`);
+  return [...shell, ...ts];
 }
 
 function defaultWorkers() {
@@ -99,7 +106,9 @@ function runOne(file) {
     const startedAt = Date.now();
     let child;
     try {
-      child = spawn(TSX, [file], {
+      const cmd = file.endsWith('.test.sh') ? '/usr/bin/env' : TSX;
+      const args = file.endsWith('.test.sh') ? ['bash', file] : [file];
+      child = spawn(cmd, args, {
         cwd: ROOT,
         env: process.env,
         stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,0 +1,14 @@
+import {makeHarness,closeHarness,scriptedAdapter,runOnce,runIdOf,events,finding} from './r7-harness';
+import {canonicalizeLoopFinding} from '../core/loop-finding-lifecycle';
+import {canonicalizeLoopCapabilityExecutionEvent} from '../core/loop-capability-execution';
+import {recoverRunContext} from '../core/loop-recovery';
+import {createHash} from 'node:crypto';
+import Database from 'better-sqlite3';
+import {join} from 'node:path';
+const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
+(async()=>{for(const version of [5,4]){const h=makeHarness('r8-version-'+version);try{const {adapter}=scriptedAdapter(new Map([['solution-gate:adversarial_scan',[{findings:[finding('REAL-HIGH','HIGH','SOLUTION')]}]],['solution-gate:formal_verdict',[{gateResult:'PASS_WITH_RISK',decisionStatus:'CONFIRMED',decisionDepth:'STANDARD',findings:[]}]]]));await runOnce(h,adapter,4);const id=runIdOf(h),v=events(h).find(e=>e.status==='succeeded'&&e.executionRole==='formal_verdict')!,f=h.runStore.listFindings(id)[0]!;
+ const open={...f,status:'OPEN' as const,riskAcceptedBy:null,riskAcceptanceEvidenceRef:null,riskAcceptanceEvidenceDigest:null,riskAcceptedScopeId:null};const terminal={...v,schemaVersion:version as any};const db=new Database(join(h.root,'journal.db'));db.prepare("UPDATE loop_findings SET status='OPEN',risk_accepted_by=NULL,risk_acceptance_evidence_ref=NULL,risk_acceptance_evidence_digest=NULL,risk_accepted_scope_id=NULL,canonical_sha256=? WHERE finding_id=?").run(hash(canonicalizeLoopFinding(open)),f.findingId);db.prepare('DELETE FROM loop_finding_proofs WHERE finding_id=?').run(f.findingId);db.prepare('UPDATE loop_capability_executions SET schema_version=?,decision_status=\'CONFIRMED\',canonical_sha256=? WHERE execution_event_id=?').run(version,hash(canonicalizeLoopCapabilityExecutionEvent(terminal)),v.executionEventId);db.close();
+ const r=recoverRunContext(h.runStore,h.requirementId)!;let accepted:any,adjudication:any;try{accepted=h.runStore.acceptFindingRisk(id,f.findingId,{riskAcceptedBy:'formal_verdict',riskAcceptanceEvidenceRef:v.outputArtifactRef,riskAcceptanceEvidenceDigest:v.outputDigest,decisionScopeId:v.decisionScopeId}).record.status}catch(e){accepted={code:(e as any).code,message:(e as Error).message}}
+ try{adjudication=h.runStore.appendCapabilityExecutionWithFindings(terminal,{evidenceRef:v.outputArtifactRef!,evidenceDigest:v.outputDigest!,findings:[],runInvalidation:true,registerReflowFinding:false,adjudicateScanFindings:{mode:'PWR_ACCEPT',decisionScopeId:v.decisionScopeId!}}).appended}catch(e){adjudication={code:(e as any).code,message:(e as Error).message}}
+ console.log('AUTHORITY',JSON.stringify({version,severity:open.severity,openStateVerified:r.openFindings[0]?.status,readVersion:events(h).find(e=>e.executionEventId===v.executionEventId)?.schemaVersion,decision:r.solutionGateDecision?.status,accepted,adjudication}));
+ }finally{closeHarness(h)}}})().catch(e=>{console.error(e);process.exit(1)});

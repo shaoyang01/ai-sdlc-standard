@@ -1,3 +1,10 @@
+// [FROZEN: PATH A RETIREMENT (C03-E W4 / Decision-073)]
+// Legacy Path-A module (first-generation sdlc-* D0x runtime / Agent direct-drive).
+// FROZEN: do not evolve; new Path-B assembly must not import it (enforced by
+// scripts/validate-skill-contracts.rb section B-7). Physical deletion is a
+// separate decision after the Path-B periphery is complete and the E5 real
+// canary passes. See docs/reports/c03-e-w4-spawn-reference-graph.md
+
 // LOOP Executor Kernel — Codex Multi-File Implementation Adapter
 // ================================================================
 // Standalone LOOP kernel adapter that:

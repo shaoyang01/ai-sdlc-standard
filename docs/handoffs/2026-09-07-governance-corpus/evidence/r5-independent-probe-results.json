@@ -1,0 +1,470 @@
+[
+  {
+    "name": "b1-adoption-memory-False",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004411.67378.json.1bOD1M\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.rR9IvC (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `a195280d6a8c4669deb58ecb0203fc67377578c400e7cdaad72aab8c66bad04a`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-adoption-memory-False/.sdlc/reports/migration_report.20260908-004411.67378.json.1bOD1M",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-adoption-memory-True",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004413.67893.json.miwlHE\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.ce1Dzc (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-adoption-memory-True/.sdlc/reports/migration_report.20260908-004413.67893.json.miwlHE",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-adoption-coding_guide-False",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004418.68828.json.6Qnym3\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.eCFqXk (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/coding_guide/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/coding_guide/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `18d72bbcf5aad1745c0f07435dc94d7f9ab3aa89a41151db5a0498819303eabc`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-adoption-coding_guide-False/.sdlc/reports/migration_report.20260908-004418.68828.json.6Qnym3",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-adoption-coding_guide-True",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004420.69332.json.vkzO4w\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.aOXg7A (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/coding_guide/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/coding_guide/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `5fa213d935402a8c156e6eed75a6c077759547b435b5a1d60ca3447482c5c158`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-adoption-coding_guide-True/.sdlc/reports/migration_report.20260908-004420.69332.json.vkzO4w",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-legacy-memory-False",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004425.70266.json.Ri5Iqt\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.j2c2sp (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `d41e59acc342ac30060e44e649b4b06b04d8a4856f4a9babeafab36846e39330`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-legacy-memory-False/.sdlc/reports/migration_report.20260908-004425.70266.json.Ri5Iqt",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-legacy-memory-True",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004427.70687.json.aZ9li3\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.hQNyBn (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `8d10652002870be3527b295e6b1b5764eb7306edfabce704c1de87b0bb17107d`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-legacy-memory-True/.sdlc/reports/migration_report.20260908-004427.70687.json.aZ9li3",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-legacy-coding_guide-False",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004432.71326.json.F2SzYo\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.P8V48X (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/coding_guide/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/coding_guide/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `f96b95872a930b439d86d8f3cb81cc24ff77a6306226700d34cd228bd5a7581c`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-legacy-coding_guide-False/.sdlc/reports/migration_report.20260908-004432.71326.json.F2SzYo",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "b1-legacy-coding_guide-True",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004434.71767.json.aa63l7\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.nRkWBL (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/coding_guide/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/coding_guide/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `8d9e897b2d0ebabd3f501d4cccd2b67b6276fb2c4e58e69eed4f0d2e571d5bd0`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/b1-legacy-coding_guide-True/.sdlc/reports/migration_report.20260908-004434.71767.json.aa63l7",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "log-directory",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004439.72522.json.AwqytH\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2 (Errno::EISDIR)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `a195280d6a8c4669deb58ecb0203fc67377578c400e7cdaad72aab8c66bad04a`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/log-directory/.sdlc/reports/migration_report.20260908-004439.72522.json.AwqytH",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "crash",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004441.73188.json.Q3zUp6\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `a195280d6a8c4669deb58ecb0203fc67377578c400e7cdaad72aab8c66bad04a`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/crash/.sdlc/reports/migration_report.20260908-004441.73188.json.Q3zUp6",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "no-write",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004444.73800.json.hmh2oV\ncorpus transform write failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/no-write/.sdlc/memory/a.md (IOError)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `a195280d6a8c4669deb58ecb0203fc67377578c400e7cdaad72aab8c66bad04a`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/no-write/.sdlc/reports/migration_report.20260908-004444.73800.json.hmh2oV",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "invalid-utf8",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004446.74305.json.Y8LVtQ\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `356b12f0d8760f7a430d1b10b15f32134a79e23abb2b1b14695a34fdb843e8e6`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/invalid-utf8/.sdlc/reports/migration_report.20260908-004446.74305.json.Y8LVtQ",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "empty-original",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004449.74914.json.Q95MKn\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 1\n> **Rolled back**: true\n> **Plan SHA-256**: `a195280d6a8c4669deb58ecb0203fc67377578c400e7cdaad72aab8c66bad04a`\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/empty-original/.sdlc/reports/migration_report.20260908-004449.74914.json.Q95MKn",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "partial",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004452.75472.json.vwjiNK\ncorpus transform write failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/partial/.sdlc/memory/a.md (IOError)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/partial/.sdlc/reports/migration_report.20260908-004452.75472.json.vwjiNK",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc"
+    },
+    "pass": true
+  },
+  {
+    "name": "garble",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004456.76304.json.tXGSns\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/garble/.sdlc/reports/migration_report.20260908-004456.76304.json.tXGSns",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "empty",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004500.77184.json.Ey0kC7\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/empty/.sdlc/reports/migration_report.20260908-004500.77184.json.Ey0kC7",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "tail",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004503.78039.json.uxA6IR\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/tail/.sdlc/reports/migration_report.20260908-004503.78039.json.uxA6IR",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "tail-line",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004506.78909.json.o57TGi\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/tail-line/.sdlc/reports/migration_report.20260908-004506.78909.json.o57TGi",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "bad-count",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004510.79754.json.wsYZ4j\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/bad-count/.sdlc/reports/migration_report.20260908-004510.79754.json.wsYZ4j",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "bad-digest",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004513.80417.json.iR5AfH\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/bad-digest/.sdlc/reports/migration_report.20260908-004513.80417.json.iR5AfH",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "A .sdlc/memory/x\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "empty-owner",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/a.md (transform receipt missing; recovery not provably complete)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004516.81172.json.XrNZhf\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (transform receipt missing; recovery not provably complete)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/empty-owner/.sdlc/reports/migration_report.20260908-004516.81172.json.XrNZhf",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "LATER TARGET OWNER\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "before-owner",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004521.82149.json.KtDbLi\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/before-owner/.sdlc/reports/migration_report.20260908-004521.82149.json.KtDbLi",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "LATER TARGET OWNER\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "before-link",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004525.83285.json.3atZ2h\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/before-link/.sdlc/reports/migration_report.20260908-004525.83285.json.3atZ2h",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/owners/before-link"
+    },
+    "pass": true
+  },
+  {
+    "name": "before-delete",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md (destination no longer present)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004530.84355.json.l1OGXJ\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (destination no longer present)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/before-delete/.sdlc/reports/migration_report.20260908-004530.84355.json.l1OGXJ",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  },
+  {
+    "name": "log-eacces-owner",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004534.85263.json.7XdYHV\ncorpus transform log append failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/knowledge-target-corpus-log.EGnFrw (Errno::EACCES)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/a.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/a.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/log-eacces-owner/.sdlc/reports/migration_report.20260908-004534.85263.json.7XdYHV",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "LATER TARGET OWNER\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "mixed-known-and-unresolved",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLBACK_INCOMPLETE",
+    "conflicts": [
+      ".sdlc/memory/z.md (transform receipt missing; recovery not provably complete)",
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004537.86102.json.8UIWIA\ncorpus transform write failed: /tmp/d091-r5.9W7v7i/cases-iqlw24p2/mixed-known-and-unresolved/.sdlc/memory/z.md (IOError)\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, INCOMPLETE)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: false\n> **Plan SHA-256**: `46a733e3c3a2203aa7a6250e361d594597a296707f2c853cb7f63624e7978128`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/z.md (transform receipt missing; recovery not provably complete)\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/mixed-known-and-unresolved/.sdlc/reports/migration_report.20260908-004537.86102.json.8UIWIA",
+    "expected_status": "FAILED_ROLLBACK_INCOMPLETE",
+    "destination_objects": {
+      ".sdlc/memory/z.md": "Z .sdlc",
+      ".sdlc/memory/a.md": "LATER PREFIX OWNER\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "registered-modify",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004541.87132.json.fwgdj9\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/registered-modify/.sdlc/reports/migration_report.20260908-004541.87132.json.fwgdj9",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "REGISTERED LATER OWNER\n"
+    },
+    "pass": true
+  },
+  {
+    "name": "registered-link",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004546.88151.json.oOxTAu\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/registered-link/.sdlc/reports/migration_report.20260908-004546.88151.json.oOxTAu",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {
+      ".sdlc/memory/a.md": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/owners/registered-link"
+    },
+    "pass": true
+  },
+  {
+    "name": "registered-delete",
+    "rc": 1,
+    "source_restored": true,
+    "status": "FAILED_ROLLED_BACK",
+    "conflicts": [
+      ".sdlc/memory/a.md (destination no longer present)"
+    ],
+    "temps": [],
+    "output": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260908-004550.89140.json.EBDAYg\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "md": "# Migration Report (FAILED, ROLLED_BACK)\n\n> **Reason**: corpus transformation failed: .sdlc/memory/z.md\n> **Moved before failure**: 2\n> **Rolled back**: true\n> **Plan SHA-256**: `e30b0e7d8ec2832480db8ba017ec66356103b62e0ce65d2ec086d8b4afb02299`\n\n## Rollback Ownership Conflicts\n\n以下目的地在回滚时已被后续写入者拥有，其内容原样保留、未删除；源已从备份恢复：\n\n- .sdlc/memory/a.md (destination no longer present)\n",
+    "report_path": "/tmp/d091-r5.9W7v7i/cases-iqlw24p2/registered-delete/.sdlc/reports/migration_report.20260908-004550.89140.json.EBDAYg",
+    "expected_status": "FAILED_ROLLED_BACK",
+    "destination_objects": {},
+    "pass": true
+  }
+]

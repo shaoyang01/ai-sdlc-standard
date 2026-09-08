@@ -1,0 +1,13 @@
+{
+  "file_collision": {
+    "rc": 0,
+    "source": "SOURCE",
+    "dest": "OWNER"
+  },
+  "directory_collision": {
+    "rc": 0,
+    "source_exists": false,
+    "nested_source_exists": true
+  },
+  "persistent_archive_after_fixture_temp_cleanup": true
+}

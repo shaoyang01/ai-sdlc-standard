@@ -85,7 +85,11 @@ async function main(): Promise<void> {
     const report = preflightLoopRunStoreV2Cutover([root]);
     ok(report.candidateCount === 2, "both candidate files discovered");
     ok(report.failureCount === 0 && !report.requiresGovernanceStop, "no failures on fresh v0 + v7");
-    ok(verdictOf(report, "v7-journal.db")?.verdict === "OK_V7", "runtime-created journal classifies as OK_V7");
+    ok(
+      verdictOf(report, "v7-journal.db")?.verdict === "OK_SUPPORTED" &&
+        verdictOf(report, "v7-journal.db")?.declaredFormatVersion === 8,
+      "runtime-created journal classifies as OK_SUPPORTED with its real format version (G4-R6-L2: version-neutral verdict)",
+    );
     ok(verdictOf(report, "empty-v0.db")?.verdict === "FRESH_EMPTY", "empty unversioned database is FRESH_EMPTY");
   });
 
@@ -116,17 +120,25 @@ async function main(): Promise<void> {
 
   console.log("preflight: future format and unversioned-with-tables fail");
   withRoot("future", (root) => {
-    seedVersionedFile(root, "future.db", 8);
+    // G4-R5-H1: format 8 is the supported store version; 7 is now historical
+    // and 9 is the future format.
+    seedVersionedFile(root, "format-7.db", 7);
+    seedVersionedFile(root, "future.db", 9);
     const db = new Database(join(root, "unversioned.db"));
     db.exec("CREATE TABLE loop_findings (finding_id TEXT PRIMARY KEY)");
     db.close();
     const report = preflightLoopRunStoreV2Cutover([root]);
-    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 7 fails as future");
+    ok(
+      verdictOf(report, "format-7.db")?.verdict === "FAIL_HISTORICAL_FORMAT" ||
+        verdictOf(report, "format-7.db")?.verdict === "FAIL_OWNER_UNKNOWN",
+      "format 7 (pre-decisionStatus) fails as historical history",
+    );
+    ok(verdictOf(report, "future.db")?.verdict === "FAIL_FUTURE_FORMAT", "format above 8 fails as future");
     ok(
       verdictOf(report, "unversioned.db")?.verdict === "FAIL_UNVERSIONED_WITH_TABLES",
       "unversioned database carrying LOOP tables fails",
     );
-    ok(report.failureCount === 2, "both candidates are failures");
+    ok(report.failureCount === 3, "all three candidates are failures");
   });
 
   console.log("preflight: corrupt SQLite and owner-unconfirmable SQLite fail; plain files ignored");
@@ -168,8 +180,12 @@ async function main(): Promise<void> {
 
   console.log("preflight: script exit codes enforce the cutover contract");
   withRoot("exitcodes", (root) => {
+    // Environment note (G4-R5): the sandboxed IPC policy blocks the tsx CLI
+    // launcher; spawning the CURRENT node binary with --import tsx runs the
+    // identical script through the same runtime (documented default-entry
+    // difference — the script under test is unchanged).
     const run = (...args: string[]) =>
-      spawnSync(TSX, [SCRIPT, ...args], { encoding: "utf8" });
+      spawnSync(process.execPath, ["--import", "tsx", SCRIPT, ...args], { encoding: "utf8" });
 
     // No roots at all → usage error.
     const noArgs = run();

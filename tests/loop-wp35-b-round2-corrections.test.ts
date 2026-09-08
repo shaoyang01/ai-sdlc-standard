@@ -106,7 +106,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
   const agent = o.agent ?? "codex";
   const succeeded = o.status === "succeeded";
   return Object.freeze({
-    schemaVersion: 4,
+    schemaVersion: 5,
     executionEventId: `${RUN}:capability:${seq}:${o.status}`,
     runId: RUN,
     sequence: seq,
@@ -134,6 +134,7 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     consumedFindingsRef: o.consumedRef ?? null,
     consumedFindingsDigest: o.consumedRef ? o.consumedRef.slice(-64) : null,
     decisionDepth: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "STANDARD" as const : null,
+    decisionStatus: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? "CONFIRMED" as const : null,
     decisionScopeId: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `${RUN}:decision:${(o as { _attempt?: number })._attempt ?? nextAttempt(o.capability, o.executionRole)}` : null,
     decisionDeltaRef: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? `loop-artifact:v1:solution_review:sha256:${dg("decision-delta")}` : null,
     decisionDeltaDigest: (o.status === "succeeded" && o.capability === "solution-gate" && o.executionRole === "formal_verdict") ? dg("decision-delta") : null,
@@ -141,6 +142,16 @@ function ev(o: EventOpts): LoopCapabilityExecutionEvent {
     errorCode: o.status === "failed" ? o.errorCode ?? "EXEC_FAILED" : null,
     retryable: o.status === "failed" ? o.retryable ?? true : null,
     reasonCode: o.status === "failed" ? o.reasonCode ?? "AGENT_FAILURE" : null,
+    processInvocationDigest: null,
+    processExitCode: null,
+    processSignal: null,
+    processDurationMs: null,
+    processTruncated: null,
+    stagingRef: null,
+    stagingDigest: null,
+    promotionRef: null,
+    promotionDigest: null,
+    humanActionRef: null,
   }) as unknown as LoopCapabilityExecutionEvent;
 }
 
