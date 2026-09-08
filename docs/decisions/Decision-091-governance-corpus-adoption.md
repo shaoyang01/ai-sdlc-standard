@@ -16,6 +16,17 @@ Accepted / 2026-09-07 由 Owner 直接授权实施（"存量兼并吸收 + 缺�
 待 Current User 收口裁决（含四个业务仓正式执行授权）——复审 PASS 不代行该授权。
 本决策正式收掉 Decision-089 中"存量迁移单独授权……不混入本次实施"的推迟项。
 
+**集成注记（2026-09-08，Owner 一次性集成裁决）**：D087 收口达成（R11 PASS +
+Current User verdict）后，Owner 批准按方案 B 预留程序执行合并集成：
+`codex/d088-governance-corpus`（分支头 `4d1c25b` = R5 认证基线 `41dd8da` +
+三个纯文档增量 `2ec9875`/`bd792b1`/`4d1c25b`）经 PR #129 合入主线
+`feature/loop-runtime-v1`（合并提交 `31a67ce`；集成 merge `8095c6e` 显式
+声明 D091 集成；合流验证双 bash bootstrap 800/0，远端 CI 四 job 绿）。
+**状态区分**：本注记登记「已合并集成」——不等于四个业务仓已完成收编执行
+（仍为独立 Owner 授权事项），不等于 `pending_confirmation` 待确认清单已全部
+关闭；初始化器继承依赖维持 PR #129 所载「候选依赖集、闭合未证明」注记，
+未获「已闭合」证据。本决策状态终值改注（含四业务仓执行结果）另行进行。
+
 ## 背景
 
 D-088-01 v3 迁移把 `.specify/` 下的文件按 C1-C10 分类处置：business_domain 搬迁转换（C1）、
