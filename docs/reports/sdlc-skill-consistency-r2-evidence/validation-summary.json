@@ -1,0 +1,31 @@
+{
+  "reviewed_commit": "37f0a8d5808fcb74686249b4faba128be2251b9d",
+  "command": "node scripts/run-tests-parallel.mjs --serial",
+  "exit_code": 0,
+  "test_file_count": 159,
+  "failed_file_count": 0,
+  "log_sha256": "15d537f85ddc6415e0f7026dd9b30f0a39dc214733e3695b6720592f3bf487e5",
+  "log_bytes": 1105754,
+  "final_lines": [
+    "  ✓ legacy recommended_next_pr fulfilled (compatibility check only)",
+    "  ✓ next governance decision is separate operator action authorization",
+    "  ✓ authority object unchanged",
+    "",
+    "",
+    "Results: 1767 passed, 0 failed",
+    "test_file_count: 159",
+    "failed_file_count: 0"
+  ],
+  "fixed_candidate_validation": {
+    "tsc_exit": 0,
+    "ruby_validators_exit": [
+      0,
+      0,
+      0
+    ],
+    "negative_killed": 21,
+    "positive_allowed": 8,
+    "installed_identical": 32
+  },
+  "scope": "Full serial suite ran on original review baseline; fixed candidate has targeted checks. Candidate CI is separate evidence on the PR."
+}

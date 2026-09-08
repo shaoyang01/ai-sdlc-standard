@@ -41,7 +41,7 @@ Load `references/execution-scenarios.md` before any write or publish operation.
 
 Use repository standard files as authoritative rules:
 
-- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/artifact-storage.md`
+- `${AI_SDLC_STANDARD_HOME}/ai-sdlc/manual-runtime-semantic-contract.md`（§3 稳定路径、§5 状态与 Finding、§6 publisher、§7.3 准入）
 - `${AI_SDLC_STANDARD_HOME}/ess/specification-schema.md`
 - `${AI_SDLC_STANDARD_HOME}/ess/review-schema.md`
 - `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
@@ -113,7 +113,7 @@ Use the schema matching the artifact node:
 - 方案审核: `${AI_SDLC_STANDARD_HOME}/ess/review-schema.md` and `${AI_SDLC_STANDARD_HOME}/templates/gate-result-template.md`
 - 实现记录: include implementation summary, verification, unfinished items, and residual risks
 - 代码审核: `${AI_SDLC_STANDARD_HOME}/ess/code-review-schema.md`
-- 测试验收: `${AI_SDLC_STANDARD_HOME}/ess/test-feedback-schema.md`
+- 测试反馈分类: `${AI_SDLC_STANDARD_HOME}/ess/test-feedback-schema.md`（消费 requirement-intake 已确认的内容，归 `00-需求资料/反馈/`）
 - 需求资料: preserve source facts and clearly mark unresolved context
 
 Do not invent business rules. Mark missing or uncertain information explicitly.

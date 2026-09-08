@@ -1,0 +1,16 @@
+[
+  {
+    "mutation": "DROP_LAST_CELL",
+    "exit": 1,
+    "diagnostics": [
+      "- per-hit negation detectors: self-test mismatches: | Node | Status |"
+    ]
+  },
+  {
+    "mutation": "DROP_DISPOSITION_MARKERS",
+    "exit": 1,
+    "diagnostics": [
+      "- per-hit negation detectors: self-test mismatches: | Finding | 处置 |"
+    ]
+  }
+]

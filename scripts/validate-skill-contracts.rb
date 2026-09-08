@@ -371,7 +371,7 @@ TABLE_STATUS_HEADER_RE = /\bStatus\b|\bResult\b|处置|状态|Current \/ Stale|D
 # Cell-level repealed markers inside a Status/Result/处置 column (R1-H2:
 # the real repealed rows lived in table DATA cells whose line has no
 # "Status" keyword, so line-level require_normative missed them).
-REPEALED_TABLE_CELL_RE = /\breplaced\b|draft \/ active|passed \/ failed|\brisk_accepted\b|\bDECIDED \/ BLOCKED_UNKNOWN\b/
+REPEALED_TABLE_CELL_RE = /\breplaced\b|draft \/ active|passed \/ failed|\b(?:risk_accepted|ACCEPTED_RISK|SUPERSEDED)\b|\bDECIDED \/ BLOCKED_UNKNOWN\b/
 
 def unsafe_skill_finding_vocabulary(text)
   hits = []
@@ -410,7 +410,9 @@ def unsafe_repealed_status_in_tables(text)
       next
     end
     next if stripped.match?(/^\|[\s:|-]+\|$/)  # separator row
-    cells = stripped.split("|")[1..-2].to_a.map(&:strip)
+    # Preserve the trailing empty field before removing the outer pipes;
+    # Ruby's default split drops it and would discard the final real cell.
+    cells = stripped.split("|", -1)[1..-2].to_a.map(&:strip)
     if header_cells.nil? || cells.length != header_cells.length
       # R1-H2: a table row whose column count does not match the remembered
       # header is treated as a potential new header - but misaligned rows are
@@ -447,6 +449,14 @@ SKILL_CONSISTENCY_SELF_TEST = {
   "| Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 02 方案审核 | yes | `02-方案审核/` |  | 1.0.0 | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |" => true,
   "| 05 代码审核 | actual | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked / risk_accepted |  |" => true,
   "| 05 代码审核 | actual | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked |  |" => false,
+  # Last-column status/disposition data must be checked, including old
+  # finding lifecycle enums. Ordinary evidence text is not a status column.
+  "| Node | Status |\n| --- | --- |\n| 02 | draft / active / stale |" => true,
+  "| Node | Result |\n| --- | --- |\n| 05 | risk_accepted |" => true,
+  "| Finding | 处置 |\n| --- | --- |\n| F01 | ACCEPTED_RISK |" => true,
+  "| Finding | 处置 | Evidence |\n| --- | --- | --- |\n| F01 | SUPERSEDED | ref |" => true,
+  "| Finding | 处置 |\n| --- | --- |\n| F01 | ACCEPTED |" => false,
+  "| Finding | 状态 | Evidence |\n| --- | --- | --- |\n| F01 | OPEN | ACCEPTED_RISK |" => false,
   # runtime evidence: retired package recommended as a callable entry -> flagged
   "先跑一次 speckit-analyze 做需求/方案/任务三产物的独立交叉分析。" => true,
   "Recommend running `sdlc-speckit-plan`." => true,
@@ -455,6 +465,7 @@ SKILL_CONSISTENCY_SELF_TEST = {
   "- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）" => false,
   "- Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 枚举已废止——manual-runtime-semantic-contract §4.3）" => false,
   "旧 `DECIDED` 枚举废止。" => false,
+  "- Decision Status: DECIDED / BLOCKED_UNKNOWN 已废止，请使用 CONFIRMED / ESCALATED / BLOCKED_UNKNOWN。" => false,
   "| {requirement_id}-F01 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |" => false,
   "- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径）" => false,
   "| Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 02 方案审核 | yes | `02-方案审核/` |  | 1.0.0 | current / stale / actionable | PASS / FAIL / PASS_WITH_RISK |  |" => false,
