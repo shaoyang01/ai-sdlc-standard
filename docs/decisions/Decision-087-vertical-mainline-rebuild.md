@@ -5,6 +5,14 @@
 Accepted（2026-09-02，Current User 授权立项。依据 = codex 评审报告五条根因 +
 Current User 确认方向：「不做补丁叠补丁，要做就做彻底」）
 
+**收口注记（2026-09-08，Current User verdict）**：G4 实施经独立复审根因合并式
+循环 R7→R8→R9→R10→R11，R11 **PASS**（候选 `a038d2b`：F1/F2/F3/F4/S1/S2 全部
+CLOSED、12/12 定向变异 killed、46/46 新增探针、159 文件串行全绿）获 Current
+User 接受，并同日批准一次性集成收口。G4 分支（220 提交）经 PR #129 合入主线
+`feature/loop-runtime-v1`（合并提交 `31a67ce`，远端 CI 四 job 绿）。
+Control Plane STATE：`D087_VERTICAL_REBUILD_GATE` CLOSED、GW_VERTICAL_REBUILD
+已消费。发布（Exchange/PKB）另行待执行；G5/G6/run8 未授权。
+
 ## 背景
 
 - run3～run7 六轮真实冒烟暴露了 runtime 在真实 agent 派发下的系统性缺陷，
@@ -90,6 +98,16 @@ PENDING / acceptedRiskScopes / risk_accepted event / pwrAdmitted / H1 特殊
 
 - 产品仓：本 Decision + 索引 + 台账（本 commit）；四仓传播随即执行
 - 实施：治理落账后立即开工（本 Decision 授权）
+- **G4 实施与复审循环（2026-09-06..09-08）**：W1..W5 三接缝实施在
+  `feature/c03-e5-autonomous-acceptance` 推进；独立复审根因合并式循环
+  R7→R8（FAIL：F1–F4）→R9（FAIL：F1/F4）→R10（FAIL：F4 悬空 symlink 锚点）
+  →R11 PASS。整改交付报告：`docs/reports/g4-r8-d087-r8-rework-report.md`、
+  `docs/reports/g4-r9-d087-r9-rework-report.md`、
+  `docs/reports/g4-r10-d087-r10-rework-report.md`；R8 复审原文归档
+  `docs/handoffs/2026-09-07-g4-r8/report/round8-review.md`（历史身份）。
+  收口合并：PR #129 → 主线 `feature/loop-runtime-v1` @ `31a67ce`；合流验证
+  tsc 0、157 TS 串行 0 失败、manual-chain 87/0、双 bash bootstrap 800/0，
+  远端 CI 四 job 绿。
 
 ## 依据
 
