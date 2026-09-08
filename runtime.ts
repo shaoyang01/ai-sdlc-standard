@@ -15,7 +15,7 @@
 //
 // Entry: run(requirement: string, options?) → RuntimeResult
 
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -1216,7 +1216,21 @@ function readProductionContainmentMarker(identity: LoopRunIdentity): ProductionC
     // (directory occupying the file path, permission, I/O error) must stay
     // fail-closed — treating it as "no marker" let a re-entry resume past an
     // isolation failure whose anchor was smothered.
-    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") return "absent";
+    // G4-R10-F4: readFileSync FOLLOWS symlinks, so its ENOENT only proves
+    // the READ TARGET was not found — not that the anchor path is free. A
+    // dangling symlink occupying the marker path is an EXISTING anchor that
+    // cannot be validated: it is "invalid" (occupied), never "absent", or
+    // the re-entry guard skips past an un-discharged containment and a
+    // write would follow the link into its target. The anchor ITSELF is
+    // verified with lstat, which never follows links.
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      try {
+        lstatSync(productionContainmentMarkerPath(identity));
+        return "invalid";
+      } catch (anchorError) {
+        return (anchorError as NodeJS.ErrnoException)?.code === "ENOENT" ? "absent" : "invalid";
+      }
+    }
     return "invalid";
   }
   try {
