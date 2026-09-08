@@ -1,0 +1,137 @@
+{
+  "anti-init": {
+    "dry_rc": 0,
+    "dry_claims_create": false,
+    "dry_claims_skip": true,
+    "apply_rc": 0,
+    "partial_sdlc_files": 21,
+    "source": "original owner corpus\n",
+    "error": "doption source still present (use --adopt-governance-corpus): .specify/memory/constitution.md\nREPORT=.sdlc/reports/knowledge_target_bootstrap_report.20260907-172807.11035.Qig5Rw\nREMAINING_CONFIRMATION: owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n"
+  },
+  "missing-template": {
+    "rc": 0,
+    "files": 13,
+    "output_tail": "plate missing; skeleton skipped: templates/governance-corpus/memory/InteractionProtocol.md\n  - corpus template missing; skeleton skipped: templates/governance-corpus/coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_bootstrap_report.20260907-172807.11435.AWuWgl\nREMAINING_CONFIRMATION: owner 填写并确认 business-domain-map 后以 --domain-map 重跑进入 routed\n\nNOTES:\n- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync\n  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。\n"
+  },
+  "archive-overwrite": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=d81301145d1234333bd8a4d6b0c184e5636b754ba82b0f11c9b20aeb887a5292\nFILES:\n  BLOCKED\t.specify/memory/extra.md\t.sdlc/legacy/.specify/memory/extra.md\tCOLLISION\tarchive destination already exists with different content (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/extra.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/extra.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/extra.md: archive destination already exists with different content: .sdlc/legacy/.specify/memory/extra.md\n",
+    "archive_after": "HISTORICAL OWNER DATA\n"
+  },
+  "ancestor-escape": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=c5f0371decdf57a280b111a9537403766c24e61c6dd0137ce0aedfab6cf5ce93\nFILES:\n  BLOCKED\t<legacy-root>\t-\tC10\tlegacy root escapes target repository (ancestor symlink?): .specify/memory -> /private/tmp/d091-r2-review/ancestor-outside/memory\nBLOCKED_FILES:\n  - <legacy-root>: legacy root escapes target repository (ancestor symlink?): .specify/memory -> /private/tmp/d091-r2-review/ancestor-outside/memory\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: legacy root escapes target repository (ancestor symlink?): .specify/memory -> /private/tmp/d091-r2-review/ancestor-outside/memory; zero partial upgrade (spec R03/I6).\n",
+    "outside_source_exists": true,
+    "adopted_exists": false
+  },
+  "internal-link": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=f801fe88be661a158232383012ad4b803d7546c6750a02cc5673849fe989fc42\nFILES:\n  BLOCKED\t.specify/memory/extra.md\t-\tC10\tcorpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED_FILES:\n  - .specify/memory/extra.md: corpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/extra.md: corpus entry must be a regular file (symlink or non-file would be transformed through its target)\n",
+    "business_after": "Business .specify/memory/item\n"
+  },
+  "gate-prefix": {
+    "plan_rc": 0,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=9401f6f0595f29a04a86de307b2e9b06760b5cf5d650a56556b9505b25e319d0\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\t25367badd3416ebf8af4c1137ebd2c0e54808b4145d99858d6e85fa10c4846fb\n",
+    "output_tail": "domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-172810.12228.7vmc0N\nMIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-172809.12228.json.F5mAJ3\nRESIDUE GATE FAILED: rolled back migration to pre-migration state.\nBLOCKED: migration rolled back (residue gate violations); see stderr list. Violations:\n  - .sdlc/business_domain/extra.md:1\n"
+  },
+  "archive-remap": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=0006e9fb75a55c7d41536fc069c0f5e2cb3a2e6e78abadd9262ad00a4e7a3e8a\nFILES:\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\t6158cd7c64a21123cceefae51f6a13884e530791927e9e17a3beae12820737e4\n",
+    "output_tail": "-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/RoleAtlas.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-172812.12757.iOLJcm\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-172811.12757.md.3nDAdO\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-172811.12757.json.HiWJhj\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "after": "Archived .sdlc/legacy/.specify/memory/item.md\n.sdlc/legacy/specs/start.md\n （.sdlc/legacy/specs/fullwidth.md） `.sdlc/legacy/specs/backtick.md` (.sdlc/legacy/specs/ascii.md) .sdlc/legacy/specs/space.md\nSpecify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync\n| Role | Responsibility |\n| Implement | Sync |\n",
+    "reports": [
+      {
+        "run_timestamp": "20260907-172811",
+        "generated_at": "2026-09-07T09:28:11Z",
+        "migration_completed_at": "2026-09-07T09:28:12Z",
+        "status": "COMPLETED",
+        "target_repository": "/tmp/d091-r2-review/archive-remap",
+        "git_author": "Review Runner",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [
+            "S1 .sdlc root present",
+            "S2 .sdlc skeleton root docs = 3/3",
+            "S4 code tree present",
+            "S5 .specify legacy root present",
+            "S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate"
+          ],
+          "skeleton_state": "complete"
+        },
+        "plan_sha256": "0006e9fb75a55c7d41536fc069c0f5e2cb3a2e6e78abadd9262ad00a4e7a3e8a",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "0006e9fb75a55c7d41536fc069c0f5e2cb3a2e6e78abadd9262ad00a4e7a3e8a"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [
+          {
+            "verb": "TRANSFORM",
+            "path": ".specify/memory/extra.md",
+            "target": ".sdlc/memory/extra.md",
+            "rule": "C11",
+            "pre_digest": "6158cd7c64a21123cceefae51f6a13884e530791927e9e17a3beae12820737e4",
+            "post_digest": "0837df2cd2267b05c4bbbc3429efece3f0373ed6eff66cba8961f6224f618737",
+            "rationale": "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)",
+            "original_archive": ".sdlc/legacy/.specify/memory/extra.md"
+          }
+        ],
+        "field_mappings": [],
+        "corpus_transformations": [
+          {
+            "file": ".sdlc/memory/extra.md",
+            "rule": 7,
+            "replacements": 5
+          }
+        ],
+        "pending_confirmation": [
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "1",
+            "excerpt": "Archived .sdlc/legacy/.specify/memory/item.md"
+          },
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "2",
+            "excerpt": ".sdlc/legacy/specs/start.md"
+          },
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "3",
+            "excerpt": "（.sdlc/legacy/specs/fullwidth.md） `.sdlc/legacy/specs/backtick.md` (.sdlc/legacy/specs/ascii.md) .sdlc/legacy/specs/spac"
+          },
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "4",
+            "excerpt": "Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync"
+          },
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "6",
+            "excerpt": "| Implement | Sync |"
+          }
+        ],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0
+        },
+        "post_detect_type": "EXISTING",
+        "rollback": {
+          "occurred": false,
+          "reason": ""
+        }
+      }
+    ],
+    "raw_archive_exists": true
+  }
+}

@@ -1,0 +1,218 @@
+{
+  "invalid-utf8": {
+    "plan_rc": 0,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=eac63f180dc6b7416b39c063909e8926cabc615765deac789634752739710084\nFILES:\n  TRANSFORM\t.specify/memory/a.md\t.sdlc/memory/a.md\tC11\tb5b9dc3324c379d32a3a48139e3dc7c9f06716088655fcf944a3fb9c12568ed3\n  TRANSFORM\t.specify/memory/z.md\t.sdlc/memory/z.md\tC11\t891901162e1f156bd9e661d530a058dd61dd4f12a55c3079b24858af783dfdbd\n",
+    "output_tail": "MIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-172943.39897.json.7mXLuc\n-e:29:in `gsub': invalid byte sequence in UTF-8 (ArgumentError)\n\n        content = content.gsub(re) { cnt += 1; rep }\n                               ^^\n\tfrom -e:29:in `block in <main>'\n\tfrom -e:22:in `each'\n\tfrom -e:22:in `each_with_index'\n\tfrom -e:22:in `<main>'\nMIGRATION FAILED: corpus transformation failed: .sdlc/memory/z.md; rolling back...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "source_restored": true,
+    "dest_absent": true,
+    "reports": [
+      {
+        "run_timestamp": "20260907-172943",
+        "generated_at": "2026-09-07T09:29:43Z",
+        "target_repository": "/tmp/d091-r2-review/invalid-utf8",
+        "git_author": "<failed run>",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [],
+          "skeleton_state": "absent"
+        },
+        "plan_sha256": "eac63f180dc6b7416b39c063909e8926cabc615765deac789634752739710084",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "eac63f180dc6b7416b39c063909e8926cabc615765deac789634752739710084"
+        },
+        "add_only": false,
+        "moved_count": 2,
+        "files": [],
+        "field_mappings": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0,
+          "violations": []
+        },
+        "post_detect_type": "",
+        "rollback": {
+          "occurred": true,
+          "status": "ROLLED_BACK",
+          "reason": "corpus transformation failed: .sdlc/memory/z.md"
+        },
+        "status": "FAILED_ROLLED_BACK",
+        "migration_completed_at": null
+      }
+    ],
+    "tmp_leftovers": []
+  },
+  "rollback-link": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=f801fe88be661a158232383012ad4b803d7546c6750a02cc5673849fe989fc42\nFILES:\n  BLOCKED\t.specify/memory/extra.md\t-\tC10\tcorpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED_FILES:\n  - .specify/memory/extra.md: corpus entry must be a regular file (symlink or non-file would be transformed through its target)\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/extra.md: corpus entry must be a regular file (symlink or non-file would be transformed through its target)\n",
+    "business_after": "Business .specify/memory/item\n",
+    "source_is_symlink": true,
+    "reports": []
+  },
+  "pending-scope": {
+    "plan_rc": 0,
+    "apply_rc": 0,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=0\nPLAN_SHA256=a3ac8ac820bd89466673179fad280cfc76c807f05f79826e1ad7ede4b474cad6\nFILES:\n  TRANSFORM\t.specify/memory/RoleAtlas.md\t.sdlc/memory/RoleAtlas.md\tC11\t868e9ebbf3c8c48f508bfa2057c3ecab59b29e9dc36385c7cc50263974a41fdd\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\t5252639abd7196a2e7099c60aa3abc452d6bd5a5e68b5ee499bbd13e836c85b2\n",
+    "output_tail": "e-profile.yaml entry-coverage-profile.yaml business-domain-map.yaml scripts/bash/audit-entry-coverage.sh memory/constitution.md memory/AiGovernance.md memory/EngineeringStandard.md memory/DocumentationStandard.md memory/InteractionProtocol.md coding_guide/CodingGuide.md\nREPORT=.sdlc/reports/knowledge_target_audit_report.20260907-172945.40352.0afMbI\nMIGRATION REPORT=.sdlc/reports/migration_report.20260907-172944.40352.md.7J9VM3\nMIGRATION REPORT JSON=.sdlc/reports/migration_report.20260907-172944.40352.json.bbLI2W\nMIGRATION PLAN JSON=.sdlc/migration/plan.json\nMIGRATION POST_DETECT_TYPE=EXISTING\n",
+    "reports": [
+      {
+        "run_timestamp": "20260907-172944",
+        "generated_at": "2026-09-07T09:29:44Z",
+        "migration_completed_at": "2026-09-07T09:29:45Z",
+        "status": "COMPLETED",
+        "target_repository": "/tmp/d091-r2-review/pending-scope",
+        "git_author": "Review Runner",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [
+            "S1 .sdlc root present",
+            "S2 .sdlc skeleton root docs = 3/3",
+            "S4 code tree present",
+            "S5 .specify legacy root present",
+            "S13 dual governance roots coexist (.sdlc + .specify) — ambiguity candidate"
+          ],
+          "skeleton_state": "complete"
+        },
+        "plan_sha256": "a3ac8ac820bd89466673179fad280cfc76c807f05f79826e1ad7ede4b474cad6",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "a3ac8ac820bd89466673179fad280cfc76c807f05f79826e1ad7ede4b474cad6"
+        },
+        "add_only": false,
+        "moved_count": 2,
+        "files": [
+          {
+            "verb": "TRANSFORM",
+            "path": ".specify/memory/RoleAtlas.md",
+            "target": ".sdlc/memory/RoleAtlas.md",
+            "rule": "C11",
+            "pre_digest": "868e9ebbf3c8c48f508bfa2057c3ecab59b29e9dc36385c7cc50263974a41fdd",
+            "post_digest": "868e9ebbf3c8c48f508bfa2057c3ecab59b29e9dc36385c7cc50263974a41fdd",
+            "rationale": "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)",
+            "original_archive": ".sdlc/legacy/.specify/memory/RoleAtlas.md"
+          },
+          {
+            "verb": "TRANSFORM",
+            "path": ".specify/memory/extra.md",
+            "target": ".sdlc/memory/extra.md",
+            "rule": "C11",
+            "pre_digest": "5252639abd7196a2e7099c60aa3abc452d6bd5a5e68b5ee499bbd13e836c85b2",
+            "post_digest": "5252639abd7196a2e7099c60aa3abc452d6bd5a5e68b5ee499bbd13e836c85b2",
+            "rationale": "project governance corpus (memory) adopted into .sdlc/memory via deterministic path/vocabulary transformation (Decision-091)",
+            "original_archive": ".sdlc/legacy/.specify/memory/extra.md"
+          }
+        ],
+        "field_mappings": [],
+        "corpus_transformations": [],
+        "pending_confirmation": [
+          {
+            "file": ".sdlc/memory/RoleAtlas.md",
+            "line": "3",
+            "excerpt": "| Specify | 创建规格 |"
+          },
+          {
+            "file": ".sdlc/memory/RoleAtlas.md",
+            "line": "4",
+            "excerpt": "| Plan | 创建方案 |"
+          },
+          {
+            "file": ".sdlc/memory/RoleAtlas.md",
+            "line": "5",
+            "excerpt": "| Sync | 回填知识 |"
+          },
+          {
+            "file": ".sdlc/memory/extra.md",
+            "line": "1",
+            "excerpt": "Specify -> Clarify -> Plan -> Tasks -> Analyze -> Implement -> Sync"
+          }
+        ],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0
+        },
+        "post_detect_type": "EXISTING",
+        "rollback": {
+          "occurred": false,
+          "reason": ""
+        }
+      }
+    ]
+  },
+  "destination-escape": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=false\nBLOCKED=1\nPLAN_SHA256=2d20aebcdfffa3c950f90a3da633190d88dae8af90df0d574abce1c766802836\nFILES:\n  BLOCKED\t<corpus-destination>\t-\tC10\t.sdlc/memory is a symlink\n  TRANSFORM\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tC11\tc104ccb51800bf96a737be0c50cad47734b17d331a9e7e0e289f169afb3b7768\nBLOCKED_FILES:\n  - <corpus-destination>: .sdlc/memory is a symlink\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - <corpus-destination>: .sdlc/memory is a symlink\n",
+    "outside_files": []
+  },
+  "dangling-destination": {
+    "plan_rc": 1,
+    "apply_rc": 1,
+    "plan": "== MIGRATION PLAN (nothing written) ==\nTYPE=EXISTING\nADD_ONLY=true\nBLOCKED=1\nPLAN_SHA256=9b6427b9c36d0dc8510dcfc1c63dd59bc6005aa3dcd20918d4b2521fbbdb0a27\nFILES:\n  BLOCKED\t.specify/memory/extra.md\t.sdlc/memory/extra.md\tCOLLISION\tdestination exists and differs from the transformed source (Decision-091)\nBLOCKED_FILES:\n  - .specify/memory/extra.md: destination exists and differs from the transformed source; owner adjudication required: .sdlc/memory/extra.md\nBLOCKED: migration cannot proceed (zero partial upgrade, spec R03).\n",
+    "output_tail": "BLOCKED: 1 ambiguous/unsafe file(s); zero partial upgrade (spec R03):\n  - .specify/memory/extra.md: destination exists and differs from the transformed source; owner adjudication required: .sdlc/memory/extra.md\n",
+    "dest_is_symlink": true
+  },
+  "missing-template-audit": {
+    "rc": 0,
+    "skip_count": 7,
+    "corpus_created": false
+  },
+  "rollback-audit-template": {
+    "rc": 1,
+    "source_restored": true,
+    "new_files": [
+      ".sdlc/reports/migration_report.20260907-172948.42287.json.riCJyJ",
+      ".sdlc/reports/migration_report.20260907-172948.42287.md.610CkQ"
+    ],
+    "error_tail": "9ca1ed84a1809a93bb9db042a5d8 ==\n== corpus adopted: 1 file(s) transformed into .sdlc (Decision-091) ==\n== knowledge-target applicability audit ==\nMIGRATION FAILURE REPORT=.sdlc/reports/migration_report.20260907-172948.42287.json.riCJyJ\nunresolved corpus template placeholders in /tmp/d091-r2-review/bad-standard/templates/governance-corpus/memory/RoleAtlas.md: {{UNKNOWN_TOKEN}}\nUNEXPECTED EXIT in transaction window; rolling back migration...\nROLLED BACK: repository restored to pre-migration state.\n",
+    "tmp_leftovers": [
+      "knowledge-target-corpus-archive.Fk8DR7"
+    ],
+    "reports": [
+      {
+        "run_timestamp": "20260907-172948",
+        "generated_at": "2026-09-07T09:29:48Z",
+        "target_repository": "/tmp/d091-r2-review/rollback-audit-template",
+        "git_author": "<failed run>",
+        "detection": {
+          "type": "EXISTING",
+          "signals": [],
+          "skeleton_state": "absent"
+        },
+        "plan_sha256": "d301e79ac7c2ace00d40c586d979fb64dad49ca1ed84a1809a93bb9db042a5d8",
+        "confirmation": {
+          "required": true,
+          "provided": true,
+          "digest": "d301e79ac7c2ace00d40c586d979fb64dad49ca1ed84a1809a93bb9db042a5d8"
+        },
+        "add_only": false,
+        "moved_count": 1,
+        "files": [],
+        "field_mappings": [],
+        "residue_gate": {
+          "scope": ".sdlc/** minus legacy/, reports/, migration/",
+          "violations_count": 0,
+          "violations": []
+        },
+        "post_detect_type": "",
+        "rollback": {
+          "occurred": true,
+          "status": "ROLLED_BACK",
+          "reason": "unexpected exit in transaction window"
+        },
+        "status": "FAILED_ROLLED_BACK",
+        "migration_completed_at": null
+      }
+    ]
+  },
+  "bad-template-init": {
+    "rc": 1,
+    "unchanged": true,
+    "error_tail": "unresolved corpus template placeholders in /tmp/d091-r2-review/bad-standard/templates/governance-corpus/memory/RoleAtlas.md: {{UNKNOWN_TOKEN}}\n"
+  }
+}

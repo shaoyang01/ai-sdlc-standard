@@ -1,0 +1,197 @@
+{
+  "existing": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "audit": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    }
+  },
+  "partial": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "audit": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    }
+  },
+  "empty": {
+    "plain": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "audit": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "apply": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    }
+  },
+  "legacy": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "plan": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "dry-run": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": true,
+      "source_exists": true
+    },
+    "audit": {
+      "rc": 0,
+      "unchanged": false,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    }
+  },
+  "ambiguous": {
+    "plain": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "detect": {
+      "rc": 0,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "plan": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "dry-run": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "audit": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    },
+    "apply": {
+      "rc": 1,
+      "unchanged": true,
+      "plan_present": false,
+      "source_exists": true
+    }
+  },
+  "move-race": {
+    "rc": 1,
+    "destination": "CONCURRENT OWNER CONTENT\n",
+    "status": "FAILED_ROLLED_BACK"
+  }
+}
