@@ -341,9 +341,22 @@ end
 LEGACY_FINDING_ID_PATTERN = /\bADV-\d+\b|\bADV-N\b/
 LEGACY_DISPOSITION_ENUM_PATTERN = /\bACCEPTED_RISK\b|\brisk_accepted\b|\bSUPERSEDED\b/
 REPEALED_STATUS_VOCAB_PATTERN =
-  /draft \/ active \/ stale \/ replaced|active \/ blocked \/ completed \/ abandoned \/ stale \/ replaced|draft \/ active \/ stale\b/
+  /draft \/ active \/ passed \/ failed \/ stale \/ replaced|active \/ blocked \/ completed \/ abandoned \/ stale \/ replaced|draft \/ active \/ stale \/ replaced|draft \/ active \/ stale\b/
 LEGACY_DECIDED_ENUM_PATTERN = /DECIDED \/ BLOCKED_UNKNOWN/
 LEGACY_SPECS_SOT_PATTERN = /`specs\/\*\*` as the SpecKit machine source of truth|`specs\/\*\*`[^。\n]{0,40}source of truth/i
+# R1-H2 supplement: retired source packages must not re-enter as callable
+# entry points or next-step recommendations (runtime evidence: an installed
+# kimi session recommended "speckit-analyze" straight from the capability
+# provenance table). Provenance TABLE rows stay exempt: they carry no action
+# verb before the package name.
+RETIRED_SOURCE_SKILL_CALL_PATTERN = /
+  (?:Run|running|runs?|Recommend(?:ing|s|running)?|suggest(?:ed|s)?|Use|Using|uses?|
+     跑|运行|使用|推荐|建议)\s*[^.\n]{0,20}?
+  (?:`?(?:sdlc-)?speckit-[a-z-]+`?|
+    `?sdlc-(?:specification-writer|solution-reviewer|solution-challenger|
+              requirement-normalizer|test-feedback-classifier|test-feedback-sync|
+              code-review-normalizer|code-review-excellence|implementation-recorder)`?)
+/ix
 SKILL_CONSISTENCY_NORMATIVE_RE = /
   \bStatus\b|
   处置|
@@ -354,6 +367,11 @@ SKILL_CONSISTENCY_NORMATIVE_RE = /
   finding\s+编号|
   source\s+of\s+truth
 /ix
+TABLE_STATUS_HEADER_RE = /\bStatus\b|\bResult\b|处置|状态|Current \/ Stale|Decision Status/i
+# Cell-level repealed markers inside a Status/Result/处置 column (R1-H2:
+# the real repealed rows lived in table DATA cells whose line has no
+# "Status" keyword, so line-level require_normative missed them).
+REPEALED_TABLE_CELL_RE = /\breplaced\b|draft \/ active|passed \/ failed|\brisk_accepted\b|\bDECIDED \/ BLOCKED_UNKNOWN\b/
 
 def unsafe_skill_finding_vocabulary(text)
   hits = []
@@ -362,11 +380,57 @@ def unsafe_skill_finding_vocabulary(text)
                           require_normative: SKILL_CONSISTENCY_NORMATIVE_RE))
   hits.concat(unsafe_hits(text, REPEALED_STATUS_VOCAB_PATTERN,
                           require_normative: /\bStatus\b/i))
-  hits.concat(unsafe_hits(text, LEGACY_DECIDED_ENUM_PATTERN,
-                          require_normative: /Decision\s+Status/i))
+  # DECIDED enum: a trailing repeal note ("已废止/deprecated") marks the line
+  # as a declaration, not normative vocabulary (R1 review suggestion).
+  decided = unsafe_hits(text, LEGACY_DECIDED_ENUM_PATTERN,
+                        require_normative: /Decision\s+Status/i)
+  decided.reject! { |_, line| line.match?(/已废止|废止|deprecated/i) }
+  hits.concat(decided)
   hits.concat(unsafe_hits(text, LEGACY_SPECS_SOT_PATTERN,
                           require_normative: /source\s+of\s+truth/i))
+  hits.concat(unsafe_hits(text, RETIRED_SOURCE_SKILL_CALL_PATTERN))
+  hits.concat(unsafe_repealed_status_in_tables(text))
   hits.uniq
+end
+
+# Bounded Markdown-table recognition: remember the most recent header row
+# while inside a table, and flag repealed status/disposition values only in
+# Status/Result/处置-like columns. Non-table prose resets the header state;
+# fenced blocks are skipped entirely.
+def unsafe_repealed_status_in_tables(text)
+  hits = []
+  header_cells = nil
+  in_code = false
+  text.lines.each_with_index do |line, idx|
+    in_code = !in_code if line.match?(CODE_FENCE_RE)
+    next if in_code
+    stripped = line.strip
+    unless stripped.start_with?("|")
+      header_cells = nil unless stripped.empty?
+      next
+    end
+    next if stripped.match?(/^\|[\s:|-]+\|$/)  # separator row
+    cells = stripped.split("|")[1..-2].to_a.map(&:strip)
+    if header_cells.nil? || cells.length != header_cells.length
+      # R1-H2: a table row whose column count does not match the remembered
+      # header is treated as a potential new header - but misaligned rows are
+      # exactly how a repealed enum re-enters (e.g. a 5-column header above an
+      # 8-column data row). Scan the whole row for unambiguous repealed status
+      # markers before adopting it as a header.
+      hits << [idx + 1, stripped] if stripped.match?(REPEALED_TABLE_CELL_RE)
+      header_cells = cells
+      next
+    end
+    status_idx = header_cells.each_index.select { |i| header_cells[i].match?(TABLE_STATUS_HEADER_RE) }
+    status_idx.each do |i|
+      cell = cells[i] || ""
+      if cell.match?(REPEALED_TABLE_CELL_RE)
+        hits << [idx + 1, line.strip]
+        break
+      end
+    end
+  end
+  hits
 end
 
 SKILL_CONSISTENCY_SELF_TEST = {
@@ -378,12 +442,24 @@ SKILL_CONSISTENCY_SELF_TEST = {
   "- Status: active / blocked / completed / abandoned / stale / replaced" => true,
   "- Decision Status: DECIDED / BLOCKED_UNKNOWN" => true,
   "Treat `specs/**` as the SpecKit machine source of truth and `library/{requirement_id}/**` as the handoff view." => true,
-  # contract-aligned wording / repeal declarations -> NOT flagged
+  # R1-H2 exact repealed real-world rows (with their table header) -> flagged
+  "- Status: draft / active / passed / failed / stale / replaced" => true,
+  "| Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 02 方案审核 | yes | `02-方案审核/` |  | 1.0.0 | draft / active / stale | PASS / FAIL / PASS_WITH_RISK |  |" => true,
+  "| 05 代码审核 | actual | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked / risk_accepted |  |" => true,
+  "| 05 代码审核 | actual | `05-代码审核/` |  |  | current / stale / actionable | resolved / blocked |  |" => false,
+  # runtime evidence: retired package recommended as a callable entry -> flagged
+  "先跑一次 speckit-analyze 做需求/方案/任务三产物的独立交叉分析。" => true,
+  "Recommend running `sdlc-speckit-plan`." => true,
+  "Use `sdlc-code-review-normalizer` when the review must be written." => true,
+  # contract-aligned wording / repeal declarations / provenance tables -> NOT flagged
   "- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）" => false,
   "- Decision Status: CONFIRMED / ESCALATED / BLOCKED_UNKNOWN（`DECIDED` 枚举已废止——manual-runtime-semantic-contract §4.3）" => false,
+  "- Decision Status: DECIDED / BLOCKED_UNKNOWN 已废止，请使用 CONFIRMED / ESCALATED / BLOCKED_UNKNOWN。" => false,
   "旧 `DECIDED` 枚举废止。" => false,
   "| {requirement_id}-F01 | SOLUTION | HIGH |  |  |  | solution-design | OPEN |" => false,
-  "- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径）" => false
+  "- Closure Status: resolved / blocked（实现类 finding 经独立关闭复验 RESOLVED；非 scan 来源无 ACCEPTED 路径）" => false,
+  "| Node | Required | Directory | Stable Path | Version | Status | Result / Gate | Updated At |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| 02 方案审核 | yes | `02-方案审核/` |  | 1.0.0 | current / stale / actionable | PASS / FAIL / PASS_WITH_RISK |  |" => false,
+  "| `sdlc-speckit-analyze` | Core Rules 全部条款吸收至本包；references 迁移件 5 个文件见 `references/sdlc-speckit-analyze/` |" => false
 }.freeze
 
 DUAL_RAIL_SELF_TEST = {

@@ -2,9 +2,9 @@
 
 ## Purpose
 
-Use this workflow to turn raw test, acceptance, or online verification feedback into a structured `05-测试验收` artifact.
+Use this workflow to turn raw test, acceptance, or online verification feedback into a structured 测试反馈分类 artifact（`library/{requirement_id}/00-需求资料/反馈/`；原始反馈经 intake 分类为 FEEDBACK_DRIVEN_CHANGE 后由相应节点消费——manual-runtime-semantic-contract §6.1，不设"测试验收"节点）。
 
-The output must decide what happens next: fix implementation, update specification, handle a requirement change, correct the test case, resolve environment/data issues, or hand reusable gaps to `sdlc-test-feedback-sync`.
+The output must decide what happens next: fix implementation, update specification, handle a requirement change, correct the test case, resolve environment/data issues, or hand reusable gaps to `sdlc-knowledge-sync`.
 
 ## Step 1: Identify Feedback Context
 
@@ -20,8 +20,8 @@ Collect:
 - Screenshots, logs, sample data, request/response, or reproduction steps
 - Related `01-技术方案`
 - Related `02-方案审核`
-- Related `03-实现记录`
-- Related `04-代码审核`
+- Related `04-实现记录`
+- Related `05-代码审核`
 
 If the failure has no observed behavior or expected behavior, stop and ask for evidence.
 
@@ -82,11 +82,10 @@ Do not use `PASS_WITH_RISK` without Accepted Risk, Accepted By, Accepted At, Acc
 Use one:
 
 - `Fix implementation and update implementation record`
-- `Return to sdlc-specification-writer and rerun sdlc-solution-reviewer`
+- `Return to sdlc-solution-design`（方案缺口回流，Gate 复审由 solution-gate 承担）
 - `Apply change-control`
 - `Update test case or acceptance wording`
 - `Resolve environment or data issue`
-- `Run sdlc-test-feedback-sync`
-- `Run sdlc-gate-runner`
+- `Hand reusable gaps to sdlc-knowledge-sync`
 
-Recommend `sdlc-test-feedback-sync` only after the classification artifact is stable.
+建议 `sdlc-knowledge-sync` 仅在分类结论稳定后给出（`sdlc-test-feedback-sync` 已退役吸收）。

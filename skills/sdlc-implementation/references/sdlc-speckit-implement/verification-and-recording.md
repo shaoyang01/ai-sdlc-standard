@@ -38,7 +38,7 @@ These cases do not need to be exhaustive, but they must be concrete enough to ju
 
 ## Implementation Record
 
-Use or recommend `sdlc-implementation-recorder` after implementation.
+Use or recommend `sdlc-implementation`（实现记录登记）after implementation.
 
 The implementation record should include:
 

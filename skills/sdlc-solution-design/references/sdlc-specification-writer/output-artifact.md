@@ -14,7 +14,7 @@ The artifact must include:
 - Requirement ID:
 - Artifact Type:
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -141,7 +141,7 @@ Change History:
   Required Re-Gate: <node/gate>
 
 Next Step:
-  Run sdlc-solution-challenger
+  adversarial_scan 产 Finding Ledger（scan 阶段）
 ```
 
 ## Ready-for-Review Criteria

@@ -68,6 +68,6 @@ Use `ai-sdlc/change-control.md` to identify the earliest affected node.
 Use:
 
 - `Fix implementation and update implementation record` for Implementation Bug.
-- `Return to sdlc-specification-writer and rerun sdlc-solution-reviewer` for Specification Missing.
+- `Return to sdlc-solution-design（方案缺口回流；Gate 复审属 solution-gate）` for Specification Missing.
 - `Apply change-control` for Requirement Change.
-- `Run sdlc-test-feedback-classifier` only after code review is passable or risk accepted.
+- Route reusable feedback gaps through `sdlc-requirement-intake`（原始反馈分类重入；实现类 HIGH 经返工复验 RESOLVED——非 scan 来源无 ACCEPTED 路径）.

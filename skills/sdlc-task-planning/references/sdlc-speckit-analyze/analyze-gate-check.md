@@ -184,4 +184,4 @@ Analyze output must include:
 - Manifest Update Recommendation
 - Next Step
 
-Recommend `sdlc-speckit-implement` only when there are no Blocking items.
+Recommend `sdlc-implementation` only when there are no Blocking items.

@@ -32,7 +32,7 @@ Continue only when:
 If no clarify result exists:
 
 - Continue only when `specs/{feature}/spec.md` contains no open clarification and the user explicitly confirms no residual ambiguity.
-- Recommend running `sdlc-speckit-clarify`.
+- Recommend returning to `sdlc-solution-design` for clarification.
 - Do not create a plan from raw chat or unreviewed assumptions.
 
 ## Source Priority

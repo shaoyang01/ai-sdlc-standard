@@ -1,3 +1,5 @@
+> 已退役（迁移历史参考）：分类后的反馈消费属 sdlc-knowledge-sync 本体；"05-测试验收"节点不存在。本文件仅作结构/措辞的历史参考，禁止作为产出格式依据或执行入口；现役形态见对应 canonical 模板/本包 SKILL.md。
+
 # Test Feedback Sync Workflow
 
 ## Purpose
@@ -77,7 +79,7 @@ Generate:
 Use one:
 
 - `Return to sdlc-specification-writer`
-- `Run sdlc-solution-reviewer`
+- `Gate 复审由 sdlc-solution-gate 承担`
 - `Fix implementation and update sdlc-implementation-recorder`
 - `Update code review checklist`
 - `Update specification checklist/schema`

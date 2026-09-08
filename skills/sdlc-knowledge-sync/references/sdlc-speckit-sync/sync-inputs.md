@@ -69,7 +69,7 @@ Continue only when:
 If `03-实现记录` is missing:
 
 - Continue only when implementation result and verification evidence are sufficient.
-- Recommend running `sdlc-implementation-recorder`.
+- Recommend `sdlc-implementation`（实现记录登记）.
 - Do not sync facts that cannot be traced to code changes and verification.
 
 ## Readiness

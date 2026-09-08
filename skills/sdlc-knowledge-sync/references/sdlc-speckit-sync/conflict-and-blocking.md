@@ -110,7 +110,7 @@ When source and target conflict:
 - Identify both statements and source evidence.
 - Determine whether the conflict is code drift, document drift, or new requirement behavior.
 - Recommend the earliest affected Re-Gate node.
-- Recommend `sdlc-speckit-code-doc-reconcile` when a code/document consistency audit is needed.
+- Run the code/document consistency audit within this Skill（`references/sdlc-speckit-code-doc-reconcile/` 迁移件已吸收为本包内部能力，不作为独立入口推荐）。
 
 ## Re-Gate Routing
 
@@ -118,10 +118,10 @@ Route blockers to:
 
 - `01-技术方案` when domain behavior is missing or changed.
 - `02-方案审核` when risk acceptance or review decision is missing.
-- `sdlc-speckit-implement` when implementation evidence is incomplete.
-- `sdlc-implementation-recorder` when implementation record is missing.
-- `sdlc-test-feedback-sync` when test feedback exposes reusable checklist or schema gaps.
-- `sdlc-speckit-code-doc-reconcile` when code and knowledge disagree.
+- `sdlc-implementation` when implementation evidence is incomplete.
+- `sdlc-implementation`（实现记录登记）when implementation record is missing.
+- `sdlc-requirement-intake` when test feedback exposes reusable checklist or schema gaps（原始反馈经 intake 分类重入）.
+- knowledge-sync 本包 code/document reconciliation when code and knowledge disagree.
 
 ## No-Write Mode
 

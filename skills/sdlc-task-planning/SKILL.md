@@ -21,7 +21,7 @@ version: 0.2.0
 7. Do not modify production code; task execution belongs to `sdlc-implementation`。
 8. Use `library/{requirement_id}/03-任务规划/` as the default local output node.
 
-9. Checklist internal check：任务集产出后运行 speckit-checklist 迁移件做可追溯性自检（checklist 为本包内部校验能力，不对外独立服务）。
+9. Checklist internal check：任务集产出后运行本包内置 checklist 自检（内部校验能力，非可调用 Skill、不对外独立服务，也不作为下一步推荐；规则来源见能力来源对照表）。
 
 ## 能力来源对照表
 

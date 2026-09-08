@@ -22,7 +22,7 @@ version: 0.2.0
 8. Do not self-review code quality（属 `sdlc-code-review`）；完成声明必须引用 diff、测试输出等可验证证据。实现记录须固定代码变更证据绑定 `{baseRevision, reviewedRevision, changeDigest}`（content-addressed，供 code-review 消费同一份变更——manual-runtime-semantic-contract §5.5）。
 9. Use `library/{requirement_id}/04-实现记录/` as the default evidence node.
 
-10. Checklist internal check：实现前运行 speckit-checklist 迁移件核对任务-产物追溯性（本包内部校验能力，不对外独立服务）。
+10. Checklist internal check：实现前运行本包内置 checklist 自检核对任务-产物追溯性（内部校验能力，非可调用 Skill、不对外独立服务，也不作为下一步推荐；规则来源见能力来源对照表）。
 
 ## 能力来源对照表
 

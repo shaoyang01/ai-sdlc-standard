@@ -49,7 +49,7 @@ Plan risks must not hide:
 
 Do not break down implementation tasks in this skill.
 
-Use `sdlc-speckit-tasks` after Plan Gate passes.
+Use `sdlc-task-planning` after the Gate Result is current and CONFIRMED（A1）.
 
 The plan may identify work areas, but not produce executable task lists.
 

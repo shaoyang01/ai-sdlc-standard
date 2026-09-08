@@ -73,9 +73,9 @@ Use one:
 
 - `Fix implementation and update implementation record`
 - `Apply change-control and re-Gate`
-- `Return to sdlc-specification-writer`
-- `Run sdlc-implementation-recorder`
-- `Run sdlc-test-feedback-classifier`
-- `Run sdlc-gate-runner`
+- `Return to sdlc-solution-design`
+- `sdlc-implementation`（实现记录登记）
+- `sdlc-requirement-intake`（反馈分类重入）
+（`sdlc-gate-runner` 已退役；Gate 裁决属 solution-gate formal_verdict）
 
-Do not recommend direct test/release when Critical or unaccepted High remains.
+Do not recommend direct test/release when Critical or unresolved HIGH remains（HIGH 经 implementation 返工并由 code-review 独立复验 RESOLVED——manual-runtime-semantic-contract §5.2；非 scan 来源无 ACCEPTED 路径）.

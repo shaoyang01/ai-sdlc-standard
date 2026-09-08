@@ -41,4 +41,4 @@ When working on a changed or reworked requirement:
 - Do not create versioned filenames.
 - Update the stable artifact file and increment its internal Metadata Version.
 - Identify the earliest affected node.
-- Recommend Re-Gate through `sdlc-solution-reviewer`.
+- Recommend Re-Gate through `sdlc-solution-gate`.

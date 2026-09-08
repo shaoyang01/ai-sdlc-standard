@@ -42,4 +42,4 @@ Block when:
 
 Summarize coverage in a compact table with category, status, evidence, and action.
 
-Recommend `sdlc-speckit-analyze` only when there are no Blocking items.
+Recommend `sdlc-task-planning`（一致性审计属任务规划内部能力）only when there are no Blocking items.

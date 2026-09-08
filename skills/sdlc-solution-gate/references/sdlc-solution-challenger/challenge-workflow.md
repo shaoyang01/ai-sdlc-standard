@@ -144,16 +144,15 @@ If the challenger's own proposed revisions would escalate current_design from LO
 - Keep only the minimum revisions required for current phase goals
 - Re-assess proposed_revision_delta
 
-## Step 7: Output Report
+## Step 7: Output Ledger
 
-Write the challenge report using the structure defined in `output-report.md`.
-
-Default output path:
-```
-library/{requirement_id}/01-技术方案/{requirement_id}_方案挑战报告.md
-```
-
-Do not renumber existing DocFlow directories (00, 01, 02, 04).
+adversarial_scan 只产出 Finding Ledger（不给正式 Gate、不写独立挑战报告）：
+按 canonical 模板 `templates/finding-ledger-template.md` 写
+`library/{requirement_id}/02-方案审核/{requirement_id}_FindingLedger.md`
+（finding ID = `{requirement_id}-F{两位序号}`，manual-runtime-semantic-
+contract §5.1/§5.4）。`output-report.md` 的挑战报告结构已退役，仅作分类
+措辞的历史参考（finding 分类/severity/scope basis 见
+`finding-classification.md`）。
 
 ## Step 8: Recommend Next Step
 

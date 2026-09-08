@@ -1,3 +1,5 @@
+> 已退役（迁移历史参考）：原始测试反馈经 requirement-intake 分类重入（FEEDBACK_DRIVEN_CHANGE），不设独立"测试验收"节点。本文件仅作结构/措辞的历史参考，禁止作为产出格式依据或执行入口；现役形态见对应 canonical 模板/本包 SKILL.md。
+
 # Test Feedback Sync Output Report
 
 ## Default Output

@@ -14,7 +14,7 @@ The artifact must include:
 - Requirement ID:
 - Artifact Type:
 - Version: 1.0.0
-- Status: draft / active / passed / failed / stale / replaced
+- Status: current / stale / actionable（manifest 冻结映射词表；`draft`/`active`/`replaced` 已废止——loop-artifact-revision.md）
 - Author / Skill:
 - Created At:
 - Updated At:
@@ -41,7 +41,7 @@ belong in `## 修订记录`, manifest `Change History`, and Git history.
 When writing a local artifact, use:
 
 ```text
-library/{requirement_id}/03-实现记录/{requirement_id}_实现记录.md
+library/{requirement_id}/04-实现记录/{requirement_id}_实现记录.md
 ```
 
 Update the stable artifact file and increment its internal Metadata Version instead of creating a versioned filename.
@@ -145,7 +145,7 @@ Recommend these manifest updates when an artifact is written:
 - Change History: record Specification Missing, Requirement Change, or Implementation Bug if discovered.
 - Blocking Issues: record unresolved blockers.
 - Missing Artifacts: record missing diff, specification, or verification evidence.
-- Next Step: `Run sdlc-code-review-normalizer`, `Fix implementation bug`, or `Apply change-control and re-Gate`.
+- Next Step: `sdlc-code-review（发现经 finding-register 登记）`, `Fix implementation bug`, or `Apply change-control and re-Gate`.
 
 Do not silently edit `manifest.md` unless the user explicitly asks for file updates or output routing through `sdlc-docflow-writer`.
 
