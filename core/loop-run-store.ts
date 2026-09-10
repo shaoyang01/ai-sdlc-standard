@@ -4470,6 +4470,29 @@ export class LoopRunStore {
   }
 
   /**
+   * Read and verify the durable closure proofs for one run, through the same
+   * single-transaction verified chain read as listFindings (contract §6.2.2(b)
+   * step 2: the projector takes the current record AND its proof bindings from
+   * the verified read interface — it never re-derives store invariants). The
+   * returned proofs are exactly the RESOLUTION / RISK_ACCEPTANCE facts the
+   * chain read just hash-verified and re-bound to revisions.
+   */
+  listFindingProofs(runId: string): readonly LoopFindingProof[] {
+    const db = this.connection();
+    try {
+      return db.transaction((): readonly LoopFindingProof[] => {
+        const snapshot = this.readRunSnapshotInTransaction(db, runId);
+        if (snapshot === undefined) return Object.freeze([]);
+        return this.readFindingChainInTransaction(db, runId, snapshot.state.identity.requirementId).proofs;
+      })() as readonly LoopFindingProof[];
+    } catch (error) {
+      if (error instanceof LoopRunJournalError) throw error;
+      if (isBusyCode(sqliteErrorCode(error))) busy();
+      storageFailure();
+    }
+  }
+
+  /**
    * The fixed read-only next-eligibility derivation (contract §6): any OPEN
    * finding blocks; any closed (RESOLVED / ACCEPTED_RISK) finding whose
    * earliest-affected-or-downstream current revision is STALE or missing
@@ -5570,6 +5593,7 @@ export class LoopRunStore {
   ): Readonly<{
     findings: readonly LoopFinding[];
     invalidations: readonly LoopFindingInvalidation[];
+    proofs: readonly LoopFindingProof[];
   }> {
     const rows = db.prepare(
       "SELECT * FROM loop_findings WHERE run_id = ? ORDER BY sequence ASC",
@@ -5770,6 +5794,7 @@ export class LoopRunStore {
     return Object.freeze({
       findings: Object.freeze(findings),
       invalidations: Object.freeze(invalidations),
+      proofs: Object.freeze(proofs),
     });
   }
 
