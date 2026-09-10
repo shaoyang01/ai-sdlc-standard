@@ -122,7 +122,7 @@ init 形态（发布器 P:220–232）：七节点 pending 行 + depth 块 + 空
 | formal_verdict succeeded (FAIL / BLOCKED_UNKNOWN)，不物化 revision | **保持不变**（含 pending 初值） | **三扩展字段 ← 事件**：`gate_result = FAIL`；`decision_status ← decisionStatus`；`decision_depth ← decisionDepth`（FAIL+CONFIRMED/ESCALATED 时为事件携带的非 null 档位；**仅 UNKNOWN 时为 null**——R4-H1 修正） | `{status: succeeded, execution_event_ref}` |
 | adversarial_scan succeeded / blocked | **保持不变**（Ledger 不入 entries，不冒充正式 Gate） | **保持不变** | `{status: <st>, ledger_ref ← unresolvedFindingsRef, ledger_digest ← unresolvedFindingsDigest, blocked_report_ref ← outputArtifactRef, blocked_report_digest ← outputDigest, execution_event_ref}`（scan blocked 双绑定：Ledger + blocked 报告，R3-H1 保持） |
 | primary blocked | **保持不变** | — | `{status: blocked, blocked_report_ref ← outputArtifactRef, blocked_report_digest ← outputDigest, execution_event_ref}`（blocked 报告为 first-class 产物，J:496） |
-| 任何角色 failed（**含 formal_verdict failed**，R4-H1 修正） | **保持不变**（有 revision 时保留其绑定；无 revision 保持 pending） | formal_verdict failed：`gate_result = FAIL`；`decision_status/decision_depth ← 事件 decisionStatus/decisionDepth`（FAIL+CONFIRMED/ESCALATED 非 null；FAIL+UNKNOWN null） | `{status: failed, error_code ← errorCode, reason_code ← reasonCode, execution_event_ref}` |
+| 任何角色 failed | **保持不变**（有 revision 时保留其绑定与当前裁决；无 revision 保持 pending；failed 无正式裁决输出 J:519–526，裁决槽不动） | `{status: failed, error_code ← errorCode, reason_code ← reasonCode, execution_event_ref}` |
 | formal_verdict blocked | 现役禁止（J:509–511） | — | 数据出现 = 损坏，走停止路径 |
 
 批次无关性：fold 逐步确定性、槽位覆盖式更新，单批/分批/从基线全量 fold 结果相同（fold 结合律，R2 已验证，本轮保持）。
@@ -161,7 +161,9 @@ solution-gate 行的 scan/verdict 双角色归约：adversarial_scan 事件只�
 
 ### 4.1 第 1 级 损坏 → `MANIFEST_CORRUPT_STOP`
 
-YAML 解析失败；self-digest 校验失败（canonical 序列化 = 发布器 `YAML.dump` 行为的 TS 复刻，D-5，G3 fixtures 逐字节对拍锁定）。不静默修复、不重建。`projection_provenance` 键缺失或行损坏 → 第 1 级 STOP。
+YAML 解析失败；self-digest 校验失败（canonical 序列化 = 发布器 `YAML.dump` 行为的 TS 复刻，D-5，G3 fixtures 逐字节对拍锁定）。不静默修复、不重建。
+
+**`projection_provenance` 键的版本适配（R5-H2 缺口 4 修正）**：该键**缺失**时**不判为损坏**——它标记 manifest 处于「接管前旧格式」状态，投影器应触发接管对账（§8）而非 STOP。接管对账通过后由投影器写入 `projection_provenance`（接管完成后该键进入 self-digest 覆盖范围）。仅当该键**存在但内容损坏**（mode 非法、logical_identity_map 行结构错误）→ 第 1 级 STOP。
 
 ### 4.2 第 2 级 真分叉 → `JOURNAL_MANIFEST_MISMATCH_STOP`
 
