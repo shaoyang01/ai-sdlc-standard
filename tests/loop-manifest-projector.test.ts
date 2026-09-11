@@ -964,5 +964,289 @@ console.log("G5-T2-R1 rework — takeover-B consistent takeover with REAL manual
   }
 }
 
+
+// ===========================================================================
+console.log("G5-T2-R2 rework — reconciled-domain comparison has a journal reference (R2-B1 read side)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r2-b1r-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    // Journal tail exists → takeover-B; the intake row then sits in the
+    // reconciled domain (§8.3 branch 2, events ≤ cursor, no tail touch).
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const intakeRef = `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`;
+    const e1 = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a") });
+    const e2 = event({
+      ...e1, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: intakeRef, outputArtifactVersion: "1.0.0", outputDigest: dg("c"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(e1);
+    store.appendCapabilityExecution(e2);
+    materializeProducerRevision(store, REQ, RUN, e2, () => nextTs());
+
+    const manualBase: Record<string, unknown> = {
+      schema_version: LOOP_MANIFEST_SCHEMA_VERSION, requirement_id: REQ, title: "R2B1需求",
+      publish_seq: 1, projected_through: "MANUAL", updated_at: nextTs(),
+      depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "intake-init", required_depth: "STANDARD" },
+      entries: [
+        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0", digest: dg("c"), updated_at: nextTs(), source_event_ref: "00-需求资料/req_需求摘要.md" },
+        { node: "solution-design", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "solution-gate", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "task-planning", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "implementation", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "code-review", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "knowledge-sync", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+      ],
+      finding_index: [], declaration_log: [], corrections: [], repair_records: [],
+    };
+    writeManualManifest(libraryDir, manualBase);
+    ok(projectLoopManifest(request).kind === "PUBLISHED", "takeover-B baseline publishes");
+
+    const rewriteTampered = (mutate: (doc: Record<string, unknown>) => void): void => {
+      const doc = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+      mutate(doc);
+      const resealed = sealManifest(doc as never);
+      writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...doc, manifest_digest: resealed.manifest_digest }), "utf8");
+    };
+
+    rewriteTampered((doc) => {
+      const intake = (doc.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
+      intake.digest = dg("9");
+    });
+    expectStop(
+      projectLoopManifest(request),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "forged digest in the reconciled domain stops against the journal reference (probe9 twin)",
+    );
+
+    writeManualManifest(libraryDir, manualBase);
+    projectLoopManifest(request);
+    rewriteTampered((doc) => {
+      const intake = (doc.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
+      intake.status = "stale";
+    });
+    expectStop(
+      projectLoopManifest(request),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "status reversed against the journal (current→stale) stops (probe9 twin)",
+    );
+
+    // For the adjudication twin the gate node must itself sit in the
+    // reconciled domain: the full chain design → scan → verdict (≤ cursor)
+    // plus a manual row carrying the MATCHING triple and the current design
+    // face (B2 would otherwise refuse).
+    const designRef = `loop-artifact:v1:technical_design:sha256:${dg("d")}`;
+    const d3 = event({ sequence: 3, status: "started", capability: "solution-design", inputArtifactRef: intakeRef, inputArtifactVersion: "1.0.0", inputDigest: dg("c") });
+    const d4 = event({
+      ...d3, executionEventId: `${RUN}:capability:4:succeeded`, sequence: 4, status: "succeeded",
+      outputArtifactRef: designRef, outputArtifactVersion: "1.0.0", outputDigest: dg("d"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(d3);
+    store.appendCapabilityExecution(d4);
+    materializeProducerRevision(store, REQ, RUN, d4, () => nextTs());
+    const ledgerRef = `loop-artifact:v1:capability_findings:sha256:${dg("e")}`;
+    const scanOutputRef = `loop-artifact:v1:solution_review:sha256:${dg("f")}`;
+    void scanOutputRef;
+    const s5 = event({ sequence: 5, status: "started", capability: "solution-gate", executionRole: "adversarial_scan", inputArtifactRef: designRef, inputArtifactVersion: "1.0.0", inputDigest: dg("d") });
+    const s6 = event({
+      ...s5, executionEventId: `${RUN}:capability:6:succeeded`, sequence: 6, status: "succeeded",
+      outputArtifactRef: scanOutputRef, outputArtifactVersion: "1.0.0", outputDigest: dg("f"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+      unresolvedFindingsRef: ledgerRef, unresolvedFindingsDigest: dg("e"),
+    });
+    store.appendCapabilityExecution(s5);
+    store.appendCapabilityExecution(s6);
+    const v7 = event({ sequence: 7, status: "started", capability: "solution-gate", executionRole: "formal_verdict", inputArtifactRef: scanOutputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("f"), consumedFindingsRef: ledgerRef, consumedFindingsDigest: dg("e"), executorAgent: "hermes", executorAdapter: "hermes-cli", bindingId: "binding-hermes-solution-gate-formal_verdict" });
+    const v8 = event({
+      ...v7, executionEventId: `${RUN}:capability:8:succeeded`, sequence: 8, status: "succeeded",
+      outputArtifactRef: `loop-artifact:v1:solution_review:sha256:${dg("7")}`,
+      outputArtifactVersion: "1.0.0", outputDigest: dg("7"),
+      gateResult: "FAIL", decisionDepth: "STANDARD", decisionStatus: "CONFIRMED",
+      decisionScopeId: `${RUN}:decision:1`, nextStepEligibility: "BLOCKED",
+      decisionDeltaRef: `loop-artifact:v1:solution_review:sha256:${dg("1")}`,
+      decisionDeltaDigest: dg("1"),
+    });
+    store.appendCapabilityExecution(v7);
+    store.appendCapabilityExecution(v8);
+
+    const gateManual = JSON.parse(JSON.stringify(manualBase)) as Record<string, unknown>;
+    const designRow = (gateManual.entries as Record<string, unknown>[]).find((e) => e.node === "solution-design")!;
+    designRow.status = "current";
+    designRow.artifact_path = "01-技术方案/req_技术方案.md";
+    designRow.version = "1.0.0";
+    designRow.digest = dg("d");
+    designRow.updated_at = nextTs();
+    designRow.source_event_ref = "01-技术方案/req_技术方案.md";
+    const gateRow = (gateManual.entries as Record<string, unknown>[]).find((e) => e.node === "solution-gate")!;
+    gateRow.gate_result = "FAIL";
+    gateRow.decision_depth = "STANDARD";
+    gateRow.decision_status = "CONFIRMED";
+    writeManualManifest(libraryDir, gateManual);
+    ok(projectLoopManifest(request).kind === "PUBLISHED", "gate reconciled-domain baseline publishes");
+
+    rewriteTampered((doc) => {
+      const gate = (doc.entries as Record<string, unknown>[]).find((e) => e.node === "solution-gate")!;
+      gate.gate_result = "PASS";
+    });
+    expectStop(
+      projectLoopManifest(request),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "forged adjudication slot in the reconciled domain stops (probe9 twin)",
+    );
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ===========================================================================
+console.log("G5-T2-R2 rework — branch-2 write side keeps the manual face, propagates status only (R2-B1 write side)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r2-b1w-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const intakeRef = `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`;
+    const e1 = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a") });
+    const e2 = event({
+      ...e1, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: intakeRef, outputArtifactVersion: "1.0.0", outputDigest: dg("c"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(e1);
+    store.appendCapabilityExecution(e2);
+    materializeProducerRevision(store, REQ, RUN, e2, () => nextTs());
+    const manualBase: Record<string, unknown> = {
+      schema_version: LOOP_MANIFEST_SCHEMA_VERSION, requirement_id: REQ, title: "R2B1写侧",
+      publish_seq: 1, projected_through: "MANUAL", updated_at: nextTs(),
+      depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "intake-init", required_depth: "STANDARD" },
+      entries: [
+        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0", digest: dg("c"), updated_at: "2020-01-01T00:00:00Z", source_event_ref: "00-需求资料/req_需求摘要.md" },
+        { node: "solution-design", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "solution-gate", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "task-planning", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "implementation", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "code-review", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "knowledge-sync", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+      ],
+      finding_index: [], declaration_log: [], corrections: [], repair_records: [],
+    };
+    writeManualManifest(libraryDir, manualBase);
+    projectLoopManifest(request); // takeover-B, cursor=2
+
+    // A design tail triggers a publication in which the intake row is
+    // branch-2 (events ≤ cursor only): its manual face must survive.
+    const designRef = `loop-artifact:v1:technical_design:sha256:${dg("d")}`;
+    const d3 = event({ sequence: 3, status: "started", capability: "solution-design", inputArtifactRef: intakeRef, inputArtifactVersion: "1.0.0", inputDigest: dg("c") });
+    const d4 = event({
+      ...d3, executionEventId: `${RUN}:capability:4:succeeded`, sequence: 4, status: "succeeded",
+      outputArtifactRef: designRef, outputArtifactVersion: "1.0.0", outputDigest: dg("d"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(d3);
+    store.appendCapabilityExecution(d4);
+    materializeProducerRevision(store, REQ, RUN, d4, () => nextTs());
+
+    const outcome = projectLoopManifest(request);
+    ok(outcome.kind === "PUBLISHED", `mixed publish (${JSON.stringify(outcome)})`);
+    const state = parseRubyYaml(readManifestText(libraryDir));
+    const intake = (state.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
+    const design = (state.entries as Record<string, unknown>[]).find((e) => e.node === "solution-design")!;
+    ok(intake.artifact_path === "00-需求资料/req_需求摘要.md", `branch-2 keeps the manual path (${String(intake.artifact_path)})`);
+    ok(intake.updated_at === "2020-01-01T00:00:00Z", "branch-2 keeps the manual updated_at");
+    ok(intake.source_event_ref === "00-需求资料/req_需求摘要.md", "branch-2 keeps the manual source_event_ref");
+    ok(!("execution" in intake), "branch-2 never grows a runtime execution slot");
+    ok(digestOf(intake) === dg("c") && statusOf(design) === "current" && digestOf(design) === dg("d"),
+      "branch-2 digest preserved while branch-3 runtime-authored design lands");
+    ok(projectLoopManifest(request).kind === "NO_OP", "replay after mixed publish is NO_OP");
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function digestOf(entry: Record<string, unknown>): unknown {
+  return entry.digest;
+}
+function statusOf(entry: Record<string, unknown>): unknown {
+  return entry.status;
+}
+
+// ===========================================================================
+console.log("G5-T2-R2 rework — real publisher shape without a corrections key (R2-B2)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r2-b2-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    // REAL publisher shape: 12 top-level keys, NO corrections key at all.
+    const realShape: Record<string, unknown> = {
+      schema_version: LOOP_MANIFEST_SCHEMA_VERSION, requirement_id: REQ, title: "真实形态",
+      publish_seq: 1, projected_through: "MANUAL", updated_at: nextTs(),
+      depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "intake-init", required_depth: "STANDARD" },
+      entries: [
+        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0", digest: dg("b"), updated_at: nextTs(), source_event_ref: "00-需求资料/req_需求摘要.md" },
+        { node: "solution-design", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "solution-gate", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "task-planning", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "implementation", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "code-review", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "knowledge-sync", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+      ],
+      finding_index: [], declaration_log: [], repair_records: [],
+    };
+    writeManualManifest(libraryDir, realShape);
+    const before = parseRubyYaml(readManifestText(libraryDir));
+    ok(!("corrections" in before), "fixture really omits the corrections key");
+
+    // The R2-B2 crash was an uncaught TypeError on load — any structured
+    // outcome (PUBLISHED/STOP) proves the crash is gone.
+    const outcome = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+    ok(outcome.kind === "PUBLISHED", `real-shape takeover-A loads and publishes (${JSON.stringify(outcome)})`);
+
+    const after = parseRubyYaml(readManifestText(libraryDir));
+    ok(!("corrections" in after), "absent-means-absent: the key stays absent after republication");
+    ok(projectLoopManifest(request).kind === "NO_OP", "real-shape replay is NO_OP");
+
+    // An explicit empty corrections key also round-trips (both legal shapes).
+    const withEmpty = { ...realShape, corrections: [] };
+    const dir2 = join(root, "library", `${REQ}-empty`);
+    mkdirSync(dir2, { recursive: true });
+    writeManualManifest(dir2, withEmpty);
+    const outcome2 = projectLoopManifest({ ...request, libraryDir: dir2, takeoverAcceptedAt: nextTs() });
+    ok(outcome2.kind === "PUBLISHED", `explicit-empty shape publishes (${JSON.stringify(outcome2)})`);
+    const after2 = parseRubyYaml(readFileSync(join(dir2, "manifest.md"), "utf8"));
+    ok("corrections" in after2, "explicit key stays explicit (never dropped)");
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\ng5t2: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
