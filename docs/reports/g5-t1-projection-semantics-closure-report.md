@@ -42,5 +42,5 @@
 
 ## 5. 治理状态
 
-- Control Plane STATE 随本收口更新 `source_refs.product_commit → a5ea687`（分支 + PR 合 main）；`route_state`/`active_work`/`next_transition`（G5_D09003_COMPLETION_REVIEW）与 [G5_MANIFEST_PROJECTION] 授权不变。
+- Control Plane STATE 随本收口更新 `source_refs.product_commit → 5f2c46c`（分支 + PR 合 main）——`source_refs` 为收口时刻产品仓 tip 的快照，本报告的合并提交（PR #146）落在其中，故该值不等于编码依据 SHA；编码依据仍为冻结稿 v1.7.0 @ `a5ea687`。`route_state`/`active_work`/`next_transition`（G5_D09003_COMPLETION_REVIEW）与 [G5_MANIFEST_PROJECTION] 授权不变。
 - 边界保持：未实施 T2；未触碰 intake.manifest.json、手动发布器、Skill 面、shadow 路径、业务仓、真实 CLI；G6/run8/C03-E 完成判断/C05、D091 业务收编仍不在授权范围。
