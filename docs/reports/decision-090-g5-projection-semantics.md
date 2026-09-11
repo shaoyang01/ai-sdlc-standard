@@ -1,7 +1,8 @@
 # G5-T1 投影语义冻结稿：journal / finding store → manifest.md 投影协议实例化
 
-> Version: 1.7.0（R7 评审 R7-H1/R7-H2 修正版；SEMANTICS_FREEZE 候选——Current User / 复审确认后冻结为 G5-T2 编码依据）
-> Date: 2026-09-09
+> Version: 1.8.0（T2-R1 评审修正配套的语义补全版；SEMANTICS_FREEZE 候选——Current User / 复审确认后冻结为 G5-T2 编码依据）
+> Date: 2026-09-11
+> v1.7.0 → v1.8.0: 按 [G5-T2-R1](/tmp/g5-t2-review-r1/.review-tmp/G5-T2-REVIEW-R1.md) 修正边界落库的最小语义补全——(1) **要求档位独立复算基值的持久落点**：`baseline` 增第二锚 `required_depth_at_takeover`（接管完成时 manifest 的 `required_depth` 持久值）；断言 D-b 基值由此锚经 ESCALATED 归约独立复算，消除"以被校验 manifest 自身为基值"的自引用（RC2-1）；(2) **B 承接域前缀校验三分支细则**（§8.3）：节点无事件 → 手动域自洽；事件全部 ≤ takeover_cursor → 按 §7.1 跨面归一化比对（`updated_at`/`source_event_ref`/`execution` 不做 runtime 形态要求，承接行 B3 原样保留手动形态）；事件落入 (cursor, C] → journal 严格比对；(3) **paired 行交叉绑定解析细则**（§4.2(b)）：经 `map.findings.runtime_id` 解析 store 行（manual_id 不得直查 store），比较域按 §7.1 归一化。实现侧五项阻塞（RC3-1/RC1-1/RC4-1/RC2-1/RC1-2）修复以本版为编码依据。
 > v1.6.0 → v1.7.0: 按 [G5-T1-REVIEW-R7](/tmp/g5-t1-review-r7/.review-tmp/G5-T1-REVIEW-R7.md) 修订——(1) R7-H1 持久容器：`logical_identity_map` 由单数组改为**对象三分区** `findings/revisions/closures`（数组无法承载独立 revision 对应的矛盾消除，D-19）；(2) R7-H1 未配对行：`manual_id/runtime_id` 允许 null（至少一侧非空），W2 类真实承接行逐行登记为 `source: manual` 未配对行，A/B 初始化填充义务落库（D-20）；(3) R7-H1 承接基线与重入：`baseline.manifest_digest_at_takeover` 时点锚 + §8.5 六步重放函数（承接状态持久于 manifest/provenance 自证覆盖内，重建 = 读当前文件 + cursor 后 tail，无需独立快照，D-19）；(4) R7-H1 RESOLVED 跨面：废止 `closure_bound_revision_id` 字面比较，改为 `map.closures` 解析函数（零解/多解 STOP），`impl-fixed` 哨兵语义落库（D-21）；(5) R7-H1 非 scan 定位：双向 locator（manual {artifact_path, index} ↔ runtime {source_capability, producer_execution_id, store_sequence}）+ 唯一性不变量（D-22）；(6) R7-H1 谓词/时点：eligibility 四条件谓词落库，时间域统一为事件时点（D-23）；(7) R7-H2 depth parity：拆为「裁决档位断言」与「要求档位断言」双断言，decisionDepth 与 required_depth 不再作同维比较，12 合法场景反例（CONFIRMED 降持 / UNKNOWN null）消除（D-24）；(8) S1：v1.6.0 删减的全部表格按 v1.5.0 基线恢复，正文自含、废止"同 v1.4.0"自指。
 > v1.5.0 → v1.6.0: 按 [G5-T1-REVIEW-R6](/tmp/g5-t1-review-r6/.review-tmp/G5-T1-REVIEW-R6.md) R6-H2 六子项修订——版本边界三态互斥（D-15）、per-row 来源标记（D-16）、mapped 行权威切换（D-17）、非 scan 不强求 Ledger（D-18）。
 > v1.4.0 → v1.5.0: R5-H1 formal failed 裁决槽保持；R5-H2 `projection_provenance` 键缺失不判损坏。
@@ -56,6 +57,7 @@ projection_provenance:            # §8.0 冻结 schema；键不存在 = 接管�
   takeover_cursor: <int>          # 接管时 journal 末序号；A=0；B=末序号
   baseline:
     manifest_digest_at_takeover: 'sha256:<hex>'   # 接管完成时 manifest self-digest（时点锚）
+    required_depth_at_takeover: <LIGHT|STANDARD|DEEP>   # 接管完成时的 required_depth 持久值（断言 D-b 独立复算基值，v1.8.0）
   logical_identity_map:           # 对象三分区（D-19）；行形态与不变量见 §7.2/§8.0
     findings:                     # finding 身份对应行
     - manual_id: <str|null>       # 未配对 runtime 行为 null
@@ -207,7 +209,7 @@ YAML 解析失败；self-digest 校验失败（canonical 序列化 = 发布器 `
    2. **状态一致 → 投影字段整行交叉绑定**：status 一致时按 §3.4 生成期望行逐字段比对（RESOLVED 绑定复验者/证据/revision；ACCEPTED 绑定接受者/证据，`closure_bound_revision_id` 不参与），漂移 → STOP；
    3. **合法落后**：索引 OPEN、权威 RESOLVED/ACCEPTED_RISK、依据有效、除生命周期新增字段外无其他漂移 → 列入第 3 级追平；未知/反向/无依据 → STOP。
 
-**`projection_provenance` 参与校验（D-16/D-19 域分离）**：已接管时，findingIndex 逐行经 `map.findings` 对应行判定域别——对应行 `source: manual` 且 `runtime_id: null`（未配对承接行）→ **手动自洽校验**（不套 runtime store 行）；对应行已配对（`runtime_id` 非空）或 `source: runtime` → **store 交叉绑定校验**（已知映射的同一行迁移按 D-17 权威切换规则，不按集合差 STOP）。未接管 → 全行按 store 交叉绑定校验。两域不得混判。
+**`projection_provenance` 参与校验（D-16/D-19 域分离；v1.8.0 paired 解析细则）**：已接管时，findingIndex 逐行经 `map.findings` 对应行判定域别——对应行 `source: manual` 且 `runtime_id: null`（未配对承接行）→ **手动自洽校验**（不套 runtime store 行）；对应行已配对（`runtime_id` 非空）或 `source: runtime` → **store 交叉绑定校验**：runtime 行以 `map.findings.runtime_id` 解析（manual_id 不得直查 store），比较域按 §7.1 归一化（细则见 §8.3）；已知映射的同一行迁移按 D-17 权威切换规则，不按集合差 STOP。未接管 → 全行按 store 交叉绑定校验。两域不得混判。
 
 ### 4.3 第 3 级 待投影 → 幂等追平
 
@@ -239,7 +241,7 @@ YAML 解析失败；self-digest 校验失败（canonical 序列化 = 发布器 `
 | D-16 | **per-row 来源标记**：`map.findings` 逐行 `source: manual\|runtime`；混合权威期校验按此分域 | R6-H2 落库；v1.7.0 纳入正式 schema（§8.0） |
 | D-17 | **mapped 行权威切换**：已配对行 OPEN→RESOLVED/ACCEPTED 按 §6.2.3 更新同一行（不按集合差 STOP），权威手动→runtime；迁移后重放 no-op | R6-H2 落库；R7-c CLOSED（已知映射同一行操作） |
 | D-18 | **非 scan 来源定位**：非 scan finding 不走 Ledger 链，按 store `source_capability` + `sequence` 定位；不因无 Ledger STOP | R6-H2 落库；R7-d 入口子项 CLOSED |
-| D-19 | **provenance 容器三分区 + 承接基线**：`logical_identity_map` = 对象 `{findings, revisions, closures}`（单数组无法承载独立 revision 对应）；`baseline.manifest_digest_at_takeover` 记录接管时点锚；`schema: 'g5-projection-provenance/1'` 为已接管格式判定锚；承接状态持久于 manifest+provenance 自证覆盖内，重放按 §8.5（读当前 + tail），不要求独立快照 | R7-H1 容器矛盾/重入修正 |
+| D-19 | **provenance 容器三分区 + 承接基线**：`logical_identity_map` = 对象 `{findings, revisions, closures}`（单数组无法承载独立 revision 对应）；`baseline.manifest_digest_at_takeover` 记录接管时点锚；`baseline.required_depth_at_takeover` 记录接管时 required_depth 持久值（断言 D-b 独立复算基值，v1.8.0）；`schema: 'g5-projection-provenance/1'` 为已接管格式判定锚；承接状态持久于 manifest+provenance 自证覆盖内，重放按 §8.5（读当前 + tail），不要求独立快照 | R7-H1 容器矛盾/重入修正 |
 | D-20 | **未配对行合法形态 + 初始化填充义务**：`findings` 行 `manual_id/runtime_id` 允许 null（**至少一侧非空**，双 null = 损坏）；A2/B3 接管时必须逐行登记承接面全部 finding（`source: manual`、对侧 null）与已存在 revision（`revisions` 分区）；禁止空 map 承接非空 findingIndex | R7-H1 W2 两行/零映射反例修正 |
 | D-21 | **RESOLVED 闭包对应函数**：RESOLVED 跨面**废止** `closure_bound_revision_id` 字面比较；改经 `map.closures` 行解析——manual 值（版本标签或 `impl-fixed` 哨兵）唯一解析到 runtime durable revision ID，与 `resolved_by_revision_id` 相等 → PASS；零解/多解 → STOP；两面 `closure_evidence_digest` 仍字面相等（同一物理证据）。`impl-fixed` 哨兵语义 = 修复发生于同一实现批次（P 真实形态），对应行以 resolution 证据 digest 锚定 | R7-H1 RESOLVED 修正 |
 | D-22 | **发现位置双向 locator**：`first_seen.manual_locator = {artifact_path, finding_index}`（发现产物内登记序）、`first_seen.runtime_locator = {source_capability, producer_execution_id, store_sequence}`；同一 locator 值至多出现在一行（唯一性不变量）；对应建立时任一侧无法唯一定位 → STOP | R7-H1 非 scan 跨面定位修正 |
@@ -364,7 +366,7 @@ YAML 解析失败；self-digest 校验失败（canonical 序列化 = 发布器 `
 
 `decisionDepth = null` 而状态非 UNKNOWN → STOP；`decisionDepth > required_depth` → STOP。
 
-**断言 D-b 要求档位**：`manifest.depth.required_depth` 独立复算 = init(`initial_depth_basis`, `requested_depth`) 经时点 C 内 ESCALATED 事件按 §3.3 归约的结果。CONFIRMED 降持只动 `decision_depth` 不动 `required_depth`；UNKNOWN null 不覆盖 `required_depth`。复算不等 → STOP。
+**断言 D-b 要求档位**：`manifest.depth.required_depth` 独立复算 = **`baseline.required_depth_at_takeover`（接管基值，v1.8.0；未接管面 = init(`initial_depth_basis`, `requested_depth`)）** 经时点 C 内 ESCALATED 事件按 §3.3 归约的结果。比较不以被校验 manifest 自身为基值（RC2-1）。CONFIRMED 降持只动 `decision_depth` 不动 `required_depth`；UNKNOWN null 不覆盖 `required_depth`。复算不等 → STOP。
 
 两断言独立求值、独立报告；D-a 漂移与 D-b 漂移分别可检（变异 Gate `decisionDepth` 与变异 manifest `required_depth` 必须分别变红）。
 
@@ -379,6 +381,7 @@ accepted_at: <ISO-8601>
 takeover_cursor: <int>                          # A=0；B=接管时 journal 末序号
 baseline:
   manifest_digest_at_takeover: 'sha256:<hex>'   # 接管完成那次发布的 manifest self-digest（时点锚）
+  required_depth_at_takeover: <LIGHT|STANDARD|DEEP>   # 接管完成时的 required_depth 持久值（断言 D-b 独立复算基值）
 logical_identity_map:                            # 对象三分区；形态/不变量见 §7.2
   findings: []
   revisions: []
@@ -408,11 +411,14 @@ logical_identity_map:                            # 对象三分区；形态/不�
 
 接管 B 的对账函数即 §7.1 的归一化比较（方向反转：journal 推导 vs 手动现存），同一实现两用。
 
-### 8.3 接管后的常规校验适配（保持）
+### 8.3 接管后的常规校验适配（v1.8.0 三分支细则）
 
-- **前缀校验**：cursor = B3 末序号；前缀=已 fold 事件——校验按 fold 后状态与 manifest 逐字段比对（归一化规则同 §7.1）。rehash 篡改 → 归一化后不等 → STOP ✓。
-- **findingIndex 校验**：未配对手动行手动自洽 + runtime 行交叉绑定；无该键 → 全行按 store 交叉绑定 ✓。
-- **后续差量**：尾段投影（fold）更新对应节点行 → 前缀校验按 fold 后状态比对 → 差量追平 ✓。
+- **前缀校验三分支**（按节点、按 journal 事件域判定；时点 C = `projected_through`）：
+  1. **节点无前缀事件**（该节点无 `sequence ≤ C` 的终态事件）→ 手动域行：仅手动自洽，不做 journal 重推导；
+  2. **节点事件全部 ≤ `takeover_cursor`**（承接对账域，尾段从未触碰）→ 承接行保留 B3 手动形态，按 **§7.1 跨面归一化**比对：`status`/`digest`/gate 三扩展字面、`artifact_path` 按 D-7 语义键；**`updated_at`/`source_event_ref`/`execution`/`version` 不做 runtime 形态要求**（承接行 B3 原样保留手动形态直至该行被尾段更新）；
+  3. **节点有事件 ∈ (cursor, C]**（尾段更新域）→ 该行已被 runtime 权威覆盖，按 §4.2(a) journal 严格重推导比对。
+- **findingIndex 校验**：未配对手动行（`source: manual` 且 `runtime_id: null`）按手动自洽；**已配对行经 `map.findings.runtime_id` 解析 store 行后交叉绑定**（比较域按 §7.1 归一化：`status` 与状态适用的 `closure_evidence_digest` 字面、`discovered_at` == store `source_capability`；`finding_id`/`source_revision`/`evidence_ref`/`closed_by` 面内自洽、跨面经映射，不字面比较）——manual_id 不得直查 store；未接管 → 全行按 store 交叉绑定。
+- **后续差量**：尾段投影（fold）更新对应节点行 → 前缀校验按分支 3 严格比对 → 差量追平 ✓。
 
 ### 8.4 混合权威期（保持）
 
@@ -425,7 +431,8 @@ logical_identity_map:                            # 对象三分区；形态/不�
 **承接状态的持久化位置（不要求独立快照）**：
 - 手动域内容（承接 entries 行、depth 块、findingIndex 手动行）持久于 **manifest 自身**，受 self-digest 保护；未被 runtime 权威覆盖的手动行在接管后保持原值；
 - 跨面映射与未配对登记持久于 **`projection_provenance` 三分区**，同受 self-digest 保护（D-11）；
-- `baseline.manifest_digest_at_takeover` 记录接管完成时点锚（审计用；不参与日常校验）。
+- `baseline.manifest_digest_at_takeover` 记录接管完成时点锚（审计用；不参与日常校验）；
+- `baseline.required_depth_at_takeover` 记录接管完成时的 `required_depth`（A 模式 = init 值；B 模式 = B2 对账通过值）——断言 D-b 的独立复算基值，防篡改自引用（v1.8.0）。
 
 **进程重启后的重放函数（唯一、确定；六步）**：
 
@@ -447,6 +454,7 @@ A 模式（cursor=0）：步骤 5 前缀为空、无 tail 事件，重放退化�
 - wrong source / wrong evidence / wrong repair revision 分别 STOP；RESOLVED 正向对应通过、零解/多解 STOP；D-2 仅 ACCEPTED；
 - depth：12 全组合 + LIGHT→ESCALATED DEEP→重建→CONFIRMED LIGHT 链；变异 Gate `decisionDepth` 与变异 manifest `required_depth` 分别变红（D-24 双断言独立可检）；多 scope、首轮无 verdict、formal failed 保留上一裁决；
 - 回归保持：原版本降级反例（R6）、坏 source/map、超前游标、诚实 formal failed（R5-H1）、原四 rehash（R4-H2）不得回退。
+- T2-R1 修正核验（v1.8.0）：任一失效边登记后"发布 → 重放 NO_OP"一致（RC3-1，含独立登记反向变体）；时钟同毫秒多事件在游标跨界时 STOP、游标越过后发布/重放一致（RC1-1）；takeover-B 一致承接（含真实中文基名）PUBLISHED 且重放 NO_OP，分叉/歧义保持 STOP（RC4-1）；`required_depth`/`execution` 额外键篡改 STOP（RC2-1，基值 = `baseline.required_depth_at_takeover`）；entries 缺行与 finding_index 重复行按 §2.1/§4.2(b)1 明文 `MANIFEST_CORRUPT_STOP`（RC1-2）。
 
 ## 10. 非阻塞建议吸收记录
 

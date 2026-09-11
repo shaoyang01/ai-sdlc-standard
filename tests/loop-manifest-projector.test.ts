@@ -510,6 +510,9 @@ console.log("G5-T2 manifest projector — finding registration, lag alignment, D
     store.appendCapabilityExecution(started);
     store.appendCapabilityExecution(succeeded);
     materializeProducerRevision(store, REQ, RUN, succeeded, () => nextTs());
+    // Gateway-registration twin shape (D-10): the registering finding shares
+    // the terminal event's createdAt (same transaction clock).
+    const designSucceededCreatedAt = succeeded.createdAt;
 
     const tailOutcome = projectLoopManifest(request);
     ok(tailOutcome.kind === "PUBLISHED", `design tail published (${JSON.stringify(tailOutcome)})`);
@@ -528,7 +531,7 @@ console.log("G5-T2 manifest projector — finding registration, lag alignment, D
       evidenceRef: `loop-artifact:v1:technical_design:sha256:${dg("d")}`,
       evidenceDigest: dg("d"),
       earliestAffectedNodeId: "solution-design",
-      createdAt: nextTs(),
+      createdAt: designSucceededCreatedAt,
     });
     store.appendFinding(finding);
 
@@ -621,6 +624,344 @@ console.log("G5-T2 manifest projector — depth reduction table (freeze §3.3, 1
   const foldedConfirmed = foldEventOntoEntry(initEntryForTest("solution-gate"), confirmedRow, undefined, REQ);
   ok(foldedConfirmed.decision_depth === "LIGHT" && foldedConfirmed.decision_status === "CONFIRMED",
     "CONFIRMED verdict folds its concrete depth (may legally sit below required)");
+}
+
+
+// ===========================================================================
+console.log("G5-T2-R1 rework — invalidation propagation stays write/read consistent (RC3-1)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r1-rc3-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    writeManualManifest(libraryDir, manualInitBase("RC3需求", []));
+    projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const designRef = `loop-artifact:v1:technical_design:sha256:${dg("d")}`;
+    const intakeStarted = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a") });
+    const intakeSucceeded = event({
+      ...intakeStarted, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`, outputArtifactVersion: "1.0.0",
+      outputDigest: dg("c"), gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(intakeStarted);
+    store.appendCapabilityExecution(intakeSucceeded);
+    materializeProducerRevision(store, REQ, RUN, intakeSucceeded, () => nextTs());
+    const designStarted = event({ sequence: 3, status: "started", capability: "solution-design", inputArtifactRef: `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`, inputArtifactVersion: "1.0.0", inputDigest: dg("c") });
+    const designSucceeded = event({
+      ...designStarted, executionEventId: `${RUN}:capability:4:succeeded`, sequence: 4, status: "succeeded",
+      outputArtifactRef: designRef, outputArtifactVersion: "1.0.0", outputDigest: dg("d"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(designStarted);
+    store.appendCapabilityExecution(designSucceeded);
+    materializeProducerRevision(store, REQ, RUN, designSucceeded, () => nextTs());
+
+    ok(projectLoopManifest(request).kind === "PUBLISHED", "design tail published (design current)");
+    ok(projectLoopManifest(request).kind === "NO_OP", "clean replay NO_OP before the edge");
+
+    // Register an invalidating finding AFTER the publish (probe5-C reverse):
+    // the append-time invalidation marks the design revision STALE in the
+    // store while the manifest still says current.
+    const finding = createLoopFinding({
+      runId: RUN, requirementId: REQ, sequence: 1,
+      sourceCapability: "solution-design", sourceRevisionId: `${RUN}:revision:solution-design:1`,
+      causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:solution-design:1`,
+      severity: "MEDIUM", category: "SOLUTION",
+      evidenceRef: designRef, evidenceDigest: dg("d"),
+      earliestAffectedNodeId: "solution-design",
+      createdAt: designSucceeded.createdAt,
+    });
+    store.appendFinding(finding);
+
+    const propOutcome = projectLoopManifest(request);
+    ok(propOutcome.kind === "PUBLISHED", `edge propagates through publication (${JSON.stringify(propOutcome)})`);
+    let state = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir))));
+    const designEntry = state.entries.find((e: Record<string, unknown>) => e.node === "solution-design");
+    ok(designEntry.status === "stale", `design entry carries the propagated staleness (${String(designEntry.status)})`);
+
+    // The write/read seam: replay must now agree with the publication (NO_OP),
+    // and keep agreeing — the projector never refuses its own release.
+    ok(projectLoopManifest(request).kind === "NO_OP", "replay after edge propagation is NO_OP");
+    ok(projectLoopManifest(request).kind === "NO_OP", "second replay stays NO_OP (permanent deadlock fixed)");
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ===========================================================================
+console.log("G5-T2-R1 rework — clock-collision invalidation refuses instead of guessing (RC1-1)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r1-rc1a-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    writeManualManifest(libraryDir, manualInitBase("碰撞需求", []));
+    projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+
+    // A legal journal shape: several terminal events share ONE createdAt, and
+    // the finding shares it too (probe4 form; timestamps stay non-decreasing
+    // per the chain validator). The registering event is undecidable — the
+    // projector must refuse, never guess.
+    const e1Ts = nextTs();
+    const sharedTs = nextTs();
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const intakeRef = `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`;
+    const e1 = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a"), createdAt: e1Ts });
+    const e2 = event({
+      ...e1, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: intakeRef, outputArtifactVersion: "1.0.0", outputDigest: dg("c"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE", createdAt: sharedTs,
+    });
+    const e3 = event({ sequence: 3, status: "started", capability: "solution-design", inputArtifactRef: intakeRef, inputArtifactVersion: "1.0.0", inputDigest: dg("c"), createdAt: sharedTs });
+    const e4 = event({
+      ...e3, executionEventId: `${RUN}:capability:4:succeeded`, sequence: 4, status: "succeeded",
+      outputArtifactRef: `loop-artifact:v1:technical_design:sha256:${dg("d")}`, outputArtifactVersion: "1.0.0",
+      outputDigest: dg("d"), gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE", createdAt: sharedTs,
+    });
+    store.appendCapabilityExecution(e1);
+    store.appendCapabilityExecution(e2);
+    materializeProducerRevision(store, REQ, RUN, e2, () => nextTs());
+    store.appendCapabilityExecution(e3);
+    store.appendCapabilityExecution(e4);
+    materializeProducerRevision(store, REQ, RUN, e4, () => nextTs());
+    const finding = createLoopFinding({
+      runId: RUN, requirementId: REQ, sequence: 1,
+      sourceCapability: "solution-design", sourceRevisionId: `${RUN}:revision:solution-design:1`,
+      causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:solution-design:1`,
+      severity: "MEDIUM", category: "SOLUTION",
+      evidenceRef: `loop-artifact:v1:technical_design:sha256:${dg("d")}`, evidenceDigest: dg("d"),
+      earliestAffectedNodeId: "solution-design", createdAt: sharedTs,
+    });
+    store.appendFinding(finding);
+
+    expectStop(
+      projectLoopManifest(request),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "same-instant multi-candidate invalidation refuses (probe4 trajectory now stops)",
+    );
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ===========================================================================
+console.log("G5-T2-R1 rework — depth/extra-key/missing-row/duplicate-row tampers (RC2-1/RC1-2)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r1-rc2-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    writeManualManifest(libraryDir, manualInitBase("篡改矩阵", []));
+    projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const intakeRef = `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`;
+    const e1 = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a") });
+    const e2 = event({
+      ...e1, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: intakeRef, outputArtifactVersion: "1.0.0", outputDigest: dg("c"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(e1);
+    store.appendCapabilityExecution(e2);
+    materializeProducerRevision(store, REQ, RUN, e2, () => nextTs());
+    ok(projectLoopManifest(request).kind === "PUBLISHED", "baseline published");
+
+    const rewriteTampered = (mutate: (doc: Record<string, unknown>) => void): void => {
+      const doc = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+      mutate(doc);
+      const resealed = sealManifest(doc as never);
+      writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...doc, manifest_digest: resealed.manifest_digest }), "utf8");
+    };
+
+    rewriteTampered((doc) => { (doc.depth as Record<string, unknown>).required_depth = "DEEP"; });
+    expectStop(
+      projectLoopManifest(request),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "depth.required_depth tamper recomputed from the takeover baseline is caught (RC2-1)",
+    );
+
+    rewriteTampered((doc) => {
+      const entry = (doc.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
+      entry.execution = { status: "succeeded", execution_event_ref: "evt", injected: "x" };
+    });
+    expectStop(
+      projectLoopManifest(request),
+      "MANIFEST_CORRUPT_STOP",
+      "execution-slot extra key injection fails closed (RC2-1)",
+    );
+
+    rewriteTampered((doc) => {
+      doc.entries = (doc.entries as Record<string, unknown>[]).filter((e) => e.node !== "knowledge-sync");
+    });
+    expectStop(
+      projectLoopManifest(request),
+      "MANIFEST_CORRUPT_STOP",
+      "missing entries row is a format violation, never silently accepted (RC1-2)",
+    );
+
+    writeManualManifest(libraryDir, manualInitBase("重复行", [
+      {
+        finding_id: "REQ-F01", discovered_at: "solution-design", root_cause_category: "SOLUTION",
+        earliest_affected_node_id: "solution-design", source_revision: null,
+        evidence_ref: "01-技术方案/x.md#f1", status: "OPEN",
+        closed_by: null, closure_evidence_ref: null, closure_evidence_digest: null, closure_bound_revision_id: null,
+      },
+      {
+        finding_id: "REQ-F01", discovered_at: "solution-design", root_cause_category: "SOLUTION",
+        earliest_affected_node_id: "solution-design", source_revision: null,
+        evidence_ref: "01-技术方案/x.md#f1", status: "OPEN",
+        closed_by: null, closure_evidence_ref: null, closure_evidence_digest: null, closure_bound_revision_id: null,
+      },
+    ]));
+    projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+    const doc2 = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+    doc2.finding_index = [doc2.finding_index as unknown[]][0]![0] === undefined ? [] : [
+      ...(doc2.finding_index as Record<string, unknown>[]),
+      ...(doc2.finding_index as Record<string, unknown>[]).slice(0, 1),
+    ];
+    const resealed2 = sealManifest(doc2 as never);
+    writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...doc2, manifest_digest: resealed2.manifest_digest }), "utf8");
+    expectStop(
+      projectLoopManifest(request),
+      "MANIFEST_CORRUPT_STOP",
+      "duplicate finding_index row reports MANIFEST_CORRUPT_STOP verbatim (RC1-2)",
+    );
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ===========================================================================
+console.log("G5-T2-R1 rework — takeover-B consistent takeover with REAL manual shapes (RC4-1)");
+{
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r1-rc4-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+
+    // Journal first: intake tail exists, so the takeover is mode B.
+    const inputRef = `loop-artifact:v1:requirement_summary:sha256:${dg("a")}`;
+    const intakeRef = `loop-artifact:v1:requirement_summary:sha256:${dg("c")}`;
+    const e1 = event({ sequence: 1, status: "started", inputArtifactRef: inputRef, inputArtifactVersion: "1.0.0", inputDigest: dg("a") });
+    const e2 = event({
+      ...e1, executionEventId: `${RUN}:capability:2:succeeded`, sequence: 2, status: "succeeded",
+      outputArtifactRef: intakeRef, outputArtifactVersion: "1.0.0", outputDigest: dg("c"),
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(e1);
+    store.appendCapabilityExecution(e2);
+    materializeProducerRevision(store, REQ, RUN, e2, () => nextTs());
+    const d3 = event({ sequence: 3, status: "started", capability: "solution-design", inputArtifactRef: intakeRef, inputArtifactVersion: "1.0.0", inputDigest: dg("c") });
+    const d4 = event({
+      ...d3, executionEventId: `${RUN}:capability:4:succeeded`, sequence: 4, status: "succeeded",
+      outputArtifactRef: `loop-artifact:v1:technical_design:sha256:${dg("d")}`, outputArtifactVersion: "1.0.0",
+      outputDigest: dg("d"), gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+    });
+    store.appendCapabilityExecution(d3);
+    store.appendCapabilityExecution(d4);
+    materializeProducerRevision(store, REQ, RUN, d4, () => nextTs());
+
+    // Manual manifest with the REAL Chinese basename (same directory segment,
+    // same digest — the D-7 face mapping exemption) plus a paired finding row.
+    const manualBase: Record<string, unknown> = {
+      schema_version: LOOP_MANIFEST_SCHEMA_VERSION, requirement_id: REQ, title: "真实形态需求",
+      publish_seq: 1, projected_through: "MANUAL", updated_at: nextTs(),
+      depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "intake-init", required_depth: "STANDARD" },
+      entries: [
+        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0", digest: dg("c"), updated_at: nextTs(), source_event_ref: "00-需求资料/req_需求摘要.md" },
+        { node: "solution-design", status: "current", artifact_path: "01-技术方案/req_技术方案.md", version: "1.0.1", digest: dg("d"), updated_at: nextTs(), source_event_ref: "01-技术方案/req_技术方案.md" },
+        { node: "solution-gate", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "task-planning", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "implementation", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "code-review", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        { node: "knowledge-sync", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+      ],
+      finding_index: [
+        {
+          finding_id: "REQ-F01", discovered_at: "solution-design", root_cause_category: "SOLUTION",
+          earliest_affected_node_id: "solution-design", source_revision: "solution-design@1.0.1",
+          evidence_ref: `loop-artifact:v1:technical_design:sha256:${dg("d")}`, status: "OPEN",
+          closed_by: null, closure_evidence_ref: null, closure_evidence_digest: null, closure_bound_revision_id: null,
+        },
+      ],
+      declaration_log: [], corrections: [], repair_records: [],
+    };
+    writeManualManifest(libraryDir, manualBase);
+
+    const bOutcome = projectLoopManifest(request);
+    ok(bOutcome.kind === "PUBLISHED" && bOutcome.tookOver, `takeover-B with real Chinese basename publishes (RC4-1(a); ${JSON.stringify(bOutcome)})`);
+    const bState = parseRubyYaml(readManifestText(libraryDir));
+    ok((bState.projection_provenance as Record<string, unknown>).mode === "manual-takeover-B", "mode B recorded");
+    ok(bState.projected_through === 4, "cursor advanced to the journal head at acceptance");
+
+    // Runtime twin of the manual finding (same evidence, same source node) so
+    // the takeover pairs REQ-F01 with a runtime row (D-17 paired domain).
+    const finding = createLoopFinding({
+      runId: RUN, requirementId: REQ, sequence: 1,
+      sourceCapability: "solution-design", sourceRevisionId: `${RUN}:revision:solution-design:1`,
+      causeKind: "REGRESSION", introducedByRevisionId: `${RUN}:revision:solution-design:1`,
+      severity: "MEDIUM", category: "SOLUTION",
+      evidenceRef: `loop-artifact:v1:technical_design:sha256:${dg("d")}`, evidenceDigest: dg("d"),
+      earliestAffectedNodeId: "solution-design", createdAt: d4.createdAt,
+    });
+    store.appendFinding(finding);
+
+    const pairedOutcome = projectLoopManifest(request);
+    ok(pairedOutcome.kind === "PUBLISHED", `paired runtime finding lands (${JSON.stringify(pairedOutcome)})`);
+
+    ok(projectLoopManifest(request).kind === "NO_OP", "paired takeover-B replay is NO_OP (RC4-1(b)/(c) fixed)");
+    ok(projectLoopManifest(request).kind === "NO_OP", "second paired replay stays NO_OP");
+
+    // Divergent manual digest still stops at B2 (probe6-F2 twin).
+    const divergentDir = join(root, "library", `${REQ}-div`);
+    mkdirSync(divergentDir, { recursive: true });
+    const divergentBase = JSON.parse(JSON.stringify(manualBase)) as Record<string, unknown>;
+    ((divergentBase.entries as Record<string, unknown>[])[0]! as Record<string, unknown>).digest = dg("9");
+    const divergentRequest = { store, runId: RUN, requirementId: REQ, libraryDir: divergentDir };
+    writeManualManifest(divergentDir, divergentBase);
+    expectStop(
+      projectLoopManifest(divergentRequest),
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      "divergent takeover-B still stops at B2 (probe6-F2 preserved)",
+    );
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
 }
 
 console.log(`\ng5t2: ${passed} passed, ${failed} failed`);

@@ -5,19 +5,28 @@
  * manifest self-digest (contract §6.2.1) is sha256 over exactly this
  * serialization, so every byte is normative.
  *
- * Behavior probed against the reference interpreter (byte-parity matrix lands
- * in G5-T5):
+ * Behavior verified against the reference interpreter for the REAL manifest
+ * data domain (G5-T2-R1 probe7: full projected manifest round-trip through
+ * Ruby 3.3.12 / Psych 5.1.2 is BYTE-IDENTICAL). Documented deviations on
+ * out-of-domain shapes exist and are intentionally deferred to the G5-T5
+ * parity matrix (17-shape table in G5-T2-REVIEW-R1 §3-RC-6(c)); the comments
+ * below state the ACTUAL emitter behavior, not the reference interpreter's:
  *   - document header `---`, mappings at 2-space indent steps
  *   - sequence items are indented AT their owning key's level (`- ` prefix)
  *   - null prints as an empty value (`key:`), not `null`
  *   - empty map `{}`, empty array `[]`
- *   - plain scalars whenever round-trip-safe; single quotes are the fallback
- *     (`'a: b'`, `'1.0'`, `'2026-09-09T10:00:00Z'`); double quotes only where
- *     single-quoted form is not representable (leading whitespace, tabs,
- *     control / non-BMP characters needing escapes)
+ *   - plain scalars whenever round-trip-safe; single quotes are the fallback;
+ *     double quotes only where single-quoted form is not representable
+ *     (leading whitespace, tabs, control / non-BMP characters)
  *   - strings that would re-parse as bool / null / int / float / timestamp /
  *     sexagesimal get quoted so the digest input stays type-stable
- *   - no line folding at any width (probed: 120-char scalar stays on one line)
+ *   - no line folding at any width (the reference folds long single-quoted
+ *     scalars — T5 matrix)
+ *   - known T5-matrix deviations vs the reference: control-char escape width
+ *     (`\x0001` vs `\x01`), emoji hex case (lowercase vs `\U0001F600`),
+ *     NEL/LS/PS emitted as raw bytes, `-`/`?`/`:` prefixes without a following
+ *     space stay plain, `y`/`n`/`1_000`/`1.` stay plain, `0o17`/`1e3`/
+ *     `12:99` get (over-)quoted, literal blocks for embedded newlines
  */
 
 export class LoopManifestYamlError extends Error {

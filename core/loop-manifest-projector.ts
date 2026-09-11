@@ -159,7 +159,11 @@ export type ProjectionProvenance = Readonly<{
   mode: "manual-takeover-A" | "manual-takeover-B";
   accepted_at: string;
   takeover_cursor: number;
-  baseline: Readonly<{ manifest_digest_at_takeover: string }>;
+  baseline: Readonly<{
+    manifest_digest_at_takeover: string;
+    /** v1.8.0 (RC2-1): assertion D-b's independent recomputation baseline. */
+    required_depth_at_takeover: string;
+  }>;
   logical_identity_map: ManifestIdentityMap;
 }>;
 
@@ -260,7 +264,10 @@ function provenanceToYamlMap(p: ProjectionProvenance): YamlValue {
     mode: p.mode,
     accepted_at: p.accepted_at,
     takeover_cursor: p.takeover_cursor,
-    baseline: { manifest_digest_at_takeover: p.baseline.manifest_digest_at_takeover },
+    baseline: {
+      manifest_digest_at_takeover: p.baseline.manifest_digest_at_takeover,
+      required_depth_at_takeover: p.baseline.required_depth_at_takeover,
+    },
     logical_identity_map: {
       findings: p.logical_identity_map.findings.map((f) => ({
         manual_id: f.manual_id,
@@ -324,11 +331,10 @@ function pathSemanticKey(relativePath: string, node: NodeCapabilityId): string {
   const normalized = relativePath.replace(/\\/g, "/");
   const dir = path.posix.dirname(normalized);
   const segment = dir === "." ? "" : dir;
-  const declared = NODE_DIRECTORY_SEGMENTS[node];
-  // The directory segment must agree with the node's frozen conversion row;
-  // basename differences (Chinese/English) are the D-7 face mapping exemption.
-  const basename = path.posix.basename(normalized);
-  return `${segment === declared ? segment : `${segment}!${declared}`}::${node}::${basename}`;
+  // Freeze §7.1 (D-7): the semantic key is (directory segment, capability) —
+  // basenames are the face mapping exemption and MUST NOT enter the key
+  // (RC4-1(a): real manual manifests carry Chinese basenames).
+  return `${segment}::${node}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -444,17 +450,27 @@ function terminalEventsOf(events: readonly LoopCapabilityExecutionEvent[]): read
 
 // ---------------------------------------------------------------------------
 // Invalidation timing (D-10): an edge's point = the registering terminal
-// event's sequence, recovered by same-transaction createdAt matching (findings
-// register inside the event's transaction). Zero or multiple matches are
-// refused — the gateway-bound domain is the projector's applicability domain.
+// event's sequence. The registering event is recovered by same-transaction
+// createdAt matching. A legal journal MAY hold several same-instant events
+// (clock collision) — createdAt equality is only a NECESSARY condition, so a
+// multi-candidate match cannot identify the registering event and the edge
+// point is undecidable: zero or multiple candidates MUST stop (fail-closed
+// per freeze §4.2(a)/§7.2 and the G5-T2-R1 RC1-1 correction boundary; the
+// write side and the replay side share this exact rule).
 // ---------------------------------------------------------------------------
 
-function registeringEvent(
+function registeringEventSequence(
   finding: LoopFinding,
   events: readonly LoopCapabilityExecutionEvent[],
-): LoopCapabilityExecutionEvent | undefined {
-  const matches = events.filter((e) => e.status !== "started" && e.createdAt === finding.createdAt);
-  return matches.length === 1 ? matches[0] : undefined;
+): number {
+  const candidates = events.filter((e) => e.status !== "started" && e.createdAt === finding.createdAt);
+  if (candidates.length !== 1) {
+    stop(
+      "JOURNAL_MANIFEST_MISMATCH_STOP",
+      `invalidation edge for finding ${finding.findingId}: ${candidates.length} candidate registering events share createdAt ${finding.createdAt} (clock collision is a legal journal shape — refusing instead of guessing, RC1-1)`,
+    );
+  }
+  return candidates[0]!.sequence;
 }
 
 /** r_k at C: the valid revision with the largest producer-event sequence ≤ C (freeze §4.2(a)). */
@@ -486,8 +502,7 @@ function isStaleAt(
     if (edge.revisionId !== revision.revisionId) return false;
     const finding = findings.find((f) => f.findingId === edge.findingId);
     if (finding === undefined) return false;
-    const event = registeringEvent(finding, events);
-    return event !== undefined && event.sequence <= sequenceAt;
+    return registeringEventSequence(finding, events) <= sequenceAt;
   });
 }
 
@@ -550,12 +565,21 @@ function validateProvenanceShape(value: unknown): ProjectionProvenance {
   if (p.mode === "manual-takeover-A" && p.takeover_cursor !== 0) {
     stop("MANIFEST_CORRUPT_STOP", "takeover-A cursor must be 0");
   }
+  const baseline = p.baseline;
   if (
-    p.baseline === null || typeof p.baseline !== "object" ||
-    typeof (p.baseline as { manifest_digest_at_takeover?: unknown }).manifest_digest_at_takeover !== "string" ||
-    !(p.baseline as { manifest_digest_at_takeover: string }).manifest_digest_at_takeover.startsWith("sha256:")
+    baseline === null || typeof baseline !== "object" ||
+    typeof (baseline as { manifest_digest_at_takeover?: unknown }).manifest_digest_at_takeover !== "string" ||
+    !(baseline as { manifest_digest_at_takeover: string }).manifest_digest_at_takeover.startsWith("sha256:")
   ) {
     stop("MANIFEST_CORRUPT_STOP", "provenance baseline anchor missing");
+  }
+  if (
+    typeof (baseline as { required_depth_at_takeover?: unknown }).required_depth_at_takeover !== "string" ||
+    !["LIGHT", "STANDARD", "DEEP"].includes(
+      (baseline as { required_depth_at_takeover: string }).required_depth_at_takeover,
+    )
+  ) {
+    stop("MANIFEST_CORRUPT_STOP", "provenance baseline required_depth_at_takeover must be LIGHT|STANDARD|DEEP (v1.8.0)");
   }
   const map = p.logical_identity_map;
   if (map === null || typeof map !== "object") stop("MANIFEST_CORRUPT_STOP", "logical_identity_map missing");
@@ -631,6 +655,43 @@ function validateProvenanceShape(value: unknown): ProjectionProvenance {
 // Document loading (freeze §4.1 three mutually exclusive states)
 // ---------------------------------------------------------------------------
 
+/**
+ * Freeze §2.2 frozen row schema: the seven base keys, the adjudication triple
+ * (solution-gate rows that carry adjudication facts), and the runtime-only
+ * execution slot. Any extra key is a format violation (RC2-1: injected keys
+ * must not survive a rehash).
+ */
+const ENTRY_BASE_KEYS = new Set([
+  "node", "status", "artifact_path", "version", "digest", "updated_at", "source_event_ref",
+]);
+const ENTRY_ADJUDICATION_KEYS = new Set(["gate_result", "decision_depth", "decision_status"]);
+const EXECUTION_FACT_KEY_SET = new Set([
+  "status", "execution_event_ref", "error_code", "reason_code",
+  "ledger_ref", "ledger_digest", "blocked_report_ref", "blocked_report_digest",
+]);
+
+function validateEntryKeys(entry: ManifestEntry): void {
+  const keys = Object.keys(entry);
+  for (const key of keys) {
+    if (!ENTRY_BASE_KEYS.has(key) && !ENTRY_ADJUDICATION_KEYS.has(key) && key !== "execution") {
+      stop("MANIFEST_CORRUPT_STOP", `entry ${entry.node} carries unknown key "${key}"`);
+    }
+  }
+  for (const key of keys) {
+    if (ENTRY_ADJUDICATION_KEYS.has(key) && entry.node !== "solution-gate") {
+      stop("MANIFEST_CORRUPT_STOP", `entry ${entry.node} carries the solution-gate-only key "${key}"`);
+    }
+  }
+  const execution = entry.execution as Record<string, unknown> | undefined;
+  if (execution !== undefined) {
+    for (const key of Object.keys(execution)) {
+      if (!EXECUTION_FACT_KEY_SET.has(key as keyof ManifestExecutionFact)) {
+        stop("MANIFEST_CORRUPT_STOP", `entry ${entry.node} execution slot carries unknown key "${key}"`);
+      }
+    }
+  }
+}
+
 function coerceEntry(value: unknown): ManifestEntry {
   const e = value as ManifestEntry;
   if (e === null || typeof e !== "object") stop("MANIFEST_CORRUPT_STOP", "entry is not a mapping");
@@ -685,7 +746,26 @@ function loadManifestFile(manifestPath: string): ManifestState | undefined {
   }
   verifySelfDigest(state);
   const entries = Object.freeze(state.entries.map(coerceEntry));
+  // Freeze §2.1: the entries array is the frozen seven-node set — a missing
+  // or duplicated row is a format violation, never a silently accepted shape
+  // (RC1-2).
+  const entryNodes = entries.map((e) => e.node);
+  if (new Set(entryNodes).size !== entryNodes.length) {
+    stop("MANIFEST_CORRUPT_STOP", "duplicate node in entries");
+  }
+  for (const node of LOOP_MANIFEST_NODES) {
+    if (!entryNodes.includes(node)) {
+      stop("MANIFEST_CORRUPT_STOP", `entries missing the frozen row for ${node}`);
+    }
+  }
   const findingIndex = Object.freeze(state.finding_index.map(coerceFindingRow));
+  // Freeze §4.2(b) step 1: duplicate finding ids in the index are
+  // MANIFEST_CORRUPT_STOP verbatim (RC1-2 failure-code fix).
+  const findingIds = findingIndex.map((row) => row.finding_id);
+  if (new Set(findingIds).size !== findingIds.length) {
+    stop("MANIFEST_CORRUPT_STOP", "duplicate finding_id in finding_index");
+  }
+  for (const entry of entries) validateEntryKeys(entry);
   const provenance =
     parsed.projection_provenance === undefined || parsed.projection_provenance === null
       ? undefined
@@ -731,11 +811,28 @@ function fieldString(value: unknown): string {
   return value === undefined || value === null ? "" : String(value);
 }
 
+const EXECUTION_FACT_KEYS: readonly (keyof ManifestExecutionFact)[] = [
+  "status", "execution_event_ref", "error_code", "reason_code",
+  "ledger_ref", "ledger_digest", "blocked_report_ref", "blocked_report_digest",
+];
+
 function comparePrefixEntry(expected: ManifestEntry, actual: ManifestEntry): string | null {
   for (const field of [
     "status", "artifact_path", "version", "digest", "updated_at", "source_event_ref",
   ] as const) {
     if (fieldString(expected[field]) !== fieldString(actual[field])) {
+      // Lawful-lag exemption (RC3-1 write/read seam): an invalidation edge
+      // registered AFTER the last publication makes the journal-derived
+      // status stale while the manifest legitimately still says current.
+      // That direction is catch-up input, not divergence; every other
+      // status direction (current↔stale reversed, pending mixes) still
+      // stops, so a tampered status cannot hide behind the exemption.
+      if (
+        field === "status" &&
+        expected.status === "stale" && actual.status === "current"
+      ) {
+        continue;
+      }
       return `entry ${actual.node} prefix drift at ${field}: expected ${JSON.stringify(expected[field])}, got ${JSON.stringify(actual[field])}`;
     }
   }
@@ -755,13 +852,68 @@ function comparePrefixEntry(expected: ManifestEntry, actual: ManifestEntry): str
     return `entry ${actual.node} execution-slot presence drift`;
   }
   if (expectedExecution !== undefined && actualExecution !== undefined) {
-    for (const field of Object.keys(expectedExecution) as (keyof ManifestExecutionFact)[]) {
+    // Bidirectional key-set equality (RC2-1): an injected extra key must not
+    // survive just because the expected side does not mention it.
+    const expectedKeys = EXECUTION_FACT_KEYS.filter((k) => k in expectedExecution);
+    const actualKeys = Object.keys(actualExecution);
+    if (actualKeys.length !== expectedKeys.length ||
+        !EXECUTION_FACT_KEYS.every((k) => (k in actualExecution) === (k in expectedExecution))) {
+      return `entry ${actual.node} execution key-set drift`;
+    }
+    for (const field of EXECUTION_FACT_KEYS) {
       if (fieldString(expectedExecution[field]) !== fieldString(actualExecution[field])) {
         return `entry ${actual.node} execution drift at ${field}`;
       }
     }
   }
   return null;
+}
+
+/**
+ * Freeze §8.3 branch 2 (v1.8.0): a takeover-reconciled row keeps its B3
+ * manual shape, so its prefix check runs through the §7.1 cross-face
+ * normalization — status / digest literal, artifact_path via the D-7
+ * semantic key; `updated_at`, `source_event_ref`, `version` and the
+ * `execution` slot make NO runtime-shape demands (the manual face has none).
+ */
+function compareReconciledEntry(
+  actual: ManifestEntry,
+  node: NodeCapabilityId,
+  requirementId: string,
+): string | null {
+  if (actual.status === "pending") {
+    return `entry ${node} reconciled-domain row is pending but the journal covered it through the takeover cursor`;
+  }
+  if (actual.status !== "current" && actual.status !== "stale") {
+    return `entry ${node} illegal status ${actual.status}`;
+  }
+  if (actual.digest === null || actual.digest === "" || !/^[0-9a-f]{64}$/.test(actual.digest)) {
+    return `entry ${node} reconciled-domain row carries no valid artifact digest`;
+  }
+  if (actual.artifact_path === null || actual.artifact_path === "") {
+    return `entry ${node} reconciled-domain row carries no artifact path`;
+  }
+  const segment = path.posix.dirname(actual.artifact_path.replace(/\\/g, "/"));
+  const declared = NODE_DIRECTORY_SEGMENTS[node];
+  if (segment !== declared) {
+    return `entry ${node} reconciled-domain path segment ${segment} disagrees with the frozen conversion row ${declared}`;
+  }
+  void requirementId;
+  return null;
+}
+
+/** Freeze §7.6 assertion D-b (v1.8.0): independent required_depth reduction. */
+function reduceRequiredDepth(
+  baselineRequired: string,
+  terminalEvents: readonly LoopCapabilityExecutionEvent[],
+  sequenceAt: number,
+): string {
+  let required = baselineRequired;
+  for (const event of terminalEvents) {
+    if (event.sequence > sequenceAt) break;
+    required = foldDepth(required, event);
+  }
+  return required;
 }
 
 // ---------------------------------------------------------------------------
@@ -806,6 +958,7 @@ function takeoverProvenance(
   acceptedAt: string,
   cursor: number,
   baselineDigest: string,
+  requiredDepthAtTakeover: string,
   map: ManifestIdentityMap,
 ): ProjectionProvenance {
   return Object.freeze({
@@ -813,7 +966,10 @@ function takeoverProvenance(
     mode,
     accepted_at: acceptedAt,
     takeover_cursor: cursor,
-    baseline: Object.freeze({ manifest_digest_at_takeover: baselineDigest }),
+    baseline: Object.freeze({
+      manifest_digest_at_takeover: baselineDigest,
+      required_depth_at_takeover: requiredDepthAtTakeover,
+    }),
     logical_identity_map: map,
   });
 }
@@ -912,13 +1068,32 @@ function projectLoopManifestInner(request: LoopManifestProjectionRequest): LoopM
   }
   if (projectedThrough > 0) {
     const entriesByNode = new Map(state.entries.map((e) => [e.node, e]));
+    const cursor = state.projection_provenance!.takeover_cursor;
     for (const node of LOOP_MANIFEST_NODES) {
-      const covered = terminalEvents.some((e) => e.capability === node && e.sequence <= projectedThrough);
-      if (!covered) continue; // manual-takeover domain row: §8.3 self-consistency, not journal re-derivation
+      // Freeze §8.3 three branches (v1.8.0): by node, by journal event domain.
+      const coveredThroughCursor = terminalEvents.some(
+        (e) => e.capability === node && e.sequence <= Math.min(cursor, projectedThrough),
+      );
+      const coveredAfterCursor = terminalEvents.some(
+        (e) => e.capability === node && e.sequence > cursor && e.sequence <= projectedThrough,
+      );
+      if (!coveredThroughCursor && !coveredAfterCursor) continue; // branch 1: manual domain, self-consistency only
       const actual = entriesByNode.get(node);
       if (actual === undefined) {
         return { kind: "STOP", code: "MANIFEST_CORRUPT_STOP", reason: `entry ${node} missing` };
       }
+      if (!coveredAfterCursor) {
+        // Branch 2: takeover-reconciled domain — the row keeps its B3 manual
+        // shape, so compare through the §7.1 cross-face normalization, never
+        // against a journal-shaped expectation (RC4-1(b)).
+        const drift = compareReconciledEntry(actual, node, requirementId);
+        if (drift !== null) {
+          return { kind: "STOP", code: "JOURNAL_MANIFEST_MISMATCH_STOP", reason: drift };
+        }
+        continue;
+      }
+      // Branch 3: a tail event has runtime-authored this row — strict journal
+      // re-derivation at C.
       const expected = deriveExpectedEntry(
         node, terminalEvents, facts.revisions, facts.invalidations, facts.findings, projectedThrough, requirementId,
       );
@@ -926,6 +1101,21 @@ function projectLoopManifestInner(request: LoopManifestProjectionRequest): LoopM
       if (drift !== null) {
         return { kind: "STOP", code: "JOURNAL_MANIFEST_MISMATCH_STOP", reason: drift };
       }
+    }
+    // Freeze §7.6 assertion D-b (v1.8.0): required_depth recomputed from the
+    // takeover baseline anchor through ESCALATED reduction — never from the
+    // manifest's own value (RC2-1).
+    const expectedRequired = reduceRequiredDepth(
+      state.projection_provenance!.baseline.required_depth_at_takeover,
+      terminalEvents,
+      projectedThrough,
+    );
+    if (expectedRequired !== state.depth.required_depth) {
+      return {
+        kind: "STOP",
+        code: "JOURNAL_MANIFEST_MISMATCH_STOP",
+        reason: `depth.required_depth prefix drift: recomputed ${expectedRequired} from the takeover baseline, manifest carries ${String(state.depth.required_depth)}`,
+      };
     }
   }
 
@@ -969,19 +1159,60 @@ function checkFindingIndex(
   manualRowIds: ReadonlySet<string>,
 ): string | null {
   const storeIds = new Set(facts.findings.map((f) => f.findingId));
+  const provenance = state.projection_provenance!;
+  const mapByManual = new Map(
+    provenance.logical_identity_map.findings
+      .filter((row) => row.manual_id !== null)
+      .map((row) => [row.manual_id!, row]),
+  );
   const indexRuntimeRows = state.finding_index.filter((row) => !manualRowIds.has(row.finding_id));
-  const indexIdSet = new Set(indexRuntimeRows.map((row) => row.finding_id));
-  if (indexIdSet.size !== indexRuntimeRows.length) {
-    return "duplicate finding_id in finding_index runtime domain";
-  }
   for (const row of indexRuntimeRows) {
+    const mapRow = mapByManual.get(row.finding_id);
+    if (mapRow !== undefined && mapRow.runtime_id !== null) {
+      // Freeze §4.2(b) / §8.3 (v1.8.0): a PAIRED row resolves its store
+      // authority through map.runtime_id — the manual id never queries the
+      // store directly (RC4-1(c)). Cross-face normalized binding per §7.1:
+      // status literal; state-applicable closure digest literal; discovered
+      // node equality; all other identity fields stay face-internal.
+      const finding = facts.findings.find((f) => f.findingId === mapRow.runtime_id);
+      if (finding === undefined) {
+        return `map row runtime_id ${mapRow.runtime_id} not present in finding store`;
+      }
+      const expectedStatus =
+        finding.status === "ACCEPTED_RISK" ? "ACCEPTED" : (finding.status as ManifestFindingRow["status"]);
+      if (row.status === expectedStatus) {
+        if (row.discovered_at !== finding.sourceCapability) {
+          return `finding ${row.finding_id} paired-row drift at discovered_at`;
+        }
+        const proof = facts.proofByFinding.get(finding.findingId);
+        const expected = expectedFindingRow(finding, proof);
+        if (row.status === "RESOLVED" || row.status === "ACCEPTED") {
+          if (fieldString(row.closure_evidence_digest) !== fieldString(expected.closure_evidence_digest)) {
+            return `finding ${row.finding_id} paired-row closure evidence drift`;
+          }
+        }
+        if (row.status === "RESOLVED" && fieldString(row.closure_bound_revision_id) !== fieldString(expected.closure_bound_revision_id)) {
+          return `finding ${row.finding_id} paired-row bound revision drift`;
+        }
+        continue;
+      }
+      // Lawful lag across the pair (D-17 direction): manual OPEN behind a
+      // runtime RESOLVED/ACCEPTED_RISK — catchUp aligns the SAME row.
+      if (row.status !== "OPEN" || finding.status === "OPEN" || finding.status === "SUPERSEDED") {
+        return `finding ${row.finding_id} status ${row.status} vs store ${finding.status} without lawful lag`;
+      }
+      continue;
+    }
     if (!storeIds.has(row.finding_id)) {
       return `finding_index row ${row.finding_id} has no store authority (IM − SI)`;
     }
   }
-  // Common rows: three ordered mutually exclusive steps (freeze §4.2(b)).
+  // Common runtime-domain rows: three ordered mutually exclusive steps.
   for (const row of indexRuntimeRows) {
-    const finding = facts.findings.find((f) => f.findingId === row.finding_id)!;
+    const mapRow = mapByManual.get(row.finding_id);
+    if (mapRow !== undefined && mapRow.runtime_id !== null) continue; // handled above
+    const finding = facts.findings.find((f) => f.findingId === row.finding_id);
+    if (finding === undefined) continue; // IM − SI already reported above
     const proof = facts.proofByFinding.get(finding.findingId);
     const expected = expectedFindingRow(finding, proof);
     for (const field of [
@@ -1011,9 +1242,16 @@ function checkFindingIndex(
     }
     // ACCEPTED_RISK: scan-source only (registered by an adversarial_scan
     // terminal event; contract §6.2.2 step 3) with a RISK_ACCEPTANCE proof.
-    const registration = registeringEvent(finding, facts.events);
-    if (registration === undefined || registration.executionRole !== "adversarial_scan") {
-      return `finding ${row.finding_id} OPEN→ACCEPTED from a non-scan registration round`;
+    // Same-instant clock collisions: the verdict must hold for EVERY same-
+    // instant candidate; a mixed candidate set is undecidable → refuse.
+    const registrationCandidates = facts.events.filter(
+      (e) => e.status !== "started" && e.createdAt === finding.createdAt,
+    );
+    if (
+      registrationCandidates.length !== 1 ||
+      registrationCandidates[0]!.executionRole !== "adversarial_scan"
+    ) {
+      return `finding ${row.finding_id} OPEN→ACCEPTED from a non-scan or ambiguous registration round`;
     }
     if (proof === undefined || proof.proofKind !== "RISK_ACCEPTANCE") {
       return `finding ${row.finding_id} OPEN→ACCEPTED without durable risk-acceptance proof`;
@@ -1041,43 +1279,77 @@ function catchUp(
     .filter((e) => e.status !== "started" && e.sequence > through)
     .slice()
     .sort((a, b) => a.sequence - b.sequence);
-  const indexRuntimeIds = new Set(
-    state.finding_index.filter((row) => !manualRowIds.has(row.finding_id)).map((row) => row.finding_id),
-  );
-  const newRegistrations = facts.findings.filter((f) => !indexRuntimeIds.has(f.findingId));
-  const laggingRows = state.finding_index.filter(
-    (row) =>
-      !manualRowIds.has(row.finding_id) && row.status === "OPEN" &&
-      facts.findings.some((f) => f.findingId === row.finding_id && f.status !== "OPEN"),
-  );
+  const terminalEvents = terminalEventsOf(facts.events);
+  const newThrough = tail.length > 0 ? tail[tail.length - 1]!.sequence : through;
+  const provenance = state.projection_provenance!;
 
-  if (tail.length === 0 && newRegistrations.length === 0 && laggingRows.length === 0) {
+  // Registered-runtime domain resolved THROUGH the identity map (RC4-1(c)):
+  // paired rows carry manual ids in finding_index, so store membership is
+  // decided by map.runtime_id, never by the manual id itself.
+  const mapByManual = new Map(
+    provenance.logical_identity_map.findings
+      .filter((row) => row.manual_id !== null)
+      .map((row) => [row.manual_id!, row]),
+  );
+  const indexRuntimeRows = state.finding_index.filter((row) => !manualRowIds.has(row.finding_id));
+  const registeredRuntimeIds = new Set<string>(
+    indexRuntimeRows.map((row) => {
+      const mapRow = mapByManual.get(row.finding_id);
+      return mapRow?.runtime_id ?? row.finding_id;
+    }),
+  );
+  const newRegistrations = facts.findings.filter((f) => !registeredRuntimeIds.has(f.findingId));
+  const laggingRows = indexRuntimeRows.filter((row) => {
+    const mapRow = mapByManual.get(row.finding_id);
+    const runtimeId = mapRow?.runtime_id ?? row.finding_id;
+    const finding = facts.findings.find((f) => f.findingId === runtimeId);
+    return finding !== undefined && row.status === "OPEN" && finding.status !== "OPEN";
+  });
+
+  // Entries (RC3-1): EVERY journal-covered node is re-derived at the NEW
+  // cursor through the same §4.2(a) time-of-validity reduction the replay
+  // uses — invalidation propagation is status-only and lands in the same
+  // atomic publication; manual-domain rows (never journal-touched) keep
+  // their B3/A2 shape. Finding lifecycle deltas still never touch artifact
+  // bindings (V9: both input classes land in ONE atomic publication).
+  const entries = new Map<NodeCapabilityId, ManifestEntry>();
+  let stalenessLag = false;
+  for (const node of LOOP_MANIFEST_NODES) {
+    const covered = terminalEvents.some((e) => e.capability === node && e.sequence <= newThrough);
+    if (!covered) {
+      const existing = state.entries.find((e) => e.node === node);
+      if (existing === undefined) {
+        return { kind: "STOP", code: "MANIFEST_CORRUPT_STOP", reason: `entry ${node} missing` };
+      }
+      entries.set(node, existing);
+      continue;
+    }
+    const derived = deriveExpectedEntry(
+      node, terminalEvents, facts.revisions, facts.invalidations, facts.findings, newThrough, requirementId,
+    );
+    entries.set(node, derived);
+    const current = state.entries.find((e) => e.node === node)!;
+    if (derived.status === "stale" && current.status === "current") {
+      // The write/read seam (probe5-C reverse): the edge postdates the last
+      // publication, so the manifest legally shows current until THIS
+      // publication propagates the staleness.
+      stalenessLag = true;
+    }
+  }
+
+  if (tail.length === 0 && newRegistrations.length === 0 && laggingRows.length === 0 && !stalenessLag) {
     return { kind: "NO_OP" };
   }
-
-  // Entries: tail events fold onto the manifest rows (batch independent,
-  // slot-covering); finding lifecycle deltas never touch artifact bindings
-  // (V9: both input classes land in ONE atomic publication).
-  const entries = new Map(state.entries.map((e) => [e.node, e]));
-  let requiredDepth = state.depth.required_depth;
-  let lastTailEvent: LoopCapabilityExecutionEvent | undefined;
-  for (const event of tail) {
-    const entry = entries.get(event.capability);
-    if (entry === undefined) {
-      return { kind: "STOP", code: "MANIFEST_CORRUPT_STOP", reason: `entry ${event.capability} missing for tail event` };
-    }
-    entries.set(
-      event.capability,
-      foldEventOntoEntry(entry, event, revisionForEvent(event, facts.revisions), requirementId),
-    );
-    requiredDepth = foldDepth(requiredDepth, event);
-    lastTailEvent = event;
-  }
+  // RC2-1: required_depth from the takeover baseline anchor through the
+  // ESCALATED reduction — never from the manifest's own current value.
+  const requiredDepth = reduceRequiredDepth(
+    provenance.baseline.required_depth_at_takeover, terminalEvents, newThrough,
+  );
+  const lastTailEvent: LoopCapabilityExecutionEvent | undefined = tail[tail.length - 1];
 
   // findingIndex: new registrations append (§3.4 mapping), lagging rows align;
   // each new registration also lands a runtime-domain map row (D-16/D-20).
   const findingRows: ManifestFindingRow[] = [...state.finding_index];
-  const provenance = state.projection_provenance!;
   const mapFindings: ManifestMapFindingRow[] = [...provenance.logical_identity_map.findings];
   const mapRevisions: ManifestMapRevisionRow[] = [...provenance.logical_identity_map.revisions];
   const mapClosures: ManifestMapClosureRow[] = [...provenance.logical_identity_map.closures];
@@ -1100,12 +1372,16 @@ function catchUp(
     });
   }
   for (const row of laggingRows) {
-    const finding = facts.findings.find((f) => f.findingId === row.finding_id)!;
+    // Resolve the store authority through the identity map for paired rows
+    // (RC4-1(c)): the manual id never queries the store directly. D-17: the
+    // transition updates the SAME row in place (authority flips to runtime,
+    // row id becomes the runtime id) and appends the closure correspondence.
+    const mapRow = mapByManual.get(row.finding_id);
+    const runtimeId = mapRow?.runtime_id ?? row.finding_id;
+    const finding = facts.findings.find((f) => f.findingId === runtimeId)!;
     const proof = facts.proofByFinding.get(finding.findingId);
     findingRows[findingRows.findIndex((r) => r.finding_id === row.finding_id)] =
       expectedFindingRow(finding, proof);
-    // D-17: a mapped OPEN→RESOLVED transition updates the SAME row and
-    // appends its closure correspondence — no set-difference STOP.
     if (finding.status === "RESOLVED") {
       mapClosures.push({
         manual_ref: null,
@@ -1132,7 +1408,7 @@ function catchUp(
     projected_through: lastTailEvent !== undefined ? lastTailEvent.sequence : through,
     updated_at: lastTailEvent !== undefined ? lastTailEvent.createdAt : state.updated_at,
     depth: { ...state.depth, required_depth: requiredDepth },
-    entries: Object.freeze(LOOP_MANIFEST_NODES.map((node) => entries.get(node) ?? initEntry(node))),
+    entries: Object.freeze(LOOP_MANIFEST_NODES.map((node) => entries.get(node)!)),
     finding_index: Object.freeze(findingRows),
     projection_provenance: Object.freeze(nextProvenance),
   });
@@ -1317,6 +1593,7 @@ function takeover(
     acceptedAt,
     cursor,
     previousDigest,
+    state.depth.required_depth,
     Object.freeze({
       findings: Object.freeze(mapFindings),
       revisions: Object.freeze(mapRevisions),
