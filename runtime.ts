@@ -33,6 +33,10 @@ import {
 import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
 import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
+import type {
+  LoopManifestProjectionOutcome,
+  LoopManifestProjectionStopCode,
+} from "./core/loop-manifest-projector";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import { validateLoopRunIdentity } from "./core/loop-run-state";
 import {
@@ -352,6 +356,78 @@ export function materializeProducerRevision(
     }
     throw error;
   }
+}
+
+// ─── G5-T3 (Δ2): manifest projection failure-code exit wiring ─────────
+// Freeze §5 / contract §7.2: the three projection failure exits enter the
+// runtime run exit verbatim — `MANIFEST_CORRUPT_STOP` (level-1 corrupt),
+// `JOURNAL_MANIFEST_MISMATCH_STOP` (level-2 true divergence) and
+// `BLOCKED_AMBIGUOUS` (structural ambiguity, §6.2.7 legacy reuse). A lawful
+// level-3 pending projection (journal tail + finding lifecycle delta) is run
+// progress, never an exit: catch-up publishes idempotently (NO_OP /
+// PUBLISHED / DEFERRED all continue). The exit offers no repair and no
+// rebuild (DP4) — trust reconstruction is the §6.2.6 repair path, judged by
+// the crash-recovery re-entry, not by this routing.
+
+export const LOOP_MANIFEST_EXIT_STOP_CODES: readonly LoopManifestProjectionStopCode[] = Object.freeze([
+  "MANIFEST_CORRUPT_STOP",
+  "JOURNAL_MANIFEST_MISMATCH_STOP",
+  "BLOCKED_AMBIGUOUS",
+]);
+
+/** Single routing point from a projection outcome to the run exit decision. */
+export type ManifestProjectionRouting =
+  | Readonly<{ blocksRun: false }>
+  | Readonly<{ blocksRun: true; code: LoopManifestProjectionStopCode; reason: string }>;
+
+export function routeManifestProjectionOutcome(
+  outcome: LoopManifestProjectionOutcome,
+): ManifestProjectionRouting {
+  switch (outcome.kind) {
+    case "NO_OP":
+    case "PUBLISHED":
+    case "DEFERRED":
+      return Object.freeze({ blocksRun: false as const });
+    case "STOP":
+      return Object.freeze({ blocksRun: true as const, code: outcome.code, reason: outcome.reason });
+  }
+}
+
+/** Everything the canonical manifest-stop exit needs from the call site. */
+export interface ManifestProjectionExitContext {
+  readonly requirement_id: string;
+  readonly run_id: string;
+  readonly execution_trace: readonly RuntimeChainEntry[];
+  readonly workspace_root: string;
+  readonly journal_path: string | null;
+  readonly completed_at: string;
+}
+
+/**
+ * The one canonical failed RuntimeResult for a manifest projection stop —
+ * same shape as every other blocked exit (final_status failed, chain_status
+ * BLOCKED, exact §7.2 code, no next execution point: a corrupt/diverged
+ * manifest must never hand the run a re-entry target).
+ */
+export function manifestProjectionBlockedResult(
+  context: ManifestProjectionExitContext,
+  stop: Readonly<{ code: LoopManifestProjectionStopCode; reason: string }>,
+): RuntimeResult {
+  if (!(LOOP_MANIFEST_EXIT_STOP_CODES as readonly string[]).includes(stop.code)) {
+    throw new Error(`non-manifest stop code ${stop.code} cannot enter the manifest projection exit`);
+  }
+  return Object.freeze({
+    requirement_id: context.requirement_id,
+    run_id: context.run_id,
+    final_status: "failed" as const,
+    chain_status: "BLOCKED" as const,
+    blocking_reason_code: stop.code,
+    execution_trace: Object.freeze(context.execution_trace.map((entry) => Object.freeze({ ...entry }))),
+    next_execution_point: null,
+    workspace_root: context.workspace_root,
+    journal_path: context.journal_path,
+    completed_at: context.completed_at,
+  });
 }
 
 export async function run(
