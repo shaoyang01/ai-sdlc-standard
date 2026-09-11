@@ -6,11 +6,13 @@
  * serialization, so every byte is normative.
  *
  * Behavior verified against the reference interpreter for the REAL manifest
- * data domain (G5-T2-R1 probe7: full projected manifest round-trip through
- * Ruby 3.3.12 / Psych 5.1.2 is BYTE-IDENTICAL). Documented deviations on
- * out-of-domain shapes exist and are intentionally deferred to the G5-T5
- * parity matrix (17-shape table in G5-T2-REVIEW-R1 §3-RC-6(c)); the comments
- * below state the ACTUAL emitter behavior, not the reference interpreter's:
+ * data domain (full projected manifest round-trips through Ruby 3.3.12 /
+ * Psych 5.1.2 are BYTE-IDENTICAL — including real W2 artifacts with
+ * broken-octal digest forms since the G5-T2-R3-B3 fix). Documented
+ * deviations on out-of-domain shapes exist and are intentionally deferred to
+ * the G5-T5 parity matrix (17-shape table in G5-T2-REVIEW-R1 §3-RC-6(c));
+ * the comments below state the ACTUAL emitter behavior, not the reference
+ * interpreter's:
  *   - document header `---`, mappings at 2-space indent steps
  *   - sequence items are indented AT their owning key's level (`- ` prefix)
  *   - null prints as an empty value (`key:`), not `null`
@@ -71,6 +73,11 @@ function wouldReparseAsNonString(s: string): boolean {
   if (SPECIAL_FLOAT.test(s)) return true;
   // YAML 1.1 sexagesimal: a pure digits-and-colons scalar re-parses as a number.
   if (/^[-+]?[0-9][0-9:]*$/.test(s) && s.includes(":")) return true;
+  // Psych quotes "broken octal" scalars (yaml_tree.rb second disjunct): a
+  // leading 0, octal digits, then an 8/9 — e.g. digests like 094fe8b3….
+  // Not valid octal, not a decimal int, yet force-quoted by the reference
+  // emitter; real W2 manifests hit this (G5-T2-R3-B3).
+  if (/^[-+]?0[0-7]*[89]/.test(s)) return true;
   if (DATE_PREFIX.test(s)) return true;
   return false;
 }

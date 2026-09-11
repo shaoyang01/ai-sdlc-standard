@@ -1248,5 +1248,56 @@ console.log("G5-T2-R2 rework — real publisher shape without a corrections key 
   }
 }
 
+
+// ===========================================================================
+console.log("G5-T2-R3 rework — broken-octal digest forms quote byte-identically (R3-B3)");
+{
+  // The Psych second-disjunct rule (`0[0-7]*[89]`): a leading 0 followed by
+  // octal digits and then an 8/9 is force-quoted — real W2 declaration logs
+  // carry input digests in exactly this shape (094fe8b3…).
+  const brokenOctalDigest = `094fe8b3${"a".repeat(56)}`;
+  ok(dumpRubyYaml({ input_digest: brokenOctalDigest }).includes(`input_digest: '${brokenOctalDigest}'`),
+    "broken-octal digest is single-quoted (reference behavior)");
+  ok(!dumpRubyYaml({ input_digest: `${"ab".repeat(32)}` }).includes("'"), "ordinary hex digest stays plain");
+  ok(dumpRubyYaml({ k: "0179" }).includes("k: '0179'") && dumpRubyYaml({ k: "08" }).includes("k: '08'"),
+    "octal-then-8/9 boundary forms quote");
+
+  // End-to-end: a manual manifest whose declaration_log carries the shape
+  // must survive self-digest (the seal and the verifier share the rule).
+  const root = mkdtempSync(join(tmpdir(), "loop-g5t2r3-b3-"));
+  const store = new LoopRunStore(join(root, "journal.db"));
+  try {
+    mkdirSync(join(root, "repo"), { recursive: true });
+    mkdirSync(join(root, "library", REQ), { recursive: true });
+    const libraryDir = join(root, "library", REQ);
+    store.init();
+    store.createRun(identity(root));
+    store.appendEvent(runEvent(2, "run_started"));
+
+    const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+    const base = manualInitBase("W2形态需求", []);
+    base.declaration_log = [
+      {
+        seq: 13, action: "entry", node: "requirement-intake", status: "current",
+        artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0",
+        digest: dg("b"), gate_result: null, decision_depth: null, decision_status: null,
+        stale: null, source_ref: null, input_digest: brokenOctalDigest,
+      },
+    ];
+    writeManualManifest(libraryDir, base);
+
+    const takeover = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
+    ok(takeover.kind === "PUBLISHED", `W2-shape takeover-A passes self-digest (${JSON.stringify(takeover)})`);
+    const republished = parseRubyYaml(readManifestText(libraryDir));
+    const log = republished.declaration_log as Record<string, unknown>[];
+    ok(log[0]!.input_digest === brokenOctalDigest, "broken-octal digest round-trips through seal/verify/load");
+    ok(("corrections" in republished) === ("corrections" in base), "optional-key shape preserved");
+    ok(projectLoopManifest(request).kind === "NO_OP", "W2-shape replay is NO_OP");
+  } finally {
+    try { store.close(); } catch { /* cleanup tolerance */ }
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\ng5t2: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);
