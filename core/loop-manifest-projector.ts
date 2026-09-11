@@ -245,13 +245,16 @@ function stateToYamlMap(state: ManifestState): { readonly [key: string]: YamlVal
     depth: { ...state.depth },
     entries: state.entries.map(entryToYamlMap),
     finding_index: state.finding_index.map((f) => ({ ...f })),
-    declaration_log: [...state.declaration_log],
-    corrections: [...state.corrections],
   };
+  // Absent-means-absent (R2-B2): the real publisher shape omits `corrections`
+  // entirely — a missing key must round-trip as a missing key so the digest
+  // semantics match the manual publisher byte for byte. Never inject [].
+  if (state.declaration_log !== undefined) map.declaration_log = [...state.declaration_log];
+  if (state.corrections !== undefined) map.corrections = [...state.corrections];
   if (state.projection_provenance !== undefined) {
     map.projection_provenance = provenanceToYamlMap(state.projection_provenance);
   }
-  map.repair_records = [...state.repair_records];
+  if (state.repair_records !== undefined) map.repair_records = [...state.repair_records];
   // The digest key participates ONLY after sealing — the hash input is the
   // document with the key entirely absent (publisher `state.delete` semantics).
   if (state.manifest_digest !== undefined) map.manifest_digest = state.manifest_digest;
@@ -877,15 +880,25 @@ function comparePrefixEntry(expected: ManifestEntry, actual: ManifestEntry): str
  * `execution` slot make NO runtime-shape demands (the manual face has none).
  */
 function compareReconciledEntry(
+  expected: ManifestEntry,
   actual: ManifestEntry,
   node: NodeCapabilityId,
   requirementId: string,
 ): string | null {
+  // Freeze §8.3 branch 2 / §7.1 (R2-B1 read side): the row keeps its B3
+  // manual SHAPE, so shape demands alone are not a parity assertion — the
+  // journal-derived expectation is the reference and the SAME normalized
+  // comparison B2 uses decides: status literal (single lawful-lag
+  // exemption), digest literal, gate-triple literal, path semantic key.
+  // updated_at / source_event_ref / execution / version stay face-internal.
   if (actual.status === "pending") {
     return `entry ${node} reconciled-domain row is pending but the journal covered it through the takeover cursor`;
   }
-  if (actual.status !== "current" && actual.status !== "stale") {
-    return `entry ${node} illegal status ${actual.status}`;
+  if (expected.status !== actual.status && !(expected.status === "stale" && actual.status === "current")) {
+    return `entry ${node} reconciled-domain status drift: journal ${expected.status} vs manifest ${actual.status}`;
+  }
+  if (expected.digest !== null && actual.digest !== null && expected.digest !== actual.digest) {
+    return `entry ${node} reconciled-domain digest drift: journal ${expected.digest} vs manifest ${actual.digest}`;
   }
   if (actual.digest === null || actual.digest === "" || !/^[0-9a-f]{64}$/.test(actual.digest)) {
     return `entry ${node} reconciled-domain row carries no valid artifact digest`;
@@ -893,10 +906,28 @@ function compareReconciledEntry(
   if (actual.artifact_path === null || actual.artifact_path === "") {
     return `entry ${node} reconciled-domain row carries no artifact path`;
   }
+  if (
+    expected.artifact_path !== null && actual.artifact_path !== null &&
+    pathSemanticKey(expected.artifact_path, node) !== pathSemanticKey(actual.artifact_path, node)
+  ) {
+    return `entry ${node} reconciled-domain path semantic key drift: journal ${expected.artifact_path} vs manifest ${actual.artifact_path}`;
+  }
   const segment = path.posix.dirname(actual.artifact_path.replace(/\\/g, "/"));
   const declared = NODE_DIRECTORY_SEGMENTS[node];
   if (segment !== declared) {
     return `entry ${node} reconciled-domain path segment ${segment} disagrees with the frozen conversion row ${declared}`;
+  }
+  if (node === "solution-gate") {
+    for (const field of ["gate_result", "decision_depth", "decision_status"] as const) {
+      const expectedHas = field in expected;
+      const actualHas = field in actual;
+      if (expectedHas !== actualHas) {
+        return `entry ${node} reconciled-domain adjudication-slot presence drift at ${field}`;
+      }
+      if (expectedHas && fieldString(expected[field]) !== fieldString(actual[field])) {
+        return `entry ${node} reconciled-domain adjudication drift at ${field}: journal ${JSON.stringify(expected[field])} vs manifest ${JSON.stringify(actual[field])}`;
+      }
+    }
   }
   void requirementId;
   return null;
@@ -1086,7 +1117,10 @@ function projectLoopManifestInner(request: LoopManifestProjectionRequest): LoopM
         // Branch 2: takeover-reconciled domain — the row keeps its B3 manual
         // shape, so compare through the §7.1 cross-face normalization, never
         // against a journal-shaped expectation (RC4-1(b)).
-        const drift = compareReconciledEntry(actual, node, requirementId);
+        const expected = deriveExpectedEntry(
+          node, terminalEvents, facts.revisions, facts.invalidations, facts.findings, projectedThrough, requirementId,
+        );
+        const drift = compareReconciledEntry(expected, actual, node, requirementId);
         if (drift !== null) {
           return { kind: "STOP", code: "JOURNAL_MANIFEST_MISMATCH_STOP", reason: drift };
         }
@@ -1314,22 +1348,34 @@ function catchUp(
   // bindings (V9: both input classes land in ONE atomic publication).
   const entries = new Map<NodeCapabilityId, ManifestEntry>();
   let stalenessLag = false;
+  const cursor = state.projection_provenance!.takeover_cursor;
   for (const node of LOOP_MANIFEST_NODES) {
+    const existing = state.entries.find((e) => e.node === node);
+    if (existing === undefined) {
+      return { kind: "STOP", code: "MANIFEST_CORRUPT_STOP", reason: `entry ${node} missing` };
+    }
     const covered = terminalEvents.some((e) => e.capability === node && e.sequence <= newThrough);
     if (!covered) {
-      const existing = state.entries.find((e) => e.node === node);
-      if (existing === undefined) {
-        return { kind: "STOP", code: "MANIFEST_CORRUPT_STOP", reason: `entry ${node} missing` };
-      }
       entries.set(node, existing);
       continue;
     }
     const derived = deriveExpectedEntry(
       node, terminalEvents, facts.revisions, facts.invalidations, facts.findings, newThrough, requirementId,
     );
-    entries.set(node, derived);
-    const current = state.entries.find((e) => e.node === node)!;
-    if (derived.status === "stale" && current.status === "current") {
+    const tailCovered = terminalEvents.some(
+      (e) => e.capability === node && e.sequence > cursor && e.sequence <= newThrough,
+    );
+    if (!tailCovered) {
+      // Freeze §8.3 branch 2 (R2-B1 write side): the row keeps its B3 manual
+      // SHAPE — path/version/updated_at/source_event_ref/gate-slot/execution
+      // are never flipped to the runtime face. ONLY the status propagates
+      // (invalidation timing at the new cursor), per the branch's own
+      // four-untouched discipline.
+      entries.set(node, { ...existing, status: derived.status });
+    } else {
+      entries.set(node, derived);
+    }
+    if (derived.status === "stale" && existing.status === "current") {
       // The write/read seam (probe5-C reverse): the edge postdates the last
       // publication, so the manifest legally shows current until THIS
       // publication propagates the staleness.
