@@ -489,10 +489,16 @@ export function resolveManifestReadiness(libraryDir: string): ManifestReadiness 
  * Durably records a manifest projection stop before the run exits (T3-R1
  * S-2). The `run_blocked` event carries the §7.2 code in `reasonCode` — the
  * journal fact that survives the return value — and the projector's
- * human-readable reason is persisted as a digest-bound artifact so the audit
- * trail never lives only in the caller's memory. A detail-artifact write that
- * fails must not degrade the durable block into an unrecorded stop, so the
- * event is appended regardless; the run stays fail-closed either way.
+ * human-readable reason is `outputArtifactRef`'s digest-bound detail, so the
+ * audit trail never lives only in the caller's memory. A detail-artifact write
+ * that fails must not degrade the durable block into an unrecorded stop, so
+ * the event is appended regardless; the run stays fail-closed either way.
+ *
+ * The stop is a WP4 durable block, and a sticky block on a repairable
+ * condition would wedge the run: `releaseRunRegateBlock` only releases
+ * REGATE_ROUND_BUDGET_EXHAUSTED. That is why a governed release exists for the
+ * manifest codes — see `releaseManifestProjectionBlock`, which forces the
+ * projection to re-judge healthy before it clears the block.
  */
 function appendManifestProjectionBlockEvent(
   runStore: LoopRunStore,
@@ -505,11 +511,7 @@ function appendManifestProjectionBlockEvent(
   try {
     const stored = artifactStore.put(
       "human_action_required",
-      JSON.stringify({
-        schema: "loop-manifest-projection-stop:v1",
-        code: stop.code,
-        reason: stop.reason,
-      }) + "\n",
+      manifestProjectionStopDetail(stop),
     );
     detailRef = stored.artifactRef;
     detailDigest = stored.digest;
@@ -537,6 +539,84 @@ function appendManifestProjectionBlockEvent(
     errorCode: null,
     retryable: null,
     reasonCode: stop.code,
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
+  }));
+}
+
+/**
+ * The rejection reason a manifest stop produces on every judgement — the same
+ * bytes `recordManifestProjectionStop` persists, so an auditor can locate the
+ * content-addressed record from the stop alone.
+ */
+export function manifestProjectionStopDetail(stop: Readonly<{
+  code: LoopManifestProjectionStopCode;
+  reason: string;
+}>): string {
+  return JSON.stringify({
+    schema: "loop-manifest-projection-stop:v1",
+    code: stop.code,
+    reason: stop.reason,
+  }) + "\n";
+}
+
+/**
+ * The stop is enforced as a WP4 durable block (a repairable condition must not
+ * silently evaporate), so it needs its own governed release: the generic
+ * `releaseRunRegateBlock` deliberately refuses every code but the round-budget
+ * exhaustion. §6.2.6 says a repaired manifest resumes "under the normal
+ * protocol", so the release is gated on exactly that — the projection is
+ * re-judged first and the release is refused while it still stops. Trust is
+ * therefore re-established by the manifest itself, never by the release
+ * decision alone.
+ */
+export function releaseManifestProjectionBlock(request: Readonly<{
+  store: LoopRunStore;
+  requirementId: string;
+  libraryDir: string;
+  release: Readonly<{ kind: "RISK_ACCEPTED" | "SCOPE_RESET" }>;
+}>): void {
+  const reject = (message: string): never => {
+    throw new LoopRunJournalError("ILLEGAL_TRANSITION", message);
+  };
+  const snapshot = request.store.findLatestRunByRequirement(request.requirementId);
+  if (snapshot === undefined) reject("no run exists for this requirement");
+  const runId = snapshot.state.identity.runId;
+  const blocked = snapshot.state.blockingReasonCode;
+  if (blocked === null || blocked === undefined) reject("the run is not durably blocked");
+  if (!(LOOP_MANIFEST_EXIT_STOP_CODES as readonly string[]).includes(blocked)) {
+    reject(`only a manifest projection block is releasable here (current block: ${blocked})`);
+  }
+  const readiness = resolveManifestReadiness(request.libraryDir);
+  if (readiness.kind !== "MANIFEST_PRESENT") {
+    reject(`the manifest is not present (${readiness.kind}); there is nothing healthy to certify`);
+  }
+  const projected = projectLoopManifest({
+    store: request.store,
+    runId,
+    requirementId: request.requirementId,
+    libraryDir: (readiness as Readonly<{ kind: "MANIFEST_PRESENT"; libraryDir: string }>).libraryDir,
+  });
+  if (routeManifestProjectionOutcome(projected).blocksRun) {
+    const code = projected.kind === "STOP" ? projected.code : "unknown";
+    reject(`the manifest still stops (${code}); repair it per §6.2.6 before releasing`);
+  }
+  const sequence = snapshot.state.lastSequence + 1;
+  request.store.appendEvent(Object.freeze({
+    eventId: `${runId}:${sequence}:run_resumed`,
+    runId,
+    sequence,
+    kind: "run_resumed" as const,
+    stage: null,
+    attempt: 0,
+    createdAt: new Date().toISOString(),
+    inputDigest: null,
+    outputArtifactRef: null,
+    outputDigest: null,
+    errorCode: null,
+    retryable: null,
+    reasonCode: request.release.kind,
     bindingId: null,
     bindingVersion: null,
     inputArtifactRef: null,
@@ -719,6 +799,10 @@ export async function run(
     const manifestBlockedExit = (
       stop: Readonly<{ code: LoopManifestProjectionStopCode; reason: string }>,
     ): RuntimeResult => {
+      // The audit evidence is the journal block event plus its digest-bound
+      // detail artifact (S-2). The block is sticky; the governed release for
+      // the manifest codes is `releaseManifestProjectionBlock`, which forces
+      // the projection to re-judge healthy before it clears the block.
       const snapshot = runStore.findLatestRunByRequirement(requirementId);
       const blockRunId = snapshot?.state.identity.runId ?? journalRunId ?? identity.runId;
       try {
@@ -911,26 +995,32 @@ export async function run(
           materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
         }
       }
-      // G5-T4 (Δ3) terminal→projector call point: the node terminal just
-      // landed and its revision materialized, so the D-9 precondition holds
-      // and the manifest catches up with the journal (idempotent by
-      // construction — a replay converges to no-op). A stop here is a stop
-      // for the run: the same blocksRun routing and the same durable block
-      // event as the entry preflight, never a second exit rule.
+      // G5-T4 (Δ3) terminal→projector call point (interrupted-attempt resume):
+      // the terminal landed and its revision materialized, so the D-9
+      // precondition holds. Identical scope to the main dispatch loop's call
+      // point — it only keeps an EXISTING manifest in step and never re-judges
+      // the three entry states mid-run. Without that guard a lawful FRESH
+      // requirement whose crashed run is resumed here would be misread as the
+      // §6.2.7 legacy-reuse case ("no manifest + journal events"), because a
+      // fresh requirement's manifest does not exist until intake creates it.
       if (manifestLibraryDir !== undefined) {
-        const projectedAfterTerminal = projectLoopManifest({
-          store: runStore,
-          runId: journalRunId ?? identity.runId,
-          requirementId,
-          libraryDir: manifestLibraryDir,
-          takeoverAcceptedAt: identity.createdAt,
-        });
-        const routedAfterTerminal = routeManifestProjectionOutcome(projectedAfterTerminal);
-        if (routedAfterTerminal.blocksRun) {
-          return manifestBlockedExit({
-            code: routedAfterTerminal.code,
-            reason: routedAfterTerminal.reason,
-          });
+        const readiness = resolveManifestReadiness(manifestLibraryDir);
+        if (readiness.kind === "MANIFEST_PRESENT") {
+          const routedAfterTerminal = routeManifestProjectionOutcome(
+            projectLoopManifest({
+              store: runStore,
+              runId: journalRunId ?? identity.runId,
+              requirementId,
+              libraryDir: readiness.libraryDir,
+              takeoverAcceptedAt: identity.createdAt,
+            }),
+          );
+          if (routedAfterTerminal.blocksRun) {
+            return manifestBlockedExit({
+              code: routedAfterTerminal.code,
+              reason: routedAfterTerminal.reason,
+            });
+          }
         }
       }
       recovery = recoverRunContext(runStore, requirementId);
