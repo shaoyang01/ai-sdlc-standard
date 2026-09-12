@@ -33,9 +33,10 @@ import {
 import { deriveDispatchCommand, recoverRunContext } from "./core/loop-recovery";
 import { withResumeLease } from "./core/loop-resume-lock";
 import { LoopRunStore } from "./core/loop-run-store";
-import type {
-  LoopManifestProjectionOutcome,
-  LoopManifestProjectionStopCode,
+import {
+  projectLoopManifest,
+  type LoopManifestProjectionOutcome,
+  type LoopManifestProjectionStopCode,
 } from "./core/loop-manifest-projector";
 import { LoopRunJournalError, type LoopRunIdentity } from "./core/loop-executor-types";
 import { validateLoopRunIdentity } from "./core/loop-run-state";
@@ -116,6 +117,14 @@ export interface RuntimeOptions {
   /** Injected execution gateway; defaults to the deterministic shadow runner. */
   gateway?: RuntimeCapabilityGateway;
   /**
+   * G5-T4 (Δ3): the requirement library directory holding `manifest.md`
+   * (`library/{requirementId}`). When set, the run performs the entry
+   * readiness preflight and keeps the manifest in step with the journal at
+   * every node terminal. Absent by default so the non-production path and
+   * every existing caller stay byte-for-byte unchanged.
+   */
+  manifestLibraryDir?: string;
+  /**
    * Where node capabilities come from (W2, wiring-design §3). Defaults to
    * "deterministic" — the traced shadow, behaviour unchanged. "real" builds a
    * RealCapabilityGateway and requires a Q1 registry plus realGatewayDeps; it
@@ -161,6 +170,7 @@ const RUNTIME_OPTION_ALLOWLIST: readonly string[] = Object.freeze([
   "gateway",
   "capabilitySource",
   "realGatewayDeps",
+  "manifestLibraryDir",
   "productionIdentity",
   "maxDispatches",
   "maxRegateRounds",
@@ -430,6 +440,109 @@ export function manifestProjectionBlockedResult(
   });
 }
 
+// ─── G5-T4 (Δ3): entry readiness preflight + terminal projection ──────
+// The manifest is the requirement library's self-证明 artifact (contract
+// §6.2). The runtime face keeps it in step with the journal, and the three
+// entry states are distinct (Δ3 / §6.2.7 / DP4):
+//
+//   FRESH              — no library directory yet; a brand-new requirement.
+//                        requirement-intake owns creation, so the runtime
+//                        projects nothing and never mints a manifest here.
+//   LEGACY_NO_MANIFEST — the directory exists without a manifest: a legacy
+//                        read-only archive source. `BLOCKED_AMBIGUOUS`,
+//                        never rebuilt and never repaired into shape.
+//   MANIFEST_PRESENT   — the §6.2.2 three-tier judgement decides: level-1
+//                        corrupt / level-2 divergence are stops, a lawful
+//                        level-3 pending delta is catch-up publication.
+//
+// A path that exists but is not a directory is NOT "fresh" — it is an
+// unreadable shape, so it takes the fail-closed legacy exit instead of
+// letting a run proceed over an object it cannot interpret.
+
+export type ManifestReadiness =
+  | Readonly<{ kind: "FRESH" }>
+  | Readonly<{ kind: "LEGACY_NO_MANIFEST"; libraryDir: string }>
+  | Readonly<{ kind: "MANIFEST_PRESENT"; libraryDir: string }>;
+
+export function resolveManifestReadiness(libraryDir: string): ManifestReadiness {
+  let dirStat: import("node:fs").Stats | null = null;
+  try {
+    dirStat = statSync(libraryDir);
+  } catch {
+    return Object.freeze({ kind: "FRESH" as const });
+  }
+  if (!dirStat.isDirectory()) {
+    return Object.freeze({ kind: "LEGACY_NO_MANIFEST" as const, libraryDir });
+  }
+  try {
+    if (statSync(join(libraryDir, "manifest.md")).isFile()) {
+      return Object.freeze({ kind: "MANIFEST_PRESENT" as const, libraryDir });
+    }
+  } catch {
+    // A missing/unreadable manifest inside an existing directory is the
+    // legacy-archive state, not a fresh requirement.
+  }
+  return Object.freeze({ kind: "LEGACY_NO_MANIFEST" as const, libraryDir });
+}
+
+/**
+ * Durably records a manifest projection stop before the run exits (T3-R1
+ * S-2). The `run_blocked` event carries the §7.2 code in `reasonCode` — the
+ * journal fact that survives the return value — and the projector's
+ * human-readable reason is persisted as a digest-bound artifact so the audit
+ * trail never lives only in the caller's memory. A detail-artifact write that
+ * fails must not degrade the durable block into an unrecorded stop, so the
+ * event is appended regardless; the run stays fail-closed either way.
+ */
+function appendManifestProjectionBlockEvent(
+  runStore: LoopRunStore,
+  artifactStore: LoopArtifactStore,
+  runId: string,
+  stop: Readonly<{ code: LoopManifestProjectionStopCode; reason: string }>,
+): void {
+  let detailRef: string | null = null;
+  let detailDigest: string | null = null;
+  try {
+    const stored = artifactStore.put(
+      "human_action_required",
+      JSON.stringify({
+        schema: "loop-manifest-projection-stop:v1",
+        code: stop.code,
+        reason: stop.reason,
+      }) + "\n",
+    );
+    detailRef = stored.artifactRef;
+    detailDigest = stored.digest;
+  } catch {
+    // The block event below is the fail-closed anchor.
+  }
+  const snapshot = runStore.getSnapshot(runId);
+  if (snapshot === undefined) return;
+  // Idempotence: the durable fact is already there when the run is blocked
+  // for the same code. A re-entry that re-judges the same stop must not append
+  // a second identical block event (the journal grows only on new facts).
+  if (snapshot.state.blockingReasonCode === stop.code) return;
+  const sequence = snapshot.state.lastSequence + 1;
+  runStore.appendEvent(Object.freeze({
+    eventId: `${runId}:${sequence}:run_blocked`,
+    runId,
+    sequence,
+    kind: "run_blocked" as const,
+    stage: null,
+    attempt: 0,
+    createdAt: new Date().toISOString(),
+    inputDigest: null,
+    outputArtifactRef: detailRef,
+    outputDigest: detailDigest,
+    errorCode: null,
+    retryable: null,
+    reasonCode: stop.code,
+    bindingId: null,
+    bindingVersion: null,
+    inputArtifactRef: null,
+  }));
+}
+
 export async function run(
   requirement: string,
   options: RuntimeOptions = {}
@@ -592,6 +705,77 @@ export async function run(
     // or blocked — it must NOT be coerced back to the first point.
     let next = recovery === undefined ? LOOP_CAPABILITY_EXECUTION_POINTS[0]! : recovery.nextExecutionPoint;
     let journalRunId = recovery?.snapshot.state.identity.runId ?? null;
+
+    // G5-T4 (Δ3) readiness preflight — BEFORE any dispatch and BEFORE the
+    // durable-block short circuit below, so a repaired-manifest re-entry is
+    // re-judged rather than reported as an opaque BLOCKED. The projection
+    // precondition (D-9) holds here: every pending revision materialization
+    // was drained above, so the projector never runs against a pending
+    // producer. A fresh requirement projects nothing (requirement-intake
+    // owns creation); a legacy directory without a manifest is
+    // BLOCKED_AMBIGUOUS and is never rebuilt. Re-entry re-judges the same
+    // three states, so crash recovery converges without a second rule.
+    const manifestLibraryDir = options.manifestLibraryDir;
+    const manifestBlockedExit = (
+      stop: Readonly<{ code: LoopManifestProjectionStopCode; reason: string }>,
+    ): RuntimeResult => {
+      const snapshot = runStore.findLatestRunByRequirement(requirementId);
+      const blockRunId = snapshot?.state.identity.runId ?? journalRunId ?? identity.runId;
+      try {
+        appendManifestProjectionBlockEvent(runStore, artifactStore, blockRunId, stop);
+      } catch {
+        // The exit below is the fail-closed outcome regardless: a journal
+        // that cannot take the block event must not turn a manifest stop
+        // into a run that proceeds.
+      }
+      return manifestProjectionBlockedResult(
+        {
+          requirement_id: requirementId,
+          run_id: blockRunId,
+          execution_trace: runStore.listCapabilityExecutions(blockRunId).map((event) => Object.freeze({
+            capability: event.capability,
+            executionRole: event.executionRole,
+            agent: event.executorAgent,
+            attempt: event.attempt,
+            status: event.status,
+            gateResult: event.gateResult,
+            outputArtifactRef: event.outputArtifactRef,
+            outputDigest: event.outputDigest,
+          })),
+          workspace_root: workspaceRoot,
+          journal_path: options.runStore === undefined
+            ? join(workspaceRoot, "journal.db")
+            : runStore.databaseFilePath,
+          completed_at: now(),
+        },
+        stop,
+      );
+    };
+    if (manifestLibraryDir !== undefined) {
+      const readiness = resolveManifestReadiness(manifestLibraryDir);
+      if (readiness.kind === "LEGACY_NO_MANIFEST") {
+        return manifestBlockedExit({
+          code: "BLOCKED_AMBIGUOUS",
+          reason: `library directory ${manifestLibraryDir} exists without a manifest.md; ` +
+            "legacy archive sources are never rebuilt (§6.2.7 / DP4)",
+        });
+      }
+      if (readiness.kind === "MANIFEST_PRESENT") {
+        const projected = projectLoopManifest({
+          store: runStore,
+          runId: journalRunId ?? identity.runId,
+          requirementId,
+          libraryDir: readiness.libraryDir,
+          // A takeover acceptance is the entry decision itself; the run's
+          // creation instant is that moment (freeze §8.0 accepted_at).
+          takeoverAcceptedAt: identity.createdAt,
+        });
+        const routed = routeManifestProjectionOutcome(projected);
+        if (routed.blocksRun) {
+          return manifestBlockedExit({ code: routed.code, reason: routed.reason });
+        }
+      }
+    }
     // WP4 Round 2 review H4 correction: maxDispatches is a pure loop safety
     // bound — hitting it stops the invocation WITHOUT a durable block. The
     // durable REGATE_ROUND_BUDGET_EXHAUSTED block is reserved for the round
@@ -725,6 +909,28 @@ export async function run(
           .find((item) => item.executionEventId === executed.producerTerminalEventId);
         if (produced !== undefined && produced.status === "succeeded") {
           materializeProducerRevision(runStore, requirementId, journalRunId!, produced, now);
+        }
+      }
+      // G5-T4 (Δ3) terminal→projector call point: the node terminal just
+      // landed and its revision materialized, so the D-9 precondition holds
+      // and the manifest catches up with the journal (idempotent by
+      // construction — a replay converges to no-op). A stop here is a stop
+      // for the run: the same blocksRun routing and the same durable block
+      // event as the entry preflight, never a second exit rule.
+      if (manifestLibraryDir !== undefined) {
+        const projectedAfterTerminal = projectLoopManifest({
+          store: runStore,
+          runId: journalRunId ?? identity.runId,
+          requirementId,
+          libraryDir: manifestLibraryDir,
+          takeoverAcceptedAt: identity.createdAt,
+        });
+        const routedAfterTerminal = routeManifestProjectionOutcome(projectedAfterTerminal);
+        if (routedAfterTerminal.blocksRun) {
+          return manifestBlockedExit({
+            code: routedAfterTerminal.code,
+            reason: routedAfterTerminal.reason,
+          });
         }
       }
       recovery = recoverRunContext(runStore, requirementId);
@@ -1064,6 +1270,37 @@ export async function run(
         }
         materializeProducerRevision(runStore, requirementId, journalRunId, produced, now);
       }
+      // G5-T4 (Δ3) terminal→projector call point (main dispatch loop): the
+      // node terminal landed and its revision materialized, so the D-9
+      // precondition holds and the manifest catches up with the journal.
+      // Idempotent by construction — a replayed terminal converges to a
+      // projection no-op. A stop here is a stop for the run, routed through
+      // the same blocksRun seam and durable block event as the entry
+      // preflight; there is no second exit rule.
+      //
+      // Scope: this point only keeps an EXISTING manifest in step. A fresh
+      // requirement has no manifest yet — creation belongs to
+      // requirement-intake — so projecting here would misread a lawful fresh
+      // run as the §6.2.7 legacy-reuse case ("no manifest + journal events").
+      // The three-state judgement is the entry preflight's job, judged once
+      // per invocation; mid-run this point never re-judges it.
+      if (manifestLibraryDir !== undefined) {
+        const readiness = resolveManifestReadiness(manifestLibraryDir);
+        if (readiness.kind === "MANIFEST_PRESENT") {
+          const routedAfterTerminal = routeManifestProjectionOutcome(
+            projectLoopManifest({
+              store: runStore,
+              runId: journalRunId ?? identity.runId,
+              requirementId,
+              libraryDir: readiness.libraryDir,
+              takeoverAcceptedAt: identity.createdAt,
+            }),
+          );
+          if (routedAfterTerminal.blocksRun) {
+            return manifestBlockedExit({ code: routedAfterTerminal.code, reason: routedAfterTerminal.reason });
+          }
+        }
+      }
       // WP4: recompute recovery AFTER the revision lands — the Re-Gate target
       // must reflect the fresh current, not the pre-append projection.
       recovery = recoverRunContext(runStore, requirementId);
@@ -1387,6 +1624,13 @@ function appendProductionIsolationBlockEvent(runStore: LoopRunStore, runId: stri
 
 export interface ProductionRunDeps {
   /**
+   * G5-T4 (Δ3): override for the requirement library directory holding
+   * `manifest.md`. Defaults to `library/{requirementId}` under the run's
+   * repository — the same stable path the manual face uses, so the runtime
+   * projection and the manual publisher write the same object.
+   */
+  manifestLibraryDir?: string;
+  /**
    * Read-only git preflight (workspaceManager.inspect bound to a manager). It
    * must NEVER create a worktree. Omit only in tests that isolate the kernel.
    */
@@ -1654,6 +1898,10 @@ export async function runProduction(
     bindingRegistry: createRuntimeBindingRegistry(),
     productionIdentity: identity,
     capabilitySource: source,
+    // G5-T4 (Δ3): the production door always wires the manifest library, so
+    // readiness preflight and terminal projection are part of the entry.
+    manifestLibraryDir:
+      deps.manifestLibraryDir ?? join(identity.repositoryPath, "library", identity.requirementId),
     ...(deps.gateway !== undefined ? { gateway: deps.gateway } : {}),
     ...(boundRealGatewayDeps !== undefined ? { realGatewayDeps: boundRealGatewayDeps } : {}),
     ...(deps.maxDispatches !== undefined ? { maxDispatches: deps.maxDispatches } : {}),
