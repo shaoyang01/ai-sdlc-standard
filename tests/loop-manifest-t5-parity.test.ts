@@ -1,20 +1,15 @@
 // G5-T5 (D-090-03): manual/runtime parity + the residuals this task owns.
-// EXECUTED coverage (main() calls exactly these three scenarios):
-//   - gate #1 parity: a REAL manual trace (driven through the frozen publisher
-//     scripts/publish-requirement-manifest.sh) taken over by the runtime face
-//     with equivalent journal/finding-store facts — the three-level
-//     discrimination passing IS the normalized-equivalence proof, and the
-//     replay is byte-identical. Both faces carry a RESOLVED finding with a
-//     durable resolution proof here; manual-OPEN vs store-RESOLVED legal-lag
-//     alignment is NOT exercised (see declared residuals).
-//   - JOURNAL_MANIFEST_MISMATCH_STOP through the production door
-//   - real D-9 DEFERRED (terminal event without a materialized revision)
-// DECLARED RESIDUALS (not silently dropped; owned by the follow-up parity
-// matrix per the T2/T3/T4 closure reports): §6.2.6 repair full flow
-// (repair_records surviving republication), ACCEPTED mixed V9 variant (needs
-// the G4 PWR re-gate fixture the D087 matrix owns; the store-level
-// acceptFindingRisk path is covered there), D-21/§7.4 cross-face resolution
-// (no T2 caller), lag end-to-end across faces.
+// EXECUTED scenarios — the list below IS the main() call list; keep them in
+// sync (a header that outruns main() is a defect, not a summary):
+//   1. scenarioManualRuntimeParity        gate #1 parity over a REAL manual trace
+//   2. scenarioMismatchThroughDoor        level-2 divergence via the production door
+//   3. scenarioDeferredThenPublish        real D-9 DEFERRED then publish
+//   4. scenarioRealPublisherProductsReadable  title-less init + folded repair reason
+//   5. scenarioRepairFullFlow             §6.2.6 repair end to end (corrected_entries)
+// NOT covered here (declared, with the owning task): D-21/§7.4 cross-face
+// resolution (no T2 caller), cross-face legal lag (manual OPEN vs store
+// RESOLVED). ACCEPTED mixed V9 ownership is recorded by the T5 closure, not
+// as a silent omission.
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -50,6 +45,9 @@ function ok(condition: boolean, message: string): void {
 
 const TS = "2026-09-14T00:00:00.000Z";
 const REQ = "req-t5-parity";
+/** Distinct event timestamps (a shared clock makes the invalidation-edge
+ * registration ambiguous, which the projector correctly refuses per RC1-1). */
+const stamp = (n: number): string => new Date(Date.parse(TS) + n * 1000).toISOString();
 const sha256 = (content: string): string => createHash("sha256").update(content, "utf8").digest("hex");
 
 function identity(root: string, runId: string): LoopRunIdentity {
@@ -523,6 +521,229 @@ async function scenarioRealPublisherProductsReadable(): Promise<void> {
   }
 }
 
+/** §6.2.6 repair end to end: the publisher records digest corrections and
+ * republishes; the runtime reader must take the product back value-exact
+ * (this is the shape that used to be rejected: corrected_entries is a nested
+ * sequence under an inner key of a seq-item map). */
+async function scenarioRepairFullFlow(): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "t5-repair-"));
+  const libDir = join(root, "lib");
+  try {
+    mkdirSync(join(libDir, "00-需求资料"), { recursive: true });
+    mkdirSync(join(libDir, "01-技术方案"), { recursive: true });
+    publisher(libDir, [
+      "init", "--requirement-id", REQ, "--requested-depth", "STANDARD",
+      "--depth-basis", "user_requested", "--decision-scope", "FULL_REQUIREMENT",
+    ]);
+    writeFileSync(join(libDir, "00-需求资料", "x.md"), "# intake artifact\n", "utf8");
+    writeFileSync(join(libDir, "01-技术方案", "y.md"), "# design artifact\n", "utf8");
+    // Bind deliberately wrong digests so repair has real drift to correct.
+    publisher(libDir, [
+      "entry-update", "--node", "requirement-intake", "--declaration-seq", "2",
+      "--artifact-path", "00-需求资料/x.md", "--version", "1.0.0",
+      "--digest", "0".repeat(64), "--source-ref", "00-需求资料/x.md",
+    ]);
+    publisher(libDir, [
+      "entry-update", "--node", "solution-design", "--declaration-seq", "3",
+      "--artifact-path", "01-技术方案/y.md", "--version", "1.0.0",
+      "--digest", "1".repeat(64), "--source-ref", "01-技术方案/y.md",
+    ]);
+    publisher(libDir, ["repair", "--who", "reviewer", "--reason", "drift repair with corrections"]);
+
+    const raw = readFileSync(join(libDir, "manifest.md"), "utf8");
+    const doc = parseRubyYaml(extractManifestYaml(raw)) as Record<string, unknown>;
+    const records = doc.repair_records as readonly Record<string, unknown>[];
+    ok(records.length === 1, "the repair record survives the republication");
+    const corrected = records[0]!.corrected_entries as readonly Record<string, unknown>[];
+    ok(corrected.length === 2, `both drifted bindings are recorded (${corrected.length})`);
+    ok(corrected[0]!.node === "requirement-intake", "the first corrected entry names its node");
+    ok(corrected[0]!.recorded_digest === "0".repeat(64), "the recorded digest is preserved verbatim");
+    ok(typeof corrected[0]!.corrected_digest === "string" && corrected[0]!.corrected_digest !== "0".repeat(64),
+      "the corrected digest is the artifact's real digest");
+    ok(records[0]!.baseline_reset === "self-digest recomputed from verified current content",
+      "the baseline reset note is read back exactly");
+    const corrections = doc.corrections as readonly Record<string, unknown>[];
+    ok(corrections.length === 2, "the flat corrections list also parses (same nested shape)");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** ACCEPTED mixed V9: a scan-source finding risk-accepted by a CONFIRMED
+ * PASS_WITH_RISK ruling, published in the SAME atomic publish as a journal
+ * tail (entries from the tail, the finding row from the lifecycle delta).
+ * Constructed entirely from the public store API — no G4 PWR re-gate fixture
+ * is needed, which is why this is delivered rather than deferred. */
+async function scenarioAcceptedMixedV9(): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "t5-accepted-"));
+  const repo = join(root, "repo");
+  mkdirSync(repo, { recursive: true });
+  const artifactStore = new LoopArtifactStore({ controlRoot: join(root, "control"), repositoryPath: repo });
+  artifactStore.init();
+  const runStore = new LoopRunStore(join(root, "control", "journal.db"), { artifactStore });
+  runStore.init();
+  try {
+    const runId = "run-t5-accepted";
+    runStore.createRun(identity(root, runId));
+    runStore.appendEvent(runEvent(runId, 2, "run_started"));
+
+    // The scan round's Finding Ledger: a canonical envelope carrying exactly
+    // one member (the membership count the store cross-checks).
+    const ledger = artifactStore.put(
+      "capability_findings",
+      JSON.stringify({ schema: "loop-capability-findings:v1", findings: [{ finding_id: "scan-1" }] }) + "\n",
+    );
+    const gateResultBlob = artifactStore.put("solution_review", "gate verdict: PASS_WITH_RISK\n");
+    // The ruling's own persisted decision delta (a succeeded formal_verdict
+    // must materialize one).
+    const deltaStored = artifactStore.put(
+      "governance_tail_result",
+      JSON.stringify({ schema: "loop-decision-delta:v1", riskAcceptanceRefs: [] }) + "\n",
+    );
+    const sourceStored = artifactStore.put("requirement_summary", `# ${REQ} accepted source\n`);
+
+    // intake + design rounds so the gate has real upstream revisions.
+    const intakeStarted = event(runId, { sequence: 1, createdAt: stamp(1), status: "started", capability: "requirement-intake", inputArtifactRef: sourceStored.artifactRef, inputArtifactVersion: "1.0.0", inputDigest: sourceStored.digest });
+    const intakeSucceeded = event(runId, { ...intakeStarted, executionEventId: `${runId}:capability:2:succeeded`, sequence: 2, createdAt: stamp(2), status: "succeeded", outputArtifactRef: sourceStored.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: sourceStored.digest, gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE" });
+    runStore.appendCapabilityExecution(intakeStarted);
+    runStore.appendCapabilityExecution(intakeSucceeded);
+    materializeProducerRevision(runStore, REQ, runId, intakeSucceeded, () => TS);
+    const designStored = artifactStore.put("technical_design", `# ${REQ} accepted design\n`);
+    const designStarted = event(runId, { sequence: 3, createdAt: stamp(3), status: "started", capability: "solution-design", inputArtifactRef: sourceStored.artifactRef, inputArtifactVersion: "1.0.0", inputDigest: sourceStored.digest });
+    const designSucceeded = event(runId, { ...designStarted, executionEventId: `${runId}:capability:4:succeeded`, sequence: 4, createdAt: stamp(4), status: "succeeded", outputArtifactRef: designStored.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: designStored.digest, gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE" });
+    runStore.appendCapabilityExecution(designStarted);
+    runStore.appendCapabilityExecution(designSucceeded);
+    materializeProducerRevision(runStore, REQ, runId, designSucceeded, () => TS);
+
+    // The adversarial scan round that PRODUCED the ledger (membership receipt:
+    // the finding registered below carries this terminal's own createdAt).
+    const scanStarted = event(runId, { sequence: 5, createdAt: stamp(5), status: "started", capability: "solution-gate", executionRole: "adversarial_scan", inputArtifactRef: designStored.artifactRef, inputArtifactVersion: "1.0.0", inputDigest: designStored.digest });
+    const scanSucceeded = event(runId, {
+      ...scanStarted,
+      executionEventId: `${runId}:capability:6:succeeded`,
+      sequence: 6, createdAt: stamp(6), status: "succeeded",
+      outputArtifactRef: gateResultBlob.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: gateResultBlob.digest,
+      gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE",
+      unresolvedFindingsRef: ledger.artifactRef, unresolvedFindingsDigest: ledger.digest,
+    });
+    runStore.appendCapabilityExecution(scanStarted);
+    runStore.appendCapabilityExecution(scanSucceeded);
+    // The finding's source revision must exist in the run.
+    materializeProducerRevision(runStore, REQ, runId, scanSucceeded, () => TS);
+
+    const finding = createLoopFinding({
+      runId, requirementId: REQ, sequence: 1,
+      sourceCapability: "solution-gate",
+      // The discovery anchor is the revision the scan EXAMINED (the design
+      // current); an adversarial_scan authors no node revision of its own.
+      sourceRevisionId: `${runId}:revision:solution-design:1`,
+      causeKind: "IMPROVEMENT", introducedByRevisionId: null,
+      severity: "MEDIUM", category: "SOLUTION",
+      evidenceRef: ledger.artifactRef, evidenceDigest: ledger.digest,
+      earliestAffectedNodeId: "solution-design",
+      createdAt: scanSucceeded.createdAt,
+    });
+    runStore.appendFinding(finding);
+
+    const verdictStarted = event(runId, {
+      sequence: 7, createdAt: stamp(7), status: "started", capability: "solution-gate", executionRole: "formal_verdict",
+      inputArtifactRef: gateResultBlob.artifactRef, inputArtifactVersion: "1.0.0", inputDigest: gateResultBlob.digest,
+      // A formal_verdict must record the Finding Ledger it consumes on its
+      // own events (not only on the terminal), and the dual-agent rule
+      // requires a DIFFERENT executor than the scan round.
+      consumedFindingsRef: ledger.artifactRef, consumedFindingsDigest: ledger.digest,
+      executorAgent: "hermes",
+      executorAdapter: "hermes-cli",
+      bindingId: "binding-hermes-solution-gate-formal_verdict",
+    });
+    const verdictSucceeded = event(runId, {
+      ...verdictStarted,
+      executionEventId: `${runId}:capability:8:succeeded`,
+      sequence: 8, createdAt: stamp(8), status: "succeeded",
+      outputArtifactRef: gateResultBlob.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: gateResultBlob.digest,
+      gateResult: "PASS_WITH_RISK", decisionDepth: "STANDARD", decisionStatus: "CONFIRMED",
+      decisionScopeId: `${runId}:decision:1`,
+      decisionDeltaRef: deltaStored.artifactRef, decisionDeltaDigest: deltaStored.digest,
+      nextStepEligibility: "ELIGIBLE",
+      consumedFindingsRef: ledger.artifactRef, consumedFindingsDigest: ledger.digest,
+    });
+    runStore.appendCapabilityExecution(verdictStarted);
+    runStore.appendCapabilityExecution(verdictSucceeded);
+    // A PASS_WITH_RISK ruling authors the solution-gate node revision.
+    materializeProducerRevision(runStore, REQ, runId, verdictSucceeded, () => TS);
+
+    runStore.acceptFindingRisk(runId, finding.findingId, {
+      riskAcceptedBy: "formal_verdict",
+      riskAcceptanceEvidenceRef: verdictSucceeded.outputArtifactRef,
+      riskAcceptanceEvidenceDigest: verdictSucceeded.outputDigest,
+      decisionScopeId: verdictSucceeded.decisionScopeId,
+    });
+    ok(runStore.listFindings(runId)[0]!.status === "ACCEPTED_RISK", "the store accepted the risk on the scan-source finding");
+
+    // A planning tail lands AFTER the acceptance -> mixed publish.
+    const libDir = join(root, "library", REQ);
+    mkdirSync(libDir, { recursive: true });
+    const seed = {
+      schema_version: "1.0", requirement_id: REQ, title: "T5 ACCEPTED",
+      publish_seq: 1, projected_through: "MANUAL", updated_at: TS,
+      depth: { decision_scope: "FULL_REQUIREMENT", requested_depth: "STANDARD", initial_depth_basis: "user_requested", required_depth: "STANDARD" },
+      entries: [
+        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/00-需求资料.md", version: "1.0.0", digest: sourceStored.digest, updated_at: TS, source_event_ref: sourceStored.artifactRef },
+        // The scan finding invalidated the examined design revision, so the
+        // manual face must mirror that truth (status stale) — a current row
+        // here is a genuine B2 divergence, not a fixture convenience.
+        { node: "solution-design", status: "stale", artifact_path: "01-技术方案/01-技术方案.md", version: "1.0.0", digest: designStored.digest, updated_at: TS, source_event_ref: designStored.artifactRef },
+        { node: "solution-gate", status: "current", artifact_path: "02-方案审核/02-方案审核.md", version: "1.0.0", digest: gateResultBlob.digest, updated_at: TS, source_event_ref: gateResultBlob.artifactRef,
+          gate_result: "PASS_WITH_RISK", decision_depth: "STANDARD", decision_status: "CONFIRMED" },
+        ...["task-planning", "implementation", "code-review", "knowledge-sync"].map((n) => ({
+          node: n, status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null,
+        })),
+      ],
+      finding_index: [{
+        finding_id: finding.findingId, discovered_at: "solution-gate", root_cause_category: "SOLUTION",
+        earliest_affected_node_id: "solution-design", source_revision: `${runId}:revision:solution-design:1`,
+        evidence_ref: ledger.artifactRef, status: "OPEN",
+        closed_by: null, closure_evidence_ref: null, closure_evidence_digest: null, closure_bound_revision_id: null,
+      }],
+      declaration_log: [], corrections: [], repair_records: [],
+    };
+    writeFileSync(join(libDir, "manifest.md"), dumpRubyYaml({ ...seed, manifest_digest: sealManifest(seed as never).manifest_digest }), "utf8");
+
+    const request = { store: runStore, runId, requirementId: REQ, libraryDir: libDir, takeoverAcceptedAt: TS };
+    const first = projectLoopManifest(request as never);
+    ok(first.kind === "PUBLISHED" || first.kind === "NO_OP", `the takeover of the accepted-state manifest settles (${JSON.stringify(first)})`);
+
+    const planStored = artifactStore.put("task_plan", `# ${REQ} plan\n`);
+    // The tail node's input must be the predecessor's (gate's) effective output.
+    const planStarted = event(runId, { sequence: 9, createdAt: stamp(9), status: "started", capability: "task-planning", inputArtifactRef: gateResultBlob.artifactRef, inputArtifactVersion: "1.0.0", inputDigest: gateResultBlob.digest });
+    const planSucceeded = event(runId, { ...planStarted, executionEventId: `${runId}:capability:10:succeeded`, sequence: 10, createdAt: stamp(10), status: "succeeded", outputArtifactRef: planStored.artifactRef, outputArtifactVersion: "1.0.0", outputDigest: planStored.digest, gateResult: "NOT_APPLICABLE", nextStepEligibility: "ELIGIBLE" });
+    runStore.appendCapabilityExecution(planStarted);
+    runStore.appendCapabilityExecution(planSucceeded);
+    materializeProducerRevision(runStore, REQ, runId, planSucceeded, () => TS);
+
+    const beforeDoc = parseRubyYaml(extractManifestYaml(readFileSync(join(libDir, "manifest.md"), "utf8"))) as Record<string, unknown>;
+    const beforeEntries = JSON.stringify((beforeDoc.entries as Record<string, unknown>[]).map((e) => [e.node, e.status, e.digest]));
+    const mixed = projectLoopManifest(request as never);
+    ok(mixed.kind === "PUBLISHED", `the mixed publish lands the tail and the acceptance together (${JSON.stringify(mixed)})`);
+    const after = parseRubyYaml(extractManifestYaml(readFileSync(join(libDir, "manifest.md"), "utf8"))) as Record<string, unknown>;
+    const rows = after.finding_index as readonly Record<string, unknown>[];
+    const accepted = rows.find((r) => r.finding_id === finding.findingId)!;
+    ok(accepted.status === "ACCEPTED", "the scan finding projects as ACCEPTED (ACCEPTED_RISK -> ACCEPTED)");
+    ok(accepted.closed_by === "formal_verdict", "the risk acceptor is recorded as the formal verdict");
+    const afterEntries = JSON.stringify((after.entries as Record<string, unknown>[]).map((e) => [e.node, e.status, e.digest]));
+    ok(afterEntries !== beforeEntries, "the journal tail's entry landed in the same publish");
+    const planning = (after.entries as readonly Record<string, unknown>[]).find((e) => e.node === "task-planning")!;
+    ok(planning.status === "current", "the tail node's entry is current after the mixed publish");
+    ok(
+      JSON.stringify((beforeDoc.entries as Record<string, unknown>[]).filter((e) => e.node !== "task-planning").map((e) => [e.node, e.status, e.digest])) ===
+        JSON.stringify((after.entries as Record<string, unknown>[]).filter((e) => e.node !== "task-planning").map((e) => [e.node, e.status, e.digest])),
+      "no other artifact binding moved (V9: unrelated entries untouched)",
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("G5-T5 parity — real manual chain vs runtime face (gate #1)");
   await scenarioManualRuntimeParity();
@@ -532,6 +753,10 @@ async function main(): Promise<void> {
   await scenarioDeferredThenPublish();
   console.log("G5-T5-R1 rework — real publisher products are readable end to end");
   await scenarioRealPublisherProductsReadable();
+  console.log("G5-T5-R2 rework — §6.2.6 repair full flow");
+  await scenarioRepairFullFlow();
+  console.log("G5-T5-R2 rework — ACCEPTED mixed V9");
+  await scenarioAcceptedMixedV9();
   console.log(`\ng5t5-parity: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

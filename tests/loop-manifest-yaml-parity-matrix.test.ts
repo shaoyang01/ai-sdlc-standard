@@ -172,8 +172,8 @@ function main(): void {
   console.log("G5-T5-R1 rework — compact nested sequence fold geometry");
   expectDoc(
     { l: [[words20, "b"]] },
-    "---\nl:\n- - " + Array.from({ length: 15 }, () => "word").join(" ") + "\n    " + Array.from({ length: 5 }, () => "word").join(" ") + "\n  - b\n",
-    "nested sequence continuation sits at indent + 4",
+    "---\nl:\n- - " + Array.from({ length: 16 }, () => "word").join(" ") + "\n    " + Array.from({ length: 4 }, () => "word").join(" ") + "\n  - b\n",
+    "nested sequence fold breakpoint and continuation indent match Psych",
   );
 
   console.log("G5-T5 parity matrix — compact nested sequences");

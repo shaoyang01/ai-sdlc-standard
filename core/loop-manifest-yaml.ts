@@ -98,7 +98,12 @@ function timeScalarResolves(s: string): boolean {
   const hh = Number(md[1]);
   const mm = Number(md[2]);
   const ss = Number(md[3]);
-  return hh <= 23 && mm <= 59 && ss <= 60;
+  if (mm > 59 || ss > 60) return false;
+  // Psych parse_time uses Time.utc: hh == 24 is legal only as 24:00:00
+  // (it normalises to the next day); 24:00:01 / 24:01:00 raise ArgumentError
+  // and stay Strings.
+  if (hh === 24) return mm === 0 && ss === 0;
+  return hh <= 23;
 }
 function dateScalarResolves(s: string): boolean {
   const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
@@ -417,7 +422,10 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
         const token = serializeScalar(item[0]);
         // The nested item's own content starts after `- - ` (4 columns), so a
         // fold continuation lands at indent + 4 (probed).
-        const head = applyFolding(`${pad}- - ${token}`, indent + 4, indent + 4);
+        // The token carries its own `pad + "- - "` prefix, so it starts at
+        // physical column 0 — passing indent + 4 here double-counted the
+        // prefix and broke one word early (phantom width).
+        const head = applyFolding(`${pad}- - ${token}`, 0, indent + 4);
         out += `${head}\n`;
         out += emitSequence(item.slice(1), indent + 2);
       } else {
@@ -511,12 +519,17 @@ function decodeDoubleQuoted(token: string): string {
 function parseQuoted(token: string): string | undefined {
   if (token.startsWith("'") && token.endsWith("'") && token.length >= 2) {
     let body = token.slice(1, -1).replace(/''/g, "'");
-    // Trailing-break fold form ("ab\n" -> 'ab\n\n  '): the two breaks and the
-    // continuation indent collapse back to one newline.
-    body = body.replace(/\n\n[ \t]*$/, "\n");
     // Single-quoted Unicode-break continuation: the break was written raw with
     // a two-space indent after it — the fold strips exactly that indent.
-    return body.replace(/([\u2028\u2029])  /g, "$1");
+    body = body.replace(/([\u2028\u2029])  /g, "$1");
+    // Psych single-quoted folding: trailing spaces are stripped at a break,
+    // one break folds to a space, and a run of n >= 2 breaks folds to n - 1
+    // breaks (the closing-quote form 'ab\n\n  ' therefore reads back as "ab\n").
+    const lines = body.split("\n");
+    const normalized = lines
+      .map((line, index) => (index === lines.length - 1 ? line : line.replace(/[ \t]+$/, "")))
+      .join("\n");
+    return normalized.replace(/\n+/g, (run) => (run.length === 1 ? " " : "\n".repeat(run.length - 1)));
   }
   if (token.startsWith('"') && token.endsWith('"') && token.length >= 2) {
     return decodeDoubleQuoted(token);
@@ -583,13 +596,12 @@ function collectQuotedRest(lines: Line[], start: number, rest: string, keyIndent
     if (j >= lines.length) {
       throw new LoopManifestYamlError("unterminated quoted scalar in manifest");
     }
-    const line = lines[j]!;
-    // Blank lines are interior to the folded scalar (indent -1); only a
-    // non-blank line at or above the key's own indent terminates the region.
-    if (line.indent !== -1 && line.indent <= keyIndent) {
-      throw new LoopManifestYamlError("unterminated quoted scalar in manifest");
-    }
-    text += "\n" + line.text;
+    // A quoted scalar continues across any line until its closing quote:
+    // YAML does not bound it by indentation, so the terminator is the quote
+    // itself. An unterminated quote therefore swallows the remaining lines and
+    // fails closed at EOF, which is the safe direction.
+    void keyIndent;
+    text += "\n" + lines[j]!.text;
     j += 1;
   }
   return { text, next: j };
@@ -730,8 +742,11 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
       const firstRest = inlineKv[2] ?? "";
       const childIndent = indent + 2;
       if (isBlockHeader(firstRest)) {
-        // A block scalar may open on the dash line (`- key: |-`).
-        const block = parseBlockScalar(lines, i + 1, indent, firstRest);
+        // A block scalar may open on the dash line (`- key: |-`); its content
+        // indent is measured from the KEY's indent (childIndent), exactly like
+        // the inner-key path — using the sequence indent swallowed the sibling
+        // keys that follow.
+        const block = parseBlockScalar(lines, i + 1, childIndent, firstRest);
         map[key] = block.value;
         i = block.next;
       } else if (startsUnterminatedQuote(firstRest)) {
@@ -757,14 +772,31 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
           i += 1;
         }
         map[key] = value;
+      } else if (i + 1 < lines.length && lines[i + 1].indent > childIndent) {
+        // `- key:` followed by deeper content: a nested container.
+        const child = lines[i + 1]!.text.startsWith("- ")
+          ? parseSequenceAt(lines, i + 1, lines[i + 1]!.indent)
+          : parseMappingAt(lines, i + 1, lines[i + 1]!.indent);
+        map[key] = child.value;
+        i = child.next;
+      } else if (
+        i + 1 < lines.length && lines[i + 1]!.indent === childIndent &&
+        lines[i + 1]!.text.startsWith("- ")
+      ) {
+        // Psych writes a nested sequence at the KEY's own indent.
+        const child = parseSequenceAt(lines, i + 1, childIndent);
+        map[key] = child.value;
+        i = child.next;
       } else {
-        // `- key:` with no inline value: the key is present with a null value
-        // (deeper nested content is handled by the inner-key loop below).
         map[key] = null;
         i += 1;
       }
       while (i < lines.length && lines[i].indent === childIndent) {
-        if (lines[i].text.startsWith("- ")) throw new LoopManifestYamlError(`unexpected nested item at line: ${lines[i].raw}`);
+        if (lines[i].text.startsWith("- ")) {
+          // A same-indent sequence belongs to the key parsed just above; the
+          // key branch consumes it, so reaching here means it has no owner.
+          throw new LoopManifestYamlError(`unexpected nested item at line: ${lines[i].raw}`);
+        }
         const innerKv = KEY_VALUE.exec(lines[i].text);
         if (innerKv === null) throw new LoopManifestYamlError(`expected 'key: value' at line: ${lines[i].raw}`);
         const innerKey = parseInlineScalar(innerKv[1]);
@@ -803,6 +835,17 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
           const child = lines[i + 1].text.startsWith("- ")
             ? parseSequenceAt(lines, i + 1, lines[i + 1].indent)
             : parseMappingAt(lines, i + 1, lines[i + 1].indent);
+          map[innerKey] = child.value;
+          i = child.next;
+          continue;
+        }
+        if (
+          i + 1 < lines.length && lines[i + 1].indent === childIndent &&
+          lines[i + 1].text.startsWith("- ")
+        ) {
+          // Psych writes the nested sequence at the KEY's indent (the real
+          // publisher's `corrected_entries` shape).
+          const child = parseSequenceAt(lines, i + 1, childIndent);
           map[innerKey] = child.value;
           i = child.next;
           continue;
