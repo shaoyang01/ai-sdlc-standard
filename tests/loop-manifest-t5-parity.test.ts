@@ -1,17 +1,20 @@
-// G5-T5 (D-090-03): projection regression residuals + manual/runtime parity.
-// Completion-gate coverage that earlier tasks deferred to this task:
-//   - gate #1: a REAL manual trace (driven through the frozen publisher
+// G5-T5 (D-090-03): manual/runtime parity + the residuals this task owns.
+// EXECUTED coverage (main() calls exactly these three scenarios):
+//   - gate #1 parity: a REAL manual trace (driven through the frozen publisher
 //     scripts/publish-requirement-manifest.sh) taken over by the runtime face
 //     with equivalent journal/finding-store facts — the three-level
 //     discrimination passing IS the normalized-equivalence proof, and the
-//     replay is byte-identical (manual trace artifact kept in the review
-//     fixture below)
-//   - gate #3 / lag end-to-end: finding store RESOLVED with durable proof
-//     aligned against a manual OPEN row (legal lag), entries untouched
-//   - ACCEPTED mixed V9 variant (same code branch as RESOLVED — R4 annotation)
-//   - §6.2.6 repair full flow with repair_records surviving republication
+//     replay is byte-identical. Both faces carry a RESOLVED finding with a
+//     durable resolution proof here; manual-OPEN vs store-RESOLVED legal-lag
+//     alignment is NOT exercised (see declared residuals).
 //   - JOURNAL_MANIFEST_MISMATCH_STOP through the production door
 //   - real D-9 DEFERRED (terminal event without a materialized revision)
+// DECLARED RESIDUALS (not silently dropped; owned by the follow-up parity
+// matrix per the T2/T3/T4 closure reports): §6.2.6 repair full flow
+// (repair_records surviving republication), ACCEPTED mixed V9 variant (needs
+// the G4 PWR re-gate fixture the D087 matrix owns; the store-level
+// acceptFindingRisk path is covered there), D-21/§7.4 cross-face resolution
+// (no T2 caller), lag end-to-end across faces.
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -343,86 +346,6 @@ function parseRubyYamlText(text: string): Record<string, unknown> {
 }
 
 
-/**
- * V9 ACCEPTED mixed variant: a scan finding accepted via the durable
- * `acceptFindingRisk` proof, projected alongside a journal tail in ONE
- * publish (entries updated by the tail, finding row ACCEPTED by the
- * lifecycle delta — the V9 mixed rule), entries' artifact bindings untouched.
- */
-async function scenarioAcceptedMixedV9(): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), "t5-v9-"));
-  const repo = join(root, "repo");
-  mkdirSync(repo, { recursive: true });
-  const artifactStore = new LoopArtifactStore({ controlRoot: join(root, "control"), repositoryPath: repo });
-  artifactStore.init();
-  const runStore = new LoopRunStore(join(root, "control", "journal.db"), { artifactStore });
-  runStore.init();
-  try {
-    const libDir = join(root, "library", REQ);
-    const parsed = parseProductionEntryRequest({
-      schema: PRODUCTION_ENTRY_SCHEMA, requirementId: REQ, repository: "example/repo",
-      repositoryPath: repo, baseBranch: "loop-runtime-v1", expectedBaseSha: "a".repeat(40),
-      taskBranch: "feature/t5v9", controlRoot: join(root, "control"),
-      sourceFiles: [join(root, "control", "requirement.md")],
-      bindingRegistryVersion: "1", executionProfileVersion: "1.0.0", mode: "real" as const,
-    }, { now: () => TS, runId: "run-t5-v9" });
-    const result = await runProduction(parsed, "build it", {
-      inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
-      runStore, artifactStore,
-      manifestLibraryDir: libDir,
-      maxDispatches: 12,
-    });
-    ok(result.execution_trace.length >= 6, `the full chain ran (${result.execution_trace.length} nodes)`);
-    ok(result.blocking_reason_code === undefined || result.blocking_reason_code === null, "the chain completed without a manifest stop");
-
-    // A scan finding discovered by the gate round, then risk-accepted by the
-    // formal verdict through the durable acceptance API (RISK_ACCEPTANCE proof).
-    const runId = runStore.findLatestRunByRequirement(REQ)!.state.identity.runId;
-    const verdict = runStore.listCapabilityExecutions(runId)
-      .find((e) => e.executionRole === "formal_verdict" && e.status === "succeeded")!;
-    const gateRev = gateRevision(runStore, runId);
-    const scanFinding = createLoopFinding({
-      runId, requirementId: REQ, sequence: 1,
-      sourceCapability: "solution-gate",
-      sourceRevisionId: gateRev.revisionId,
-      causeKind: "IMPROVEMENT", introducedByRevisionId: null,
-      severity: "MEDIUM", category: "SOLUTION",
-      evidenceRef: gateRev.artifactRef,
-      evidenceDigest: gateRev.digest,
-      earliestAffectedNodeId: "solution-design", createdAt: TS,
-    });
-    runStore.appendFinding(scanFinding);
-    runStore.acceptFindingRisk(runId, scanFinding.findingId, {
-      riskAcceptedBy: "formal_verdict",
-      riskAcceptanceEvidenceRef: gateRevision(runStore, runId).artifactRef,
-      riskAcceptanceEvidenceDigest: gateRevision(runStore, runId).digest,
-      decisionScopeId: verdict.decisionScopeId ?? `${runId}:scope:1`,
-    });
-
-    // The acceptance is a finding-lifecycle delta with NO node terminal: the
-    // projection updates the finding row and leaves every artifact binding
-    // untouched (gate #3 / entries 不被触碰).
-    const before = readFileSync(join(libDir, "manifest.md"), "utf8");
-    const outcome = projectLoopManifest({ store: runStore, runId, requirementId: REQ, libraryDir: libDir });
-    ok(outcome.kind === "PUBLISHED", `the acceptance projects as a lifecycle-only publish (${JSON.stringify(outcome)})`);
-    const doc = parseRubyYaml(readFileSync(join(libDir, "manifest.md"), "utf8")) as Record<string, unknown>;
-    const rows = doc.finding_index as readonly Record<string, unknown>[];
-    const accepted = rows.find((r) => r.finding_id === scanFinding.findingId)!;
-    ok(accepted.status === "ACCEPTED", "the finding row is ACCEPTED (OPEN -> ACCEPTED lawful lag)");
-    ok(accepted.closed_by === "formal_verdict", "the acceptance authority is recorded");
-    const entriesBefore = (parseRubyYaml(before.startsWith("---") ? before : extractManifestYaml(before)) as Record<string, unknown>).entries;
-    const digestBefore = JSON.stringify((entriesBefore as Record<string, unknown>[]).map((e) => [e.node, e.status, e.digest]));
-    const digestAfter = JSON.stringify((doc.entries as Record<string, unknown>[]).map((e) => [e.node, e.status, e.digest]));
-    ok(digestBefore === digestAfter, "artifact bindings untouched by the lifecycle-only publish");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-function gateRevision(runStore: LoopRunStore, runId: string) {
-  return runStore.listArtifactRevisions(runId).find((r) => r.nodeId === "solution-gate")!;
-}
-
 /** MISMATCH through the production door: a rehashed tamper on the entries
  * must stop the run with the exact §7.2 code (T4-R1 S-3 seed). */
 async function scenarioMismatchThroughDoor(): Promise<void> {
@@ -572,6 +495,34 @@ async function scenarioDeferredThenPublish(): Promise<void> {
   }
 }
 
+/** T5-R1-RC2-1 regression: the REAL publisher products the reader used to
+ * reject — a title-less init (`title: ''`) and a repair with a long reason
+ * (folded scalar inside a seq-item map) — must parse back value-exact. */
+async function scenarioRealPublisherProductsReadable(): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "t5-pub-"));
+  const libDir = join(root, "lib");
+  const longReason = "a deliberately long english reason that should exceed the eighty column folding width used by the reference emitter";
+  try {
+    mkdirSync(libDir, { recursive: true });
+    publisher(libDir, [
+      "init", "--requirement-id", REQ, "--requested-depth", "STANDARD",
+      "--depth-basis", "user_requested", "--decision-scope", "FULL_REQUIREMENT",
+    ]);
+    publisher(libDir, ["repair", "--who", "reviewer", "--reason", longReason]);
+
+    const raw = readFileSync(join(libDir, "manifest.md"), "utf8");
+    ok(raw.includes("title: ''"), "the title-less init really emits an empty single-quoted scalar");
+    const doc = parseRubyYaml(extractManifestYaml(raw)) as Record<string, unknown>;
+    ok(doc.title === "", "the empty scalar parses back as an empty string (was: unterminated-quote throw)");
+    const repairRows = doc.repair_records as readonly Record<string, unknown>[];
+    ok(repairRows.length === 1 && repairRows[0]!.reason === longReason,
+      "the folded reason inside a seq-item map reassembles value-exact");
+    ok(repairRows[0]!.who === "reviewer", "the sibling inner keys still parse after the fold");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("G5-T5 parity — real manual chain vs runtime face (gate #1)");
   await scenarioManualRuntimeParity();
@@ -579,6 +530,8 @@ async function main(): Promise<void> {
   await scenarioMismatchThroughDoor();
   console.log("G5-T5 residuals — real D-9 DEFERRED then publish");
   await scenarioDeferredThenPublish();
+  console.log("G5-T5-R1 rework — real publisher products are readable end to end");
+  await scenarioRealPublisherProductsReadable();
   console.log(`\ng5t5-parity: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

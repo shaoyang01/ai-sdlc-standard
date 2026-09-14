@@ -78,6 +78,37 @@ const PSYCH_SEXAGESIMAL = /^[-+]?[0-9][0-9_]*(:[0-5]?[0-9]){1,2}$/;
 const PSYCH_SEXAGESIMAL_FLOAT = /^[-+]?[0-9][0-9_]*(:[0-5]?[0-9]){1,2}\.[0-9_]*$/;
 const PSYCH_BROKEN_OCTAL = /^0[0-7]*[89]/;
 
+/** Psych parse_time/strptime are wrapped in `rescue ArgumentError -> String`:
+ * an out-of-range month/day/time makes the scalar stay a String (plain). */
+function isLeapYear(y: number): boolean {
+  return y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+}
+function validCalendarDate(y: number, m: number, d: number): boolean {
+  if (m < 1 || m > 12 || d < 1) return false;
+  const perMonth = [31, isLeapYear(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return d <= perMonth[m - 1]!;
+}
+function timeScalarResolves(s: string): boolean {
+  if (!PSYCH_TIME.test(s)) return false;
+  const datePart = s.split(/[Tt]|\s+/)[0]!;
+  const [y, m, d] = datePart.split("-").map((v) => Number(v));
+  if (!validCalendarDate(y!, m!, d!)) return false;
+  const md = /(\d{1,2}):(\d\d):(\d\d)/.exec(s);
+  if (md === null) return false;
+  const hh = Number(md[1]);
+  const mm = Number(md[2]);
+  const ss = Number(md[3]);
+  return hh <= 23 && mm <= 59 && ss <= 60;
+}
+function dateScalarResolves(s: string): boolean {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m === null) return false;
+  const day = m[3]!;
+  // Psych's date regex admits 1-2 digit day up to 31; the calendar check is
+  // what rejects 2020-02-31 and 1999-02-29.
+  return validCalendarDate(Number(m[1]), Number(m[2]), Number(day));
+}
+
 /** ScalarScanner#tokenize: does the string resolve to a NON-String value? */
 function tokenizeResolvesNonString(s: string): boolean {
   if (s === "") return true;
@@ -89,8 +120,8 @@ function tokenizeResolvesNonString(s: string): boolean {
     if (/^(no|false|off)$/i.test(s)) return true;
     return false;
   }
-  if (PSYCH_TIME.test(s)) return true;
-  if (/^\d{4}-(?:1[012]|0\d|\d)-(?:[12]\d|3[01]|0\d|\d)$/.test(s)) return true;
+  if (timeScalarResolves(s)) return true;
+  if (dateScalarResolves(s)) return true;
   if (/^\+?\.inf$/i.test(s)) return true;
   if (/^-\.inf$/i.test(s)) return true;
   if (/^\.nan$/i.test(s)) return true;
@@ -189,6 +220,15 @@ function psychStyleOf(s: string): PsychStyle {
 /** libyaml plain-analysis fallback for a PLAIN-requested scalar. */
 function plainFallbackToken(s: string): string {
   if (s === "") return "''";
+  // Exactly one trailing LF takes the single-quoted fold form (probed
+  // 'ab\n' -> 'ab\n\n  '); this must precede the control-character gate,
+  // since LF is itself a control character.
+  if (s.endsWith("\n") && !s.slice(0, -1).includes("\n") && !s.slice(0, -1).includes("\t")) {
+    // Probed: 'ab\n' -> 'ab\n\n  ' — the breaks and continuation indent sit
+    // INSIDE the quotes.
+    const body = s.slice(0, -1).replace(/'/g, "''");
+    return `'${body}\n\n  '`;
+  }
   if (/\t/.test(s)) return doubleQuoted(s);
   for (const ch of s) {
     const code = ch.codePointAt(0)!;
@@ -201,11 +241,13 @@ function plainFallbackToken(s: string): string {
   if (/[\x00-\x1f\x7f-\x9f\x85\u2028\u2029]/.test(s)) return doubleQuoted(s);
   if (s.includes(": ") || s.includes(" #") || s.endsWith(":")) return singleQuoted(s);
   if (/ $/.test(s)) return singleQuoted(s);
-  if (s.endsWith("\n")) return `${singleQuoted(s.slice(0, -1))}\n\n  `;
   return s;
 }
 
 function serializeScalarString(s: string, blockIndent = 0): string {
+  // psych visit_String: o == '<<' is an explicit !!str single-quoted branch
+  // (it would otherwise resolve as a merge key).
+  if (s === "<<") return "!!str '<<'";
   const style = psychStyleOf(s);
   if (style === "literal") return multilineScalar(s, blockIndent);
   if (style === "double") return doubleQuoted(s);
@@ -253,7 +295,15 @@ function multilineScalar(s: string, blockIndent = 0): string {
   const header = `|${indicator}${chomp}`;
   const linePad = " ".repeat(blockIndent + 2);
   let out = `${header}\n`;
-  for (const line of contentLines) out += line === "" ? "\n" : `${linePad}${line}\n`;
+  for (const line of contentLines) {
+    if (line === "") {
+      out += "\n";
+      continue;
+    }
+    // Probed: a raw U+2028/U+2029 inside a block line is followed by a
+    // two-space continuation indent (same rule as the single-quoted form).
+    out += `${linePad}${line.replace(/([\u2028\u2029])/g, "$1  ")}\n`;
+  }
   return out;
 }
 
@@ -365,7 +415,9 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       // first item rides the parent dash line, the rest indent +2.
       if (isScalar(item[0])) {
         const token = serializeScalar(item[0]);
-        const head = applyFolding(`${pad}- - ${token}`, indent, indent + 2);
+        // The nested item's own content starts after `- - ` (4 columns), so a
+        // fold continuation lands at indent + 4 (probed).
+        const head = applyFolding(`${pad}- - ${token}`, indent + 4, indent + 4);
         out += `${head}\n`;
         out += emitSequence(item.slice(1), indent + 2);
       } else {
@@ -473,6 +525,9 @@ function parseQuoted(token: string): string | undefined {
 }
 
 function parseInlineScalar(token: string): YamlValue {
+  // psych emits `!!str '<<'` for the merge-key sentinel: the tag pins the
+  // scalar's type, the value is what follows.
+  if (token.startsWith("!!str ")) return parseInlineScalar(token.slice("!!str ".length));
   if (token === "") return null;
   if (token === "[]") return Object.freeze([]);
   if (token === "{}") return Object.freeze({});
@@ -511,8 +566,10 @@ function startsUnterminatedQuote(rest: string): boolean {
   if (rest.length < 2) return rest === "'" || rest === '"';
   const q = rest[0];
   if (q !== "'" && q !== '"') return false;
-  if (q === '"') return !/[^\\](\\\\)*"$/.test(rest);
-  return !/([^']|'')'$/.test(rest) || rest === "'";
+  // The empty scalar '' / "" is terminated (its body is empty) — parsing it
+  // used to loop forever because the empty parse result is falsy.
+  if (rest === "''" || rest === '""') return false;
+  return parseQuoted(rest) === undefined;
 }
 
 /** Collect the quoted scalar text across continuation lines (joined with the
@@ -520,11 +577,19 @@ function startsUnterminatedQuote(rest: string): boolean {
 function collectQuotedRest(lines: Line[], start: number, rest: string, keyIndent: number): { text: string; next: number } {
   let text = rest;
   let j = start;
-  while (!parseQuoted(text)) {
-    if (j >= lines.length || lines[j].indent <= keyIndent) {
+  // `parseQuoted` returns "" for a legitimately empty scalar, which is falsy —
+  // test against undefined instead or the loop never terminates.
+  while (parseQuoted(text) === undefined) {
+    if (j >= lines.length) {
       throw new LoopManifestYamlError("unterminated quoted scalar in manifest");
     }
-    text += "\n" + lines[j].text;
+    const line = lines[j]!;
+    // Blank lines are interior to the folded scalar (indent -1); only a
+    // non-blank line at or above the key's own indent terminates the region.
+    if (line.indent !== -1 && line.indent <= keyIndent) {
+      throw new LoopManifestYamlError("unterminated quoted scalar in manifest");
+    }
+    text += "\n" + line.text;
     j += 1;
   }
   return { text, next: j };
@@ -552,7 +617,9 @@ function parseBlockScalar(lines: Line[], start: number, keyIndent: number, heade
     i += 1;
   }
   while (collected.length > 0 && collected[collected.length - 1] === "") collected.pop();
-  let value = collected.join("\n");
+  // Reverse the raw-break continuation: a LS/PS inside a block line was
+  // written followed by a two-space indent.
+  let value = collected.join("\n").replace(/([\u2028\u2029])  /g, "$1");
   if (!strip && value !== "") value += "\n";
   return { value, next: i };
 }
@@ -659,9 +726,43 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
     if (inlineKv !== null && parseQuoted(inlineKv[1]) === undefined && !/^[0-9:./-]+$/.test(inlineKv[1])) {
       const key = parseInlineScalar(inlineKv[1]);
       if (typeof key !== "string") throw new LoopManifestYamlError(`non-string mapping key at line: ${lines[i].raw}`);
-      const map: Record<string, YamlValue> = { [key]: parseInlineScalar(inlineKv[2] ?? "") };
-      i += 1;
+      const map: Record<string, YamlValue> = {};
+      const firstRest = inlineKv[2] ?? "";
       const childIndent = indent + 2;
+      if (isBlockHeader(firstRest)) {
+        // A block scalar may open on the dash line (`- key: |-`).
+        const block = parseBlockScalar(lines, i + 1, indent, firstRest);
+        map[key] = block.value;
+        i = block.next;
+      } else if (startsUnterminatedQuote(firstRest)) {
+        // Folded/quoted continuation of the first key's value.
+        const collected = collectQuotedRest(lines, i + 1, firstRest, indent);
+        map[key] = parseInlineScalar(collected.text);
+        i = collected.next;
+      } else if (firstRest !== "") {
+        let value = parseInlineScalar(firstRest);
+        const conts: Line[] = [];
+        let j = i + 1;
+        // A folded continuation is indented deeper than the key it belongs to
+        // (the first key sits on the dash line at childIndent, so its
+        // continuations are > childIndent — exactly like inner-key values).
+        while (j < lines.length && lines[j].indent > childIndent) {
+          conts.push(lines[j]);
+          j += 1;
+        }
+        if (conts.length > 0 && typeof value === "string") {
+          value = joinFoldContinuation(value, conts);
+          i = j;
+        } else {
+          i += 1;
+        }
+        map[key] = value;
+      } else {
+        // `- key:` with no inline value: the key is present with a null value
+        // (deeper nested content is handled by the inner-key loop below).
+        map[key] = null;
+        i += 1;
+      }
       while (i < lines.length && lines[i].indent === childIndent) {
         if (lines[i].text.startsWith("- ")) throw new LoopManifestYamlError(`unexpected nested item at line: ${lines[i].raw}`);
         const innerKv = KEY_VALUE.exec(lines[i].text);
@@ -669,9 +770,33 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
         const innerKey = parseInlineScalar(innerKv[1]);
         if (typeof innerKey !== "string") throw new LoopManifestYamlError(`non-string mapping key at line: ${lines[i].raw}`);
         const innerRest = innerKv[2] ?? "";
+        if (isBlockHeader(innerRest)) {
+          const block = parseBlockScalar(lines, i + 1, childIndent, innerRest);
+          map[innerKey] = block.value;
+          i = block.next;
+          continue;
+        }
+        if (startsUnterminatedQuote(innerRest)) {
+          const collected = collectQuotedRest(lines, i + 1, innerRest, childIndent);
+          map[innerKey] = parseInlineScalar(collected.text);
+          i = collected.next;
+          continue;
+        }
         if (innerRest !== "") {
-          map[innerKey] = parseInlineScalar(innerRest);
-          i += 1;
+          let value = parseInlineScalar(innerRest);
+          const innerConts: Line[] = [];
+          let j = i + 1;
+          while (j < lines.length && lines[j].indent > childIndent) {
+            innerConts.push(lines[j]);
+            j += 1;
+          }
+          if (innerConts.length > 0 && typeof value === "string") {
+            value = joinFoldContinuation(value, innerConts);
+            i = j;
+          } else {
+            i += 1;
+          }
+          map[innerKey] = value;
           continue;
         }
         if (i + 1 < lines.length && lines[i + 1].indent > childIndent) {

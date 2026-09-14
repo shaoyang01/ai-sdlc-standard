@@ -169,6 +169,13 @@ function main(): void {
     "sequence item fold",
   );
 
+  console.log("G5-T5-R1 rework — compact nested sequence fold geometry");
+  expectDoc(
+    { l: [[words20, "b"]] },
+    "---\nl:\n- - " + Array.from({ length: 15 }, () => "word").join(" ") + "\n    " + Array.from({ length: 5 }, () => "word").join(" ") + "\n  - b\n",
+    "nested sequence continuation sits at indent + 4",
+  );
+
   console.log("G5-T5 parity matrix — compact nested sequences");
   assert.ok(true);
   {
@@ -182,7 +189,19 @@ function main(): void {
     ok(actual === "---\nouter:\n  inner: |-\n    x\n    y\n    z\n", `nested block literal (got ${JSON.stringify(actual)})`);
   }
 
-  console.log("G5-T5 parity matrix — round-trips through the strict reader");
+  console.log("G5-T5-R1 rework — five classes that were undeclared inequivalences");
+  expectBytes("<<", "---\nk: !!str '<<'\n", "merge-key sentinel takes the !!str branch");
+  for (const [label, form] of [
+    ["bad-month", "2020-13-01 00:00:00"], ["bad-day", "2020-02-31"],
+    ["bad-hour", "2020-01-01 25:00:00"], ["non-leap", "1999-02-29"],
+  ] as const) {
+    expectBytes(form, `---\nk: ${form}\n`, `${label}: invalid calendar stays plain (Psych rescue -> String)`);
+  }
+  expectBytes("2020-02-29", "---\nk: '2020-02-29'\n", "valid leap date still single-quoted");
+  expectBytes(`a${LS}b\nc`, `---\nk: |-\n  a${LS}  b\n  c\n`, "raw LS inside a block line keeps the +2 continuation");
+  expectBytes("ab\n", "---\nk: 'ab\n\n  '\n", "single trailing LF takes the single-quoted fold");
+
+    console.log("G5-T5 parity matrix — round-trips through the strict reader");
   for (const [label, form] of [
     ["block strip", "a\nb"], ["block three lines", "x\ny\nz"], ["block clip", "x\ny\n"],
     ["block interior empty", "a\n\nb"], ["block explicit indent", " a\nb"],
@@ -190,6 +209,9 @@ function main(): void {
     ["LS mid", `a${LS}b`], ["LS multiple", `a${LS}b${LS}c`],
     ["NEL escape", `a${NEL}b`], ["escapes", "a\x01b\tc\rd"],
     ["fold plain", words20], ["fold quoted", longQuoted],
+    ["merge sentinel", "<<"], ["invalid date plain", "2020-02-31"],
+    ["block with raw LS", `a${LS}b\nc`], ["single trailing LF fold", "ab\n"],
+    ["empty scalar", ""],
     ["underscore int", "1_000"], ["broken octal", "094fe8b3"],
   ] as const) {
     expectRoundTrip(form, label);
