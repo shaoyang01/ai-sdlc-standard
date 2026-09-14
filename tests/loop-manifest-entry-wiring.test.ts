@@ -4,11 +4,12 @@
 // The channel is exercised end-to-end: real production door → real
 // LoopRunStore/artifact store → real projector → the §7.2 exit envelope.
 import { strict as assert } from "node:assert";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { LoopArtifactStore } from "../core/loop-artifact-store";
+import { LoopRunJournalError } from "../core/loop-executor-types";
 import { LoopRunStore } from "../core/loop-run-store";
 import {
   parseProductionEntryRequest,
@@ -16,11 +17,15 @@ import {
   type ParsedProductionEntry,
 } from "../core/loop-production-entry";
 import {
+  LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+} from "../core/loop-capability-execution";
+import {
   LOOP_MANIFEST_SCHEMA_VERSION,
   sealManifest,
 } from "../core/loop-manifest-projector";
 import { dumpRubyYaml, parseRubyYaml } from "../core/loop-manifest-yaml";
 import {
+  releaseManifestProjectionBlock,
   resolveManifestReadiness,
   runProduction,
   type ProductionPreflightSnapshot,
@@ -305,6 +310,380 @@ async function scenarioTerminalProjection(): Promise<void> {
   }
 }
 
+async function scenarioInterruptedResumeFresh(): Promise<void> {
+  const { root, repo, control } = makeRoot();
+  const s = stores(control, repo);
+  try {
+    // Seed the crashed-attempt shape: a run whose intake claim is still
+    // STARTED (no terminal). This is the interrupted-resume entry into the
+    // chain, i.e. the second terminal→projector call point.
+    const parsed = parsedEntry({ repo, control, runId: "run-t4-interrupted" });
+    const source = s.artifactStore.put("requirement_summary", "build it");
+    s.runStore.createRun(parsed.identity);
+    s.runStore.appendEvent(Object.freeze({
+      eventId: `${parsed.identity.runId}:2:run_started`,
+      runId: parsed.identity.runId,
+      sequence: 2,
+      kind: "run_started" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: TS,
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
+    s.runStore.appendCapabilityExecution(Object.freeze({
+      schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+      executionEventId: `${parsed.identity.runId}:capability:1:started`,
+      runId: parsed.identity.runId,
+      sequence: 1,
+      capability: "requirement-intake",
+      executionRole: "primary",
+      nodeId: "requirement-intake",
+      attempt: 1,
+      status: "started",
+      createdAt: TS,
+      bindingId: "binding-codex-requirement-intake-primary",
+      bindingVersion: "2.0.0",
+      bindingRegistryVersion: "1",
+      executorAgent: "codex",
+      executorAdapter: "codex-real-dispatch",
+      executorVersion: "1.0.0",
+      inputArtifactRef: source.artifactRef,
+      inputArtifactVersion: "1.0.0",
+      inputDigest: source.digest,
+      outputArtifactRef: null,
+      outputArtifactVersion: null,
+      outputDigest: null,
+      gateResult: null,
+      unresolvedFindingsRef: null,
+      unresolvedFindingsDigest: null,
+      consumedFindingsRef: null,
+      consumedFindingsDigest: null,
+      decisionDepth: null,
+      decisionStatus: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
+      nextStepEligibility: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
+    } as never));
+    ok(manifestExists(libraryDirOf(repo)) === false, "the interrupted-resume scenario starts with no library directory (lawful FRESH)");
+
+    const resumed = await runProduction(parsed, "build it", {
+      inspectWorkspace: clean,
+      runStore: s.runStore,
+      artifactStore: s.artifactStore,
+      maxDispatches: 2,
+    });
+    // The interrupted-resume call point must apply the same three-state guard
+    // as the main loop: a lawful FRESH requirement whose crashed run is
+    // resumed here must NOT be misread as the §6.2.7 legacy-reuse case.
+    ok(
+      resumed.blocking_reason_code !== "BLOCKED_AMBIGUOUS",
+      `interrupted resume of a lawful FRESH run is not misjudged as legacy reuse (got ${String(resumed.blocking_reason_code)})`,
+    );
+    ok(
+      !s.runStore.listEvents(parsed.identity.runId).some((e) => e.kind === "run_blocked"),
+      "no durable block event was appended for the lawful fresh resume",
+    );
+    ok(!manifestExists(libraryDirOf(repo)), "no manifest was minted by the resume");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+async function scenarioRepairAndGovernedRelease(): Promise<void> {
+  const { root, repo, control } = makeRoot();
+  const s = stores(control, repo);
+  try {
+    const dir = libraryDirOf(repo);
+    writeManifest(dir, manualInitBase("探针需求"));
+    await runProduction(
+      parsedEntry({ repo, control, runId: "run-t4-release" }),
+      "build it",
+      { inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 3 },
+    );
+    const runId = s.runStore.findLatestRunByRequirement(REQ)!.state.identity.runId;
+    const healthy = readFileSync(join(dir, "manifest.md"), "utf8");
+
+    // Corrupt → durable manifest stop.
+    writeFileSync(join(dir, "manifest.md"), healthy.replace(/^title: .*$/mu, "title: tampered"), "utf8");
+    const stopped = await runProduction(
+      parsedEntry({ repo, control, runId: "run-t4-release" }),
+      "build it",
+      { inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 3 },
+    );
+    ok(stopped.blocking_reason_code === "MANIFEST_CORRUPT_STOP", "the corrupt manifest stops the run");
+    ok(
+      s.runStore.listEvents(runId).some((e) => e.kind === "run_blocked" && e.reasonCode === "MANIFEST_CORRUPT_STOP"),
+      "the stop is a durable journal fact (S-2)",
+    );
+
+    // While still broken, the governed release must refuse: trust is restored
+    // by the manifest, never by the release decision alone.
+    let refusedWhileBroken = false;
+    try {
+      releaseManifestProjectionBlock({
+        store: s.runStore,
+        requirementId: REQ,
+        libraryDir: dir,
+        release: { kind: "RISK_ACCEPTED" },
+      });
+    } catch {
+      refusedWhileBroken = true;
+    }
+    ok(refusedWhileBroken, "the release is refused while the manifest still stops (forces a healthy re-judgement)");
+
+    // §6.2.6 repair: restore the healthy bytes.
+    writeFileSync(join(dir, "manifest.md"), healthy, "utf8");
+
+    // The still-durable block keeps the run from proceeding until released.
+    const stillBlocked = await runProduction(
+      parsedEntry({ repo, control, runId: "run-t4-release" }),
+      "build it",
+      { inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 3 },
+    );
+    ok(stillBlocked.chain_status === "BLOCKED" || stillBlocked.blocking_reason_code === undefined || stillBlocked.blocking_reason_code === null,
+      "a repaired manifest does not silently bypass the durable block");
+
+    // Governed release: the projection re-judges healthy, so the block clears.
+    releaseManifestProjectionBlock({
+      store: s.runStore,
+      requirementId: REQ,
+      libraryDir: dir,
+      release: { kind: "RISK_ACCEPTED" },
+    });
+    ok(
+      s.runStore.listEvents(runId).some((e) => e.kind === "run_resumed" && e.reasonCode === "RISK_ACCEPTED"),
+      "the governed release is recorded as a run_resumed decision event",
+    );
+    const afterRelease = await runProduction(
+      parsedEntry({ repo, control, runId: "run-t4-release" }),
+      "build it",
+      { inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 3 },
+    );
+    ok(
+      afterRelease.blocking_reason_code === undefined || afterRelease.blocking_reason_code === null,
+      `after a governed release the repaired run proceeds (${String(afterRelease.blocking_reason_code)})`,
+    );
+    ok(manifestSelfVerifies(dir), "the manifest still self-verifies through the stop-repair-release cycle");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+
+async function scenarioReleaseEquivalence(): Promise<void> {
+  const { root, repo, control } = makeRoot();
+  const s = stores(control, repo);
+  try {
+    const dir = libraryDirOf(repo);
+    // Symptom 1: a bootstrap-only run (run_created + run_started, zero
+    // capability executions — the crash-window shape before the first
+    // dispatch) + corrupt manifest -> the stop latches (no execution is
+    // active). The repaired manifest is takeover-A-shaped, so the release
+    // re-judgement MUST see the same acceptance instant the preflight uses.
+    writeManifest(dir, manualInitBase("探针需求"));
+    const parsed = parsedEntry({ repo, control, runId: "run-t4-boot" });
+    s.runStore.createRun(parsed.identity);
+    s.runStore.appendEvent(Object.freeze({
+      eventId: `${parsed.identity.runId}:2:run_started`,
+      runId: parsed.identity.runId,
+      sequence: 2,
+      kind: "run_started" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: TS,
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
+    const corrupted = readFileSync(join(dir, "manifest.md"), "utf8").replace(/^title: .*$/mu, "title: tampered");
+    writeFileSync(join(dir, "manifest.md"), corrupted, "utf8");
+    const stopped = await runProduction(parsed, "build it", {
+      inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 2,
+    });
+    ok(stopped.blocking_reason_code === "MANIFEST_CORRUPT_STOP", "bootstrap-only corrupt stop latches");
+    writeFileSync(join(dir, "manifest.md"), manualInitBase("探针需求") && (() => {
+      writeManifest(dir, manualInitBase("探针需求"));
+      return readFileSync(join(dir, "manifest.md"), "utf8");
+    })(), "utf8");
+    let refusedBefore = false;
+    try {
+      releaseManifestProjectionBlock({ store: s.runStore, requirementId: REQ, libraryDir: dir, release: { kind: "RISK_ACCEPTED" } });
+    } catch (error) {
+      refusedBefore = error instanceof LoopRunJournalError;
+    }
+    ok(refusedBefore === false, "repaired takeover-A-shaped manifest is releasable (certification equals the preflight)");
+
+    // Symptom 2: a durable BLOCKED_AMBIGUOUS whose human disambiguation is
+    // "the directory was misplaced — delete it" (FRESH) must be releasable,
+    // otherwise the run wedges forever.
+    const { root: root2, repo: repo2, control: control2 } = makeRoot();
+    const s2 = stores(control2, repo2);
+    try {
+      writeManifest(dir2Of(repo2), manualInitBase("探针需求"));
+      const first = await runProduction(parsedEntry({ repo: repo2, control: control2, runId: "run-t4-amb" }), "build it", {
+        inspectWorkspace: clean, runStore: s2.runStore, artifactStore: s2.artifactStore, maxDispatches: 3,
+      });
+      ok(first.execution_trace.length >= 1, "baseline run established the journal run");
+      rmSync(dir2Of(repo2), { recursive: true, force: true });
+      mkdirSync(dir2Of(repo2), { recursive: true });
+      const ambiguous = await runProduction(parsedEntry({ repo: repo2, control: control2, runId: "run-t4-amb" }), "build it", {
+        inspectWorkspace: clean, runStore: s2.runStore, artifactStore: s2.artifactStore, maxDispatches: 2,
+      });
+      ok(ambiguous.blocking_reason_code === "BLOCKED_AMBIGUOUS", "directory without manifest stops with BLOCKED_AMBIGUOUS");
+      rmSync(dir2Of(repo2), { recursive: true, force: true });
+      releaseManifestProjectionBlock({ store: s2.runStore, requirementId: REQ, libraryDir: dir2Of(repo2), release: { kind: "SCOPE_RESET" } });
+      ok(
+        s2.runStore.listEvents(first.run_id).some((e) => e.kind === "run_resumed" && e.reasonCode === "SCOPE_RESET"),
+        "the FRESH disambiguation is releasable (no permanent wedge)",
+      );
+    } finally {
+      rmSync(root2, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+function dir2Of(repo: string): string {
+  return join(repo, "library", REQ);
+}
+
+async function scenarioDeferredStopFailsLoud(): Promise<void> {
+  const { root, repo, control } = makeRoot();
+  const s = stores(control, repo);
+  try {
+    const dir = libraryDirOf(repo);
+    // Crash-window shape: run established + intake claim still STARTED.
+    const parsed = parsedEntry({ repo, control, runId: "run-t4-deferred" });
+    const source = s.artifactStore.put("requirement_summary", "build it");
+    s.runStore.createRun(parsed.identity);
+    s.runStore.appendEvent(Object.freeze({
+      eventId: `${parsed.identity.runId}:2:run_started`,
+      runId: parsed.identity.runId,
+      sequence: 2,
+      kind: "run_started" as const,
+      stage: null,
+      attempt: 0,
+      createdAt: TS,
+      inputDigest: null,
+      outputArtifactRef: null,
+      outputDigest: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+      bindingId: null,
+      bindingVersion: null,
+      inputArtifactRef: null,
+    }));
+    s.runStore.appendCapabilityExecution(Object.freeze({
+      schemaVersion: LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION,
+      executionEventId: `${parsed.identity.runId}:capability:1:started`,
+      runId: parsed.identity.runId,
+      sequence: 1,
+      capability: "requirement-intake",
+      executionRole: "primary",
+      nodeId: "requirement-intake",
+      attempt: 1,
+      status: "started",
+      createdAt: TS,
+      bindingId: "binding-codex-requirement-intake-primary",
+      bindingVersion: "2.0.0",
+      bindingRegistryVersion: "1",
+      executorAgent: "codex",
+      executorAdapter: "codex-real-dispatch",
+      executorVersion: "1.0.0",
+      inputArtifactRef: source.artifactRef,
+      inputArtifactVersion: "1.0.0",
+      inputDigest: source.digest,
+      outputArtifactRef: null,
+      outputArtifactVersion: null,
+      outputDigest: null,
+      gateResult: null,
+      unresolvedFindingsRef: null,
+      unresolvedFindingsDigest: null,
+      consumedFindingsRef: null,
+      consumedFindingsDigest: null,
+      decisionDepth: null,
+      decisionStatus: null,
+      decisionScopeId: null,
+      decisionDeltaRef: null,
+      decisionDeltaDigest: null,
+      nextStepEligibility: null,
+      errorCode: null,
+      retryable: null,
+      reasonCode: null,
+      processInvocationDigest: null,
+      processExitCode: null,
+      processSignal: null,
+      processDurationMs: null,
+      processTruncated: null,
+      stagingRef: null,
+      stagingDigest: null,
+      promotionRef: null,
+      promotionDigest: null,
+      humanActionRef: null,
+    } as never));
+    writeManifest(dir, manualInitBase("探针需求"));
+    const corrupted = readFileSync(join(dir, "manifest.md"), "utf8").replace(/^title: .*$/mu, "title: tampered-loud");
+    writeFileSync(join(dir, "manifest.md"), corrupted, "utf8");
+
+    let loud: unknown = null;
+    try {
+      await runProduction(parsed, "build it", {
+        inspectWorkspace: clean, runStore: s.runStore, artifactStore: s.artifactStore, maxDispatches: 2,
+      });
+    } catch (error) {
+      loud = error;
+    }
+    ok(loud instanceof LoopRunJournalError, "a stop in the crash-window shape fails loud (no silent envelope)");
+    ok((loud as LoopRunJournalError).message.includes("MANIFEST_CORRUPT_STOP"), "the loud failure names the stop code");
+    ok(
+      !s.runStore.listEvents(parsed.identity.runId).some((e) => e.kind === "run_blocked"),
+      "no run_blocked event landed while the execution is active",
+    );
+    // Zero orphans: no human_action_required artifact was written for the
+    // deferred stop (the detail is only written when the event can land).
+    const artifactsRoot = join(control, "artifacts", "v1", "human_action_required");
+    let orphanCount = 0;
+    try {
+      orphanCount = readdirSync(artifactsRoot).length;
+    } catch {
+      orphanCount = 0;
+    }
+    ok(orphanCount === 0, "no orphan detail artifact was stranded by the deferred stop");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   console.log("G5-T4 readiness — three entry states (Δ3 / §6.2.7 / DP4)");
   {
@@ -341,6 +720,18 @@ async function main(): Promise<void> {
 
   console.log("G5-T4 terminal call point — the manifest keeps step with the journal");
   await scenarioTerminalProjection();
+
+  console.log("G5-T4 interrupted resume — a lawful FRESH run is never misjudged as legacy reuse");
+  await scenarioInterruptedResumeFresh();
+
+  console.log("G5-T4 recovery — repair plus governed release (RC3-1)");
+  await scenarioRepairAndGovernedRelease();
+
+  console.log("G5-T4 release certification equals the entry preflight (T4-R2-RC2-1)");
+  await scenarioReleaseEquivalence();
+
+  console.log("G5-T4 deferred stop fails loud, zero orphans (T4-R2-RC3-1)");
+  await scenarioDeferredStopFailsLoud();
 
   console.log(`\ng5t4: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
