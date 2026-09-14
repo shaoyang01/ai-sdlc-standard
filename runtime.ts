@@ -505,25 +505,26 @@ function appendManifestProjectionBlockEvent(
   artifactStore: LoopArtifactStore,
   runId: string,
   stop: Readonly<{ code: LoopManifestProjectionStopCode; reason: string }>,
-): void {
-  let detailRef: string | null = null;
-  let detailDigest: string | null = null;
-  try {
-    const stored = artifactStore.put(
-      "human_action_required",
-      manifestProjectionStopDetail(stop),
-    );
-    detailRef = stored.artifactRef;
-    detailDigest = stored.digest;
-  } catch {
-    // The block event below is the fail-closed anchor.
-  }
+): "RECORDED" | "IDEMPOTENT" | "NO_RUN" | "DEFERRED" {
   const snapshot = runStore.getSnapshot(runId);
-  if (snapshot === undefined) return;
-  // Idempotence: the durable fact is already there when the run is blocked
-  // for the same code. A re-entry that re-judges the same stop must not append
-  // a second identical block event (the journal grows only on new facts).
-  if (snapshot.state.blockingReasonCode === stop.code) return;
+  if (snapshot === undefined) return "NO_RUN";
+  // Idempotence first: the durable fact is already there when the run is
+  // blocked for the same code — no second event, no second artifact.
+  if (snapshot.state.blockingReasonCode === stop.code) return "IDEMPOTENT";
+  // Journal acceptability BEFORE the artifact write: the store refuses run
+  // events while the last capability execution is still active (the crash
+  // window — an attempt claimed but never closed). Writing the digest-bound
+  // detail before that check would strand an unreferenced orphan artifact
+  // every time the stop lands in that window. A deferred stop is NOT
+  // swallowed downstream: `manifestBlockedExit` fails loud instead, so a
+  // stop can never present as an envelope with no journal fact and no
+  // operator-visible failure.
+  const executions = runStore.listCapabilityExecutions(runId);
+  if (executions[executions.length - 1]?.status === "started") return "DEFERRED";
+  const stored = artifactStore.put(
+    "human_action_required",
+    manifestProjectionStopDetail(stop),
+  );
   const sequence = snapshot.state.lastSequence + 1;
   runStore.appendEvent(Object.freeze({
     eventId: `${runId}:${sequence}:run_blocked`,
@@ -534,8 +535,8 @@ function appendManifestProjectionBlockEvent(
     attempt: 0,
     createdAt: new Date().toISOString(),
     inputDigest: null,
-    outputArtifactRef: detailRef,
-    outputDigest: detailDigest,
+    outputArtifactRef: stored.artifactRef,
+    outputDigest: stored.digest,
     errorCode: null,
     retryable: null,
     reasonCode: stop.code,
@@ -543,6 +544,7 @@ function appendManifestProjectionBlockEvent(
     bindingVersion: null,
     inputArtifactRef: null,
   }));
+  return "RECORDED";
 }
 
 /**
@@ -589,18 +591,37 @@ export function releaseManifestProjectionBlock(request: Readonly<{
     reject(`only a manifest projection block is releasable here (current block: ${blocked})`);
   }
   const readiness = resolveManifestReadiness(request.libraryDir);
-  if (readiness.kind !== "MANIFEST_PRESENT") {
-    reject(`the manifest is not present (${readiness.kind}); there is nothing healthy to certify`);
-  }
-  const projected = projectLoopManifest({
-    store: request.store,
-    runId,
-    requirementId: request.requirementId,
-    libraryDir: (readiness as Readonly<{ kind: "MANIFEST_PRESENT"; libraryDir: string }>).libraryDir,
-  });
-  if (routeManifestProjectionOutcome(projected).blocksRun) {
-    const code = projected.kind === "STOP" ? projected.code : "unknown";
-    reject(`the manifest still stops (${code}); repair it per §6.2.6 before releasing`);
+  // The certification condition must be EQUIVALENT to the entry preflight's
+  // judgement for the blocked code (T4-R2-RC2-1):
+  // - BLOCKED_AMBIGUOUS was raised by a directory that existed without a
+  //   manifest. Deleting that misplaced directory is a lawful §6.2.7/DP4
+  //   disambiguation — FRESH is then a healthy outcome and must be
+  //   releasable, otherwise the run wedges forever. A manifest appearing in
+  //   the directory is judged by the same projection as the preflight would.
+  // - MANIFEST_CORRUPT_STOP / JOURNAL_MANIFEST_MISMATCH_STOP require a
+  //   present manifest that re-judges clean — with the SAME takeover
+  //   acceptance instant the preflight uses (the blocked run's identity
+  //   createdAt). Without it, a takeover-A-shaped state (journal not yet
+  //   carrying terminal events) re-judges as corrupt even though the
+  //   preflight itself would have accepted and taken over.
+  if (blocked === "BLOCKED_AMBIGUOUS" && readiness.kind === "FRESH") {
+    // Lawful disambiguation: fall through to the release below.
+  } else {
+    if (readiness.kind !== "MANIFEST_PRESENT") {
+      reject(`the manifest is not present (${readiness.kind}); there is nothing healthy to certify`);
+    }
+    const projected = projectLoopManifest({
+      store: request.store,
+      runId,
+      requirementId: request.requirementId,
+      libraryDir: (readiness as Readonly<{ kind: "MANIFEST_PRESENT"; libraryDir: string }>).libraryDir,
+      takeoverAcceptedAt: snapshot.state.identity.createdAt,
+    });
+    if (routeManifestProjectionOutcome(projected).blocksRun) {
+      const code = projected.kind === "STOP" ? projected.code : "unknown";
+      const reason = projected.kind === "STOP" ? projected.reason : "unknown";
+      reject(`the manifest still stops (${code}): ${reason}`);
+    }
   }
   const sequence = snapshot.state.lastSequence + 1;
   request.store.appendEvent(Object.freeze({
@@ -805,12 +826,23 @@ export async function run(
       // the projection to re-judge healthy before it clears the block.
       const snapshot = runStore.findLatestRunByRequirement(requirementId);
       const blockRunId = snapshot?.state.identity.runId ?? journalRunId ?? identity.runId;
-      try {
-        appendManifestProjectionBlockEvent(runStore, artifactStore, blockRunId, stop);
-      } catch {
-        // The exit below is the fail-closed outcome regardless: a journal
-        // that cannot take the block event must not turn a manifest stop
-        // into a run that proceeds.
+      const recorded = appendManifestProjectionBlockEvent(runStore, artifactStore, blockRunId, stop);
+      if (recorded === "DEFERRED") {
+        // Fail loud, never silent: the run exists, the stop is real, but the
+        // journal refuses run events while the crashed attempt is still open.
+        // A quiet envelope here would leave the stop with no journal fact and
+        // no operator-visible trace (T4-R2-RC3-1). Declared boundary: in this
+        // crash-window shape the stop is enforced in-memory for the
+        // invocation and re-derived on every re-entry until the manifest is
+        // healthy — recovery therefore proceeds by re-judgement, not by the
+        // governed release (which only exists once a block event latched).
+        throw new LoopRunJournalError(
+          "ILLEGAL_TRANSITION",
+          `manifest projection stop ${stop.code} could not be recorded durably: capability ` +
+            `execution is still active in run ${blockRunId} (crash window). ` +
+            `Reason: ${stop.reason}. Close the interrupted attempt (resume the run) ` +
+            "or repair the manifest before re-entering.",
+        );
       }
       return manifestProjectionBlockedResult(
         {
