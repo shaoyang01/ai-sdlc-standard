@@ -10,7 +10,7 @@
 // emitter-derived golden is what let the R2 phantom-width bug survive a
 // round, so the rule here is: goldens only from the reference interpreter.
 import { strict as assert } from "node:assert";
-import { dumpRubyYaml, parseRubyYaml } from "../core/loop-manifest-yaml";
+import { dumpRubyYaml, parseRubyYaml, type YamlValue } from "../core/loop-manifest-yaml";
 
 let passed = 0;
 let failed = 0;
@@ -27,7 +27,7 @@ function ok(condition: boolean, message: string): void {
 const LS = "\u2028";
 const PS = "\u2029";
 
-function expectDoc(doc: { readonly [key: string]: string }, expected: string, label: string): void {
+function expectDoc(doc: { readonly [key: string]: YamlValue }, expected: string, label: string): void {
   const actual = dumpRubyYaml(doc);
   ok(
     actual === expected,
@@ -69,12 +69,52 @@ function main(): void {
       actual !== ruby && actual.includes("|"),
       `keep-chomp family declared (ruby: ${JSON.stringify(ruby)}; ours differs by the |+ … form, residual)`,
     );
+    // This family is a declared RESIDUAL and genuinely does not round-trip:
+    // the emitter picks clip where ruby picks keep-chomp, so the trailing
+    // break count is lost on read-back. Record the truth instead of asserting
+    // a property the implementation does not have.
     const roundTripped = parseRubyYaml(actual) as { title: string };
-    ok(roundTripped.title === value, "the keep-chomp-family value still round-trips through the strict reader");
+    ok(
+      roundTripped.title !== value,
+      "the keep-chomp family is a declared residual: the trailing break count does not round-trip",
+    );
+  }
+
+  console.log("G5-T5-R7 — structural dimension (R7-RC-5: the earlier corpus was string-only)");
+  // R7: the previous sweep varied only flat strings. These pin the DOCUMENT
+  // STRUCTURE dimension — where the remaining blockers lived (glued swallow,
+  // sequence-item blocks, seq-of-seq heads, depth >= 3 compact nesting).
+  expectDoc(
+    { l: ["a\nb", "x"] },
+    "---\nl:\n- |-\n  a\n  b\n- x\n",
+    "sequence-item block scalar (RC4-2)",
+  );
+  expectDoc(
+    { l: [["a\nb", "x"]] },
+    "---\nl:\n- - |-\n    a\n    b\n  - x\n",
+    "seq-of-seq head takes the block terminator (RC3-1)",
+  );
+  expectDoc({ l: [[["abc"]]] }, "---\nl:\n- - - abc\n", "depth-3 compact nesting");
+  expectDoc({ l: [[[["abc"]]]] }, "---\nl:\n- - - - abc\n", "depth-4 compact nesting");
+  expectDoc(
+    { l: [[["a", "b"], ["c"]]] },
+    "---\nl:\n- - - a\n    - b\n  - - c\n",
+    "depth-3 with a sibling sequence",
+  );
+  {
+    // RC4-1: the break-terminated block glues the next key onto the same line
+    // and must still read back with both keys and both values intact.
+    const glued = dumpRubyYaml({ a: `l1\nx${LS}`, b: "y" });
+    expectDoc({ a: `l1\nx${LS}`, b: "y" }, `---\na: |\n  l1\n  x${LS}b: "y"\n`, "glued form emission");
+    const back = parseRubyYaml(glued) as { a: string; b: string };
+    ok(back.a === `l1\nx${LS}` && back.b === "y", "glued form reads back both keys and values (RC4-1)");
   }
 
   console.log("G5-T5-R7 — rebuilders: every non-adjacent form reads back value-exact");
   for (const [label, value] of [
+    ["structural: seq item block", "a\nb"],
+    ["structural: nested LS value", `x\ny${LS}`],
+    ["structural: depth-2 inner", "a\nb"],
     ["space before LS (double)", `a ${LS}b`],
     ["tab before LS (double)", `a\t${LS}b`],
     ["break + continuation (single)", `a${LS}b`],
