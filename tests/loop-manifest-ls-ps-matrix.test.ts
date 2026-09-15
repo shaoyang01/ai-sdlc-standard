@@ -63,6 +63,7 @@ function main(): void {
   // LS/PS handling). What must hold: the VALUE still round-trips here.
   {
     const value = `l1\nx${LS}${LS}`;
+    void value;
     const ruby = '---\ntitle: |+\n  l1\n  x' + LS + LS + '...\n';
     const actual = dumpRubyYaml({ title: value });
     ok(
@@ -77,6 +78,17 @@ function main(): void {
     ok(
       roundTripped.title !== value,
       "the keep-chomp family is a declared residual: the trailing break count does not round-trip",
+    );
+    // The family's other member: a break-terminated block whose value ends
+    // with LS/PS after an LF (ruby: `|+ …` + document-end marker; ours: clip).
+    // Declared residual - cite the R8 unreachability proof (the publisher
+    // pipeline JSON-escapes U+2028/U+2029, so raw LS/PS cannot reach it, and
+    // shell `$(...)` strips trailing newlines).
+    const breakTerminated = "x\n" + LS;
+    const btEmit = dumpRubyYaml({ title: breakTerminated });
+    ok(
+      btEmit.includes("|") && !btEmit.includes("|+"),
+      "the break-terminated member of the keep-chomp family is emitted as clip (declared residual)",
     );
   }
 

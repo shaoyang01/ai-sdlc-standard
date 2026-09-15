@@ -217,6 +217,12 @@ function singleQuotedWithBreaks(s: string, continuationIndent = 2): string {
     if (!isBreak) continue;
     const next = chars[k + 1];
     const nextIsBreak = next === "\n" || next === "\u2028" || next === "\u2029";
+    const prev = chars[k - 1];
+    const prevIsBreak = prev === "\n" || prev === "\u2028" || prev === "\u2029";
+    // A trailing LF whose PRECEDING character is content is written TWICE,
+    // before the closing indent (probed: `a<LS>b\n` -> 'a<LS>  b\n\n  ',
+    // while `ab<LS>\n` keeps a single one).
+    if (ch === "\n" && next === undefined && prev !== undefined && !prevIsBreak) body += "\n";
     // Pad only before content, or at the very end; never between two breaks.
     if (next === undefined || !nextIsBreak) body += pad;
   }
@@ -363,6 +369,10 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
     // single-quoted reader (value corrosion), so such scalars take the
     // double-escaped form too (`a<LS> b` -> "a\L b").
     const breakAdjacentBlank = new RegExp(` [${"\u2028\u2029"}]|[${"\u2028\u2029"}] `).test(s);
+    // Probed: with TWO or more trailing LFs the reference switches to the
+    // double-quoted form (three or more take the keep-chomp block, which is
+    // the declared residual) - the single-quoted fold form cannot carry them.
+    const multiTrailingLf = /\n{2,}$/.test(s);
     const doubleForced =
       /\t/.test(s) ||
       /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(s) ||
@@ -370,7 +380,7 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
         const code = ch.codePointAt(0)!;
         return code > 0xffff || code === 0xfffe || code === 0xffff;
       });
-    if (style === "double" || doubleForced || breakAdjacentBlank) {
+    if (style === "double" || doubleForced || breakAdjacentBlank || multiTrailingLf) {
       return doubleQuotedFolded(s, blockIndent, columnBefore);
     }
     // The continuation indent follows the owning block's indent + 2
@@ -579,7 +589,9 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       // scalar continues at the token's own indent +2 (R7-RC5-1).
       const chain: (readonly YamlValue[])[] = [];
       let cur: readonly YamlValue[] = item;
-      while (cur.length > 0 && Array.isArray(cur[0])) {
+      // Descend only into a NON-EMPTY nested sequence: an empty one is a head
+      // value in its own right and stays inline (`- - []`).
+      while (cur.length > 0 && Array.isArray(cur[0]) && (cur[0] as readonly YamlValue[]).length > 0) {
         chain.push(cur);
         cur = cur[0] as readonly YamlValue[];
       }
@@ -588,15 +600,37 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       const dashes = "- ".repeat(chain.length + 2);
       const siblingIndent = indent + 2 * (chain.length + 1);
       const foldIndent = indent + 2 * (chain.length + 2);
+      const headPrefix = `${pad}${dashes}`;
+      const headValue = cur.length === 0 ? null : cur[0];
       if (cur.length === 0) {
         out += `${pad}${dashes.slice(0, -1)}\n`;
+      } else if (isEmptyContainer(headValue as YamlValue)) {
+        // Probed: an empty container head stays inline (`- - []` / `- - {}`).
+        out += `${headPrefix}${Array.isArray(headValue) ? "[]" : "{}"}\n`;
+      } else if (headValue !== null && !isScalar(headValue as YamlValue)) {
+        // Probed: a mapping head rides the dash line (`- - a: 1`) with the
+        // remaining keys one level in (`    b: 2`).
+        const entries = Object.entries(headValue as { readonly [key: string]: YamlValue });
+        const [key, val] = entries[0]!;
+        const keyToken = serializeScalar(key);
+        out += `${headPrefix}${keyToken}:`;
+        if (isScalar(val) && val !== null) {
+          const valueToken = inlineScalarToken(val, headPrefix.length + keyToken.length + 2, foldIndent);
+          out += ` ${valueToken}${lineTerminatorFor(valueToken)}`;
+        } else {
+          out += "\n";
+        }
+        // The mapping's keys align after its own dash prefix (probed
+        // `- - a: 1` / `    b: 2` -> indent + 4 for depth 2).
+        if (entries.length > 1) out += emitMapping(entries.slice(1), foldIndent);
       } else {
-        const token = serializeScalar(cur[0] as Scalar, siblingIndent);
-        const headText = `${pad}${dashes}${token}`;
-        // A token that already carries its own lines (block form, or an
-        // already-folded double-quoted form) must not be folded again.
+        const token = serializeScalar(headValue as Scalar, siblingIndent, headPrefix.length);
+        const headText = `${headPrefix}${token}`;
+        // The dash prefix occupies table columns, so a folded token's break
+        // points must count them (R8-RC3-1).
         const head = token.includes("\n") ? headText : applyFolding(headText, 0, foldIndent);
-        out += `${head}${lineTerminatorFor(token)}`;
+        // Probed: a null head prints as a bare `- -` (no trailing space).
+        out += token === "" ? `${pad}${dashes.slice(0, -1)}\n` : `${head}${lineTerminatorFor(token)}`;
       }
       out += emitSequence(cur.slice(1), siblingIndent);
       for (let level = chain.length - 1; level >= 0; level -= 1) {
