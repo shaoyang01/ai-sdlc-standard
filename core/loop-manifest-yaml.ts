@@ -199,25 +199,36 @@ function containsUnicodeBreak(s: string): boolean {
   return s.includes("\u2028") || s.includes("\u2029");
 }
 
-function singleQuotedWithBreaks(s: string, blockIndent = 0): string {
-  // R5-B1-Ⅳ: ruby inserts the continuation indent only after the LAST break
-  // of a consecutive run (`a<LS><PS>b` -> 'a<LS><PS>  b'), never after each.
-  const cont = " ".repeat(blockIndent + 2);
-  const chars = Array.from(s);
+function singleQuotedWithBreaks(s: string, continuationIndent = 2): string {
+  const pad = " ".repeat(continuationIndent);
   let body = "";
-  for (let idx = 0; idx < chars.length; idx += 1) {
-    const ch = chars[idx]!;
-    if (ch === "'") body += "''";
-    else {
-      body += ch;
-      const next = chars[idx + 1];
-      if ((ch === "\u2028" || ch === "\u2029") && next !== "\u2028" && next !== "\u2029") {
-        body += cont;
-      }
+  const chars = Array.from(s);
+  for (let k = 0; k < chars.length; k += 1) {
+    const ch = chars[k]!;
+    if (ch === "'") {
+      body += "''";
+      continue;
     }
+    body += ch;
+    // A break takes the continuation indent when content follows on the same
+    // physical line; the FINAL break takes it before the closing quote
+    // (probed: `x<LS>` -> 'x<LS>  ' and `x<LS>\n` -> 'x<LS>\n  ').
+    const isBreak = ch === "\n" || ch === "\u2028" || ch === "\u2029";
+    if (!isBreak) continue;
+    const next = chars[k + 1];
+    const nextIsBreak = next === "\n" || next === "\u2028" || next === "\u2029";
+    const prev = chars[k - 1];
+    const prevIsBreak = prev === "\n" || prev === "\u2028" || prev === "\u2029";
+    // A trailing LF whose PRECEDING character is content is written TWICE,
+    // before the closing indent (probed: `a<LS>b\n` -> 'a<LS>  b\n\n  ',
+    // while `ab<LS>\n` keeps a single one).
+    if (ch === "\n" && next === undefined && prev !== undefined && !prevIsBreak) body += "\n";
+    // Pad only before content, or at the very end; never between two breaks.
+    if (next === undefined || !nextIsBreak) body += pad;
   }
   return `'${body}'`;
 }
+
 
 type Scalar = null | boolean | number | string;
 
@@ -358,6 +369,10 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
     // single-quoted reader (value corrosion), so such scalars take the
     // double-escaped form too (`a<LS> b` -> "a\L b").
     const breakAdjacentBlank = new RegExp(` [${"\u2028\u2029"}]|[${"\u2028\u2029"}] `).test(s);
+    // Probed: with TWO or more trailing LFs the reference switches to the
+    // double-quoted form (three or more take the keep-chomp block, which is
+    // the declared residual) - the single-quoted fold form cannot carry them.
+    const multiTrailingLf = /\n{2,}$/.test(s);
     const doubleForced =
       /\t/.test(s) ||
       /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(s) ||
@@ -365,10 +380,12 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
         const code = ch.codePointAt(0)!;
         return code > 0xffff || code === 0xfffe || code === 0xffff;
       });
-    if (style === "double" || doubleForced || breakAdjacentBlank) {
+    if (style === "double" || doubleForced || breakAdjacentBlank || multiTrailingLf) {
       return doubleQuotedFolded(s, blockIndent, columnBefore);
     }
-    return singleQuotedWithBreaks(s, blockIndent);
+    // The continuation indent follows the owning block's indent + 2
+    // (probed: top level 2, nested 4).
+    return singleQuotedWithBreaks(s, blockIndent + 2);
   }
   if (style === "double") return doubleQuoted(s);
   if (style === "single") return singleQuoted(s);
@@ -566,21 +583,60 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
         out += `${pad}- []\n`;
         continue;
       }
-      // Probed compact nested form: `- - a` / `  - b` — the nested sequence's
-      // first item rides the parent dash line, the rest indent +2.
-      if (isScalar(item[0])) {
-        const token = serializeScalar(item[0], indent + 2);
-        // The nested item's own content starts after `- - ` (4 columns), so a
-        // fold continuation lands at indent + 4 (probed).
-        // The token carries its own `pad + "- - "` prefix, so it starts at
-        // physical column 0 — passing indent + 4 here double-counted the
-        // prefix and broke one word early (phantom width).
-        const head = applyFolding(`${pad}- - ${token}`, 0, indent + 4);
-        out += `${head}\n`;
-        out += emitSequence(item.slice(1), indent + 2);
+      // Probed compact nested form: every level whose first element is itself
+      // a sequence contributes another dash on the SAME line (`- - - abc` at
+      // depth 3), the sibling continuations indent +2 per level, and a folded
+      // scalar continues at the token's own indent +2 (R7-RC5-1).
+      const chain: (readonly YamlValue[])[] = [];
+      let cur: readonly YamlValue[] = item;
+      // Descend only into a NON-EMPTY nested sequence: an empty one is a head
+      // value in its own right and stays inline (`- - []`).
+      while (cur.length > 0 && Array.isArray(cur[0]) && (cur[0] as readonly YamlValue[]).length > 0) {
+        chain.push(cur);
+        cur = cur[0] as readonly YamlValue[];
+      }
+      // The item slot itself contributes one dash, every descended level one
+      // more: depth 2 -> `- - a`, depth 3 -> `- - - abc` (probed).
+      const dashes = "- ".repeat(chain.length + 2);
+      const siblingIndent = indent + 2 * (chain.length + 1);
+      const foldIndent = indent + 2 * (chain.length + 2);
+      const headPrefix = `${pad}${dashes}`;
+      const headValue = cur.length === 0 ? null : cur[0];
+      if (cur.length === 0) {
+        out += `${pad}${dashes.slice(0, -1)}\n`;
+      } else if (isEmptyContainer(headValue as YamlValue)) {
+        // Probed: an empty container head stays inline (`- - []` / `- - {}`).
+        out += `${headPrefix}${Array.isArray(headValue) ? "[]" : "{}"}\n`;
+      } else if (headValue !== null && !isScalar(headValue as YamlValue)) {
+        // Probed: a mapping head rides the dash line (`- - a: 1`) with the
+        // remaining keys one level in (`    b: 2`).
+        const entries = Object.entries(headValue as { readonly [key: string]: YamlValue });
+        const [key, val] = entries[0]!;
+        const keyToken = serializeScalar(key);
+        out += `${headPrefix}${keyToken}:`;
+        if (isScalar(val) && val !== null) {
+          const valueToken = inlineScalarToken(val, headPrefix.length + keyToken.length + 2, foldIndent);
+          out += ` ${valueToken}${lineTerminatorFor(valueToken)}`;
+        } else {
+          out += "\n";
+        }
+        // The mapping's keys align after its own dash prefix (probed
+        // `- - a: 1` / `    b: 2` -> indent + 4 for depth 2).
+        if (entries.length > 1) out += emitMapping(entries.slice(1), foldIndent);
       } else {
-        out += `${pad}-\n`;
-        out += emitSequence(item, indent + 2);
+        const token = serializeScalar(headValue as Scalar, siblingIndent, headPrefix.length);
+        const headText = `${headPrefix}${token}`;
+        // The dash prefix occupies table columns, so a folded token's break
+        // points must count them (R8-RC3-1).
+        const head = token.includes("\n") ? headText : applyFolding(headText, 0, foldIndent);
+        // Probed: a null head prints as a bare `- -` (no trailing space).
+        out += token === "" ? `${pad}${dashes.slice(0, -1)}\n` : `${head}${lineTerminatorFor(token)}`;
+      }
+      out += emitSequence(cur.slice(1), siblingIndent);
+      for (let level = chain.length - 1; level >= 0; level -= 1) {
+        // A descended level's sibling sits one indent step in from that level
+        // (probed depth-3: `- - - a\n    - b\n  - - c`).
+        out += emitSequence(chain[level]!.slice(1), indent + 2 * (level + 1));
       }
     } else {
       const token = emitScalar(item);
@@ -599,7 +655,16 @@ function emitScalar(value: Scalar): string {
 // Minimal strict reader (round-trip grammar of dumpRubyYaml)
 // ---------------------------------------------------------------------------
 
-type Line = { indent: number; text: string; raw: string };
+type Line = {
+  indent: number;
+  text: string;
+  raw: string;
+  /** The break character that terminated this line: "\n", U+2028/U+2029, or ""
+   * for the not-yet-terminated final line. LS/PS are line boundaries just like
+   * LF (that is why ruby glues the next key right after a break-terminated
+   * block), so every joiner must rebuild values with the ORIGINAL break. */
+  brk: string;
+};
 
 type ParseResult = { value: YamlValue; next: number };
 
@@ -607,25 +672,36 @@ function splitLines(text: string): Line[] {
   if (!text.startsWith("---\n")) {
     throw new LoopManifestYamlError("missing YAML document start marker '---'");
   }
-  const rawLines = text.slice(4).split("\n");
-  // The document ends with "\n"; the split's trailing empty elements are
-  // artifacts, not content. Interior empty lines (block scalars only) are
-  // kept with indent -1 so the block collector can see them while every
-  // other consumer treats them as a region end.
-  while (rawLines.length > 0 && rawLines[rawLines.length - 1] === "") rawLines.pop();
+  const body = text.slice(4);
   const lines: Line[] = [];
-  for (const raw of rawLines) {
-    if (raw === "...") break; // document-end marker (keep-chomp block forms)
+  let buf = "";
+  let terminated = false;
+  const push = (raw: string, brk: string): void => {
+    if (raw === "...") {
+      terminated = true; // document-end marker (keep-chomp block forms)
+      return;
+    }
     if (raw === "") {
-      lines.push({ indent: -1, text: "", raw });
-      continue;
+      lines.push({ indent: -1, text: "", raw, brk });
+      return;
     }
     const match = /^( *)([\s\S]*)$/.exec(raw);
     if (match === null) throw new LoopManifestYamlError(`unparseable line: ${JSON.stringify(raw)}`);
-    lines.push({ indent: match[1].length, text: match[2], raw });
+    lines.push({ indent: match[1]!.length, text: match[2]!, raw, brk });
+  };
+  for (const ch of body) {
+    if (terminated) break;
+    if (ch === "\n" || ch === "\u2028" || ch === "\u2029") {
+      push(buf, ch);
+      buf = "";
+      continue;
+    }
+    buf += ch;
   }
+  if (!terminated && buf !== "") push(buf, "");
   return lines;
 }
+
 
 const KEY_VALUE = /^([^:]+):(?: ([\s\S]*))?$/;
 
@@ -679,11 +755,24 @@ function parseQuoted(token: string): string | undefined {
     // Psych single-quoted folding: trailing spaces are stripped at a break,
     // one break folds to a space, and a run of n >= 2 breaks folds to n - 1
     // breaks (the closing-quote form 'ab\n\n  ' therefore reads back as "ab\n").
-    const lines = body.split("\n");
+    // A trailing break run is the quoted form's own line terminator, decoded by
+    // the reference emitter's rule (probed): a run of n >= 2 LFs before the
+    // closing quote is n - 1 LFs, a single LF is preserved, and LS/PS runs are
+    // preserved as written.
+    const trailingRun = /([\n\u2028\u2029]+)[ \t]*$/.exec(body);
+    let head = body;
+    let tail = "";
+    if (trailingRun !== null) {
+      head = body.slice(0, trailingRun.index);
+      const run = trailingRun[1]!;
+      tail = run === "\n" ? "\n" : run.replace(/\n+/g, (r) => "\n".repeat(Math.max(1, r.length - 1)));
+    }
+    const lines = head.split("\n");
     const normalized = lines
       .map((line, index) => (index === lines.length - 1 ? line : line.replace(/[ \t]+$/, "")))
       .join("\n");
-    return normalized.replace(/\n+/g, (run) => (run.length === 1 ? " " : "\n".repeat(run.length - 1)));
+    const folded = normalized.replace(/\n+/g, (run) => (run.length === 1 ? " " : "\n".repeat(run.length - 1)));
+    return folded + tail;
   }
   if (token.startsWith('"') && token.endsWith('"') && token.length >= 2) {
     return decodeDoubleQuoted(token);
@@ -753,9 +842,11 @@ function collectQuotedRest(lines: Line[], start: number, rest: string, keyIndent
     // A quoted scalar continues across any line until its closing quote:
     // YAML does not bound it by indentation, so the terminator is the quote
     // itself. An unterminated quote therefore swallows the remaining lines and
-    // fails closed at EOF, which is the safe direction.
+    // fails closed at EOF, which is the safe direction. The ORIGINAL break is
+    // reinstated (an LS inside quotes is value content, not a fold).
     void keyIndent;
-    text += "\n" + lines[j]!.text;
+    const prev = lines[j - 1]!;
+    text += prev.brk + lines[j]!.text;
     j += 1;
   }
   return { text, next: j };
@@ -766,48 +857,40 @@ function isBlockHeader(rest: string): boolean {
 }
 
 function parseBlockScalar(lines: Line[], start: number, keyIndent: number, header: string): ParseResult {
+  const keep = header.includes("+");
   const strip = header.includes("-");
   const explicitIndent = /^\|(\d)/.exec(header);
   const contentIndent = keyIndent + (explicitIndent !== null ? Number(explicitIndent[1]) : 2);
-  const collected: string[] = [];
+  // R7-RC4-1: every content line contributes its text AND the break that
+  // terminated it (LF or LS/PS — all are line boundaries), so the value is
+  // rebuilt exactly rather than re-joined with a guessed "\n".
+  const parts: { text: string; brk: string }[] = [];
   let i = start;
   while (i < lines.length) {
     const line = lines[i]!;
-    if (line.indent === -1 || line.raw === "") {
-      collected.push("");
+    if (line.raw === "") {
+      parts.push({ text: "", brk: line.brk });
       i += 1;
       continue;
     }
-    // A break sitting at column 0 is block CONTENT (LS/PS are line breaks),
-    // not a dedent: the emitter writes `\u2028  b` for a line-initial break.
-    let raw = line.raw;
-    let lead = "";
-    while (raw.length > 0 && (raw[0] === "\u2028" || raw[0] === "\u2029")) {
-      lead += raw[0];
-      raw = raw.slice(1);
-    }
-    if (lead === "") {
-      if (line.indent < contentIndent) break;
-    } else {
-      const rest = /^( *)([\s\S]*)$/.exec(raw)!;
-      if (rest[2] !== "" && rest[1]!.length < contentIndent) break;
-    }
-    const body = raw.startsWith(" ".repeat(contentIndent))
-      ? raw.slice(contentIndent)
-      : raw.replace(/^ */, "");
-    collected.push(lead + body);
+    if (line.indent < contentIndent) break; // region end
+    // Indentation BEYOND the content indent is value content (explicit `|2`
+    // blocks rely on it: `|2-\n   a` reads back as " a").
+    parts.push({ text: " ".repeat(line.indent - contentIndent) + line.text, brk: line.brk });
     i += 1;
   }
-  while (collected.length > 0 && collected[collected.length - 1] === "") collected.pop();
-  // Reverse the emitter's break continuation: it writes a break followed by
-  // exactly the content indent, so strip EXACTLY that many blanks (stripping
-  // all of them would eat whitespace that is part of the value).
-  const pad = new RegExp("([\u2028\u2029])[ \t]{" + contentIndent + "}", "g");
-  let value = collected.join("\n").replace(pad, "$1");
-  // Clip keeps one trailing break; a value already ending in a break has it.
-  if (!strip && value !== "" && !/[\u2028\u2029]$/.test(value)) value += "\n";
+  let value = "";
+  for (const part of parts) value += part.text + part.brk;
+  const trailing = /(?:\n|[\u2028\u2029])+$/;
+  if (strip) {
+    value = value.replace(trailing, "");
+  } else if (!keep) {
+    // clip: keep exactly one trailing break (whatever character it is).
+    value = value.replace(trailing, (run) => run[run.length - 1]!);
+  }
   return { value, next: i };
 }
+
 
 
 function parseMappingAt(lines: Line[], start: number, indent: number): ParseResult {
@@ -902,7 +985,7 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
     // Compact nested sequence: `- - a` / `  - b` (probed Psych form).
     if (body.startsWith("- ") || body === "-") {
       const substituted = lines.slice();
-      substituted[i] = { indent: indent + 2, text: body, raw: lines[i].raw };
+      substituted[i] = { indent: indent + 2, text: body, raw: lines[i]!.raw, brk: lines[i]!.brk };
       const child = parseSequenceAt(substituted, i, indent + 2);
       items.push(child.value);
       i = child.next;
@@ -1034,6 +1117,14 @@ function parseSequenceAt(lines: Line[], start: number, indent: number): ParseRes
       const collected = collectQuotedRest(lines, i + 1, body, indent);
       items.push(parseInlineScalar(collected.text));
       i = collected.next;
+      continue;
+    }
+    // R7-RC4-2: a plain scalar ITEM can be a block scalar (`- |-`), which the
+    // mapping paths already handled but the scalar-item path did not.
+    if (isBlockHeader(body)) {
+      const block = parseBlockScalar(lines, i + 1, indent, body);
+      items.push(block.value);
+      i = block.next;
       continue;
     }
     let itemValue = parseInlineScalar(body);
