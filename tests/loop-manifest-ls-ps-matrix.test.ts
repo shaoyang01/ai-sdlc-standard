@@ -122,7 +122,63 @@ function main(): void {
     ok(back.a === `l1\nx${LS}` && back.b === "y", "glued form reads back both keys and values (RC4-1)");
   }
 
-  console.log("G5-T5-R7 — rebuilders: every non-adjacent form reads back value-exact");
+  console.log("G5-T5 — RESIDUAL TABLE (each entry: shape boundary | behaviour truth | reachability)");
+  // Registered per R8/R9 rulings. Each entry is EXECUTED so that "declaration
+  // matches implementation" is machine-checked rather than a comment.
+  {
+    // (1) keep-chomp family - approved for registration by the R9 §6-A ruling.
+    //   shape:   a value ruby serializes with `|+` + `...` (multi trailing breaks)
+    //   truth:   byte-different (we emit clip) AND no trailing-break round-trip
+    //   reach:   unreachable - the publisher pipeline JSON-escapes U+2028/U+2029
+    //            to literal \\u2028 text and shell `$(...)` strips trailing newlines
+    const kcValue = `l1\nx${LS}${LS}`;
+    const kcEmit = dumpRubyYaml({ title: kcValue });
+    ok(!kcEmit.includes("|+") && kcEmit.includes("|"), "residual(1) keep-chomp: we emit clip, ruby emits |+ (byte difference)");
+    ok((parseRubyYaml(kcEmit) as { title: string }).title !== kcValue,
+      "residual(1) keep-chomp: the trailing break count does not round-trip (declared)");
+
+    // (2) N8 - three or more trailing LFs.
+    //   shape:   value ending with 3+ LF (with or without LS)
+    //   truth:   byte-different (ruby `|+`, we double-quoted); value EXACT both ways
+    //   reach:   unreachable in natural operation; constructible via declaration
+    //            JSON, where the value stays exact and the digest net is fail-closed
+    const n8 = "ab\n\n\n";
+    const n8Emit = dumpRubyYaml({ title: n8 });
+    ok(!n8Emit.includes("|+") && n8Emit.startsWith('---\ntitle: "'),
+      "residual(2) N8: 3+ trailing LFs take double quotes here, `|+` in ruby (byte difference)");
+    ok((parseRubyYaml(n8Emit) as { title: string }).title === n8,
+      "residual(2) N8: the value is exact in both directions (byte-only difference)");
+
+    // (3) a space immediately before a trailing single LF, with an LS earlier.
+    //   shape:   <content><LS><content><space><LF>
+    //   truth:   we emit single-quoted, ruby double-quoted; OUR read is exact,
+    //            but ruby reading our bytes loses the pre-LF space
+    //            (cross-face value corruption, one direction only)
+    //   reach:   unreachable - the shape requires a raw LS, which the publisher
+    //            pipeline JSON-escapes
+    const preLfSpace = `a${LS}b \n`;
+    const preLfEmit = dumpRubyYaml({ k: preLfSpace });
+    ok(!preLfEmit.includes('"') && preLfEmit.includes("'"),
+      "residual(3) pre-LF space: single-quoted here vs double-quoted (\\L) in ruby");
+    ok((parseRubyYaml(preLfEmit) as { k: string }).k === preLfSpace,
+      "residual(3) pre-LF space: our own read-back is exact (self-consistent)");
+
+    // (4) historical reading gaps (R2-era, closed vocabulary makes them unreachable).
+    ok(
+      JSON.stringify(parseRubyYaml("---\n'a: b': 1\n")) !== JSON.stringify({ "a: b": 1 }),
+      "residual(4a) colon-bearing quoted key: mis-split at the first colon (historical gap, declared)",
+    );
+    ok(
+      JSON.stringify(parseRubyYaml("---\nl:\n- a: 1\n  b: 2\n")) === JSON.stringify({ l: [{ a: 1, b: 2 }] }),
+      "residual(4b) seq-item map keys: normal shape is correct (gap only for a container first value, unreachable)",
+    );
+    ok(
+      (parseRubyYaml("---\nk: 1.5\n") as { k: unknown }).k === "1.5",
+      "residual(4c) float/null literals read as strings (historical gap, declared: the manifest has no such fields)",
+    );
+  }
+
+    console.log("G5-T5-R7 — rebuilders: every non-adjacent form reads back value-exact");
   for (const [label, value] of [
     ["structural: seq item block", "a\nb"],
     ["structural: nested LS value", `x\ny${LS}`],

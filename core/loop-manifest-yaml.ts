@@ -614,11 +614,22 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
         const [key, val] = entries[0]!;
         const keyToken = serializeScalar(key);
         out += `${headPrefix}${keyToken}:`;
-        if (isScalar(val) && val !== null) {
-          const valueToken = inlineScalarToken(val, headPrefix.length + keyToken.length + 2, foldIndent);
-          out += ` ${valueToken}${lineTerminatorFor(valueToken)}`;
+        const valueColumn = headPrefix.length + keyToken.length + 2;
+        // The head value block/continuation sits TWO columns past the mapping
+        // keys (probed depth 2: keys at 4, `|-` content and fold/SLS
+        // continuations at 6).
+        const valueIndent = foldIndent + 2;
+        if (isEmptyContainer(val as YamlValue)) {
+          out += ` ${Array.isArray(val) ? "[]" : "{}"}\n`;
+        } else if (isScalar(val as YamlValue)) {
+          const token = val === null ? "" : inlineScalarToken(val as Scalar, valueColumn, valueIndent);
+          out += token === "" ? "\n" : ` ${token}${lineTerminatorFor(token)}`;
+        } else if (Array.isArray(val)) {
+          // A sequence value opens on the next line at the mapping-key indent.
+          out += "\n" + emitSequence(val, foldIndent);
         } else {
-          out += "\n";
+          // A nested mapping sits one step deeper than its key.
+          out += "\n" + emitMapping(Object.entries(val as { readonly [key: string]: YamlValue }), valueIndent);
         }
         // The mapping's keys align after its own dash prefix (probed
         // `- - a: 1` / `    b: 2` -> indent + 4 for depth 2).
