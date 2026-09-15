@@ -57,7 +57,7 @@ R1 三项**不是在 `888089f` 收口的**。`888089f` 只做了样例级修复�
 ## 6. 恢复步骤与下一步
 
 1. `git fetch && git checkout feat/g5-t5-regression-parity && git pull`；核验工作区干净。
-2. 自检：`npx tsc --noEmit`（应 0）；`npm test`（应 164 文件全绿）。⚠️ 见 §7 两处环境陷阱。
+2. 自检：`npx tsc --noEmit`（应 0）；`npm test`（应 165 文件全绿）。⚠️ 见 §7 两处环境陷阱。
 3. **生成 G5-T5-R3 复审 prompt**（会话内展示、不入仓，沿 T5-R1/R2 的全量+深度+根因式文体），交独立复审方；评审对象 = 本文件所在提交。
    - 建议判定核心：R2 六项的**类闭合**（R1/R2 连续两轮的同一教训）、两次"用自己的错误输出当基准"（矩阵金样、头注释）——要求对**全部**金样与**全部**声明独立复探。
 4. R3 PASS → T5 收口（收口报告 + 合并 PR #159 + Control Plane STATE `product_commit` 推进）→ **G5 五任务全部完成**，进入 `G5_D09003_COMPLETION_REVIEW`。

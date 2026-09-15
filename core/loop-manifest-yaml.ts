@@ -166,6 +166,8 @@ function doubleEscape(code: number): string {
     case 0x0d: return "\\r";
     case 0x1b: return "\\e";
     case 0x85: return "\\N";
+    case 0x2028: return "\\L";
+    case 0x2029: return "\\P";
     default: break;
   }
   if (code <= 0xff) return `\\x${code.toString(16).padStart(2, "0").toUpperCase()}`;
@@ -187,8 +189,9 @@ function doubleQuoted(s: string): string {
   return out + '"';
 }
 
-/** Probed: U+2028/U+2029 emit raw inside single quotes + a 2-space
- * continuation indent after each break (even before the closing quote). */
+/** Probed: U+2028/U+2029 emit raw inside single quotes, each break followed
+ * by the continuation indent (owning indent + 2 — R4-N4a keeps the column
+ * model consistent with applyFolding). */
 function containsUnicodeBreak(s: string): boolean {
   return s.includes("\u2028") || s.includes("\u2029");
 }
@@ -207,14 +210,6 @@ function singleQuotedWithBreaks(s: string, blockIndent = 0): string {
 
 type Scalar = null | boolean | number | string;
 
-// Leading characters that force quoting when they start a scalar the
-// double-quote rule passed over (strings containing a double quote): all
-// YAML indicators plus the resolver-significant prefixes.
-const DOUBLE_FIRST = new Set([
-  ",", "[", "]", "{", "}", "#", "&", "*", "!", "|", ">", "'", '"', "%", "@", "`",
-  "-", "?", ":", "+", ".", "~",
-]);
-
 type PsychStyle = "literal" | "double" | "single" | "plain";
 
 function psychStyleOf(s: string): PsychStyle {
@@ -226,9 +221,12 @@ function psychStyleOf(s: string): PsychStyle {
     }
   }
   if (s === "y" || s === "n") return "double";
-  // Probed: a scalar whose FIRST character is a double quote always takes the
-  // double-escaped form (`"a` -> "\"a"), regardless of the rest of the string
-  // (G5-T5-R3-B1).
+  // Probed (R4-N1): a scalar whose FIRST character is a double quote takes
+  // the double-escaped form when that is the ONLY double quote (`"a` ->
+  // \"a); a SECOND double quote anywhere flips the whole scalar to the
+  // single-quoted form with apostrophe doubling (`"a"` -> '"a"', `""` ->
+  // '"").
+  if (s.length > 0 && s[0] === '"' && s.indexOf('"', 1) !== -1) return "single";
   if (s.length > 0 && s[0] === '"') return "double";
   if (s.length > 0 && !PSYCH_WORD.test(s[0]) && !s.includes('"')) return "double";
   if (tokenizeResolvesNonString(s) || PSYCH_BROKEN_OCTAL.test(s)) return "single";
@@ -259,6 +257,14 @@ function plainFallbackToken(s: string, blockIndent = 0): string {
     const body = s.slice(0, -1).replace(/'/g, "''");
     return `'${body}\n\n${" ".repeat(blockIndent + 2)}'`;
   }
+  // Probed (R4-N2): plain-safety analysis is independent of the quote gate —
+  // a leading blank WITH a double quote takes the single-quoted form
+  // (' "a'); a leading soft indicator followed by a blank with a double quote
+  // is a plain-unsafe sequence/mapping indicator form and is single-quoted
+  // too (`- "x"` / `? "x"`); the no-quote leading-blank case was already
+  // routed to the double-escaped form upstream.
+  if (/^ /.test(s)) return s.includes('"') ? singleQuoted(s) : doubleQuoted(s);
+  if (/^[-?] /.test(s) && s.includes('"')) return singleQuoted(s);
   if (/\t/.test(s)) return doubleQuoted(s);
   for (const ch of s) {
     const code = ch.codePointAt(0)!;
@@ -275,26 +281,89 @@ function plainFallbackToken(s: string, blockIndent = 0): string {
   return s;
 }
 
-function serializeScalarString(s: string, blockIndent = 0): string {
+/** Double-quoted emitter with \L/\P breaks: the break resets the column to
+ * the continuation indent, spaces fold exactly like applyFolding (R4-N4b).
+ * Escape tokens count their own written width; astral code points escape as
+ * one \U token. */
+function doubleQuotedFolded(s: string, blockIndent: number, columnBefore = 1): string {
+  const cont = blockIndent + 2;
+  const chars = Array.from(s);
+  let out = '"';
+  let column = columnBefore + 1; // prefix + the opening quote
+  for (let idx = 0; idx < chars.length; idx += 1) {
+    const ch = chars[idx]!;
+    const code = ch.codePointAt(0)!;
+    if (ch === "\u2028" || ch === "\u2029") {
+      out += ch === "\u2028" ? "\\L" : "\\P";
+      column = cont; // the break resets the column
+      continue;
+    }
+    const token = ch === '"'
+      ? '\\"'
+      : ch === "\\"
+        ? "\\\\"
+        : (code >= 0x20 && code <= 0x7e) || (code >= 0xa1 && code <= 0xd7ff) || (code >= 0xe000 && code <= 0xfffd)
+          ? ch
+          : doubleEscape(code);
+    // Fold decision mirrors applyFolding's neighbour rules, evaluated on the
+    // original string neighbours.
+    if (
+      token === " " && column > 80 &&
+      chars[idx - 1] !== " " && chars[idx + 1] !== undefined && chars[idx + 1] !== " "
+    ) {
+      out += "\n" + " ".repeat(cont);
+      column = cont;
+      continue;
+    }
+    out += token;
+    column += token.length;
+  }
+  return out + '"';
+}
+
+function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): string {
   // psych visit_String: o == '<<' is an explicit !!str single-quoted branch
   // (it would otherwise resolve as a merge key).
   if (s === "<<") return "!!str '<<'";
   const style = psychStyleOf(s);
   if (style === "literal") return multilineScalar(s, blockIndent);
+  if (containsUnicodeBreak(s)) {
+    // R4-N3/N4 model (ruby-probed):
+    //   - a tab, control byte, or astral char forces the double-escaped form
+    //     (raw control bytes can never ride the single-quoted LS form);
+    //   - a blank IMMEDIATELY BEFORE a break is trailing whitespace at a
+    //     fold point — the single-quoted form would strip it and change the
+    //     value, so the reference switches to double + \L (value fidelity);
+    //   - style "double" (leading quote, y/n, non-word start) rides the
+    //     folding double emitter so \L/\P stay escaped;
+    //   - everything else takes the single-quoted LS form, where the break
+    //     RESETS the column (R4-N4a: no phantom folds after it).
+    const breakBeforeSpace = new RegExp(` [${"\u2028\u2029"}]`).test(s);
+    const doubleForced =
+      /\t/.test(s) ||
+      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(s) ||
+      [...s].some((ch) => {
+        const code = ch.codePointAt(0)!;
+        return code > 0xffff || code === 0xfffe || code === 0xffff;
+      });
+    if (style === "double" || doubleForced || breakBeforeSpace) {
+      return doubleQuotedFolded(s, blockIndent, columnBefore);
+    }
+    return singleQuotedWithBreaks(s, blockIndent);
+  }
   if (style === "double") return doubleQuoted(s);
   if (style === "single") return singleQuoted(s);
-  if (containsUnicodeBreak(s)) return singleQuotedWithBreaks(s, blockIndent);
   return plainFallbackToken(s, blockIndent);
 }
 
-function serializeScalar(value: Scalar, blockIndent = 0): string {
+function serializeScalar(value: Scalar, blockIndent = 0, columnBefore = 1): string {
   if (value === null) return "";
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") {
     if (!Number.isFinite(value)) throw new LoopManifestYamlError("non-finite number is not YAML-dumpable");
     return String(value);
   }
-  return serializeScalarString(value, blockIndent);
+  return serializeScalarString(value, blockIndent, columnBefore);
 }
 
 /**
@@ -314,11 +383,6 @@ function multilineScalar(s: string, blockIndent = 0): string {
   const contentLines = bodyLines;
   const blockEligible = contentLines.every((line) => !line.includes("\t") && !/[ \t]$/.test(line));
   if (!blockEligible) return doubleQuoted(s);
-  // Probed: a single content line + trailing LF takes the single-quoted fold
-  // form ("ab\n" -> 'ab\n\n  '), not a block.
-  if (trailingEmpty && contentLines.length === 1) {
-    return `${singleQuoted(contentLines[0])}\n\n  `;
-  }
   const firstLineLeadingSpace = /^[ \t]/.test(contentLines[0]);
   const firstLineEmpty = contentLines[0] === "";
   const chomp = trailingEmpty ? "" : "-";
@@ -331,8 +395,9 @@ function multilineScalar(s: string, blockIndent = 0): string {
       out += "\n";
       continue;
     }
-    // Probed: a raw U+2028/U+2029 inside a block line is followed by a
-    // two-space continuation indent (same rule as the single-quoted form).
+    // Probed: a raw U+2028/U+2029 inside a block line is followed by the
+    // continuation indent (owning indent + 2 — linePad), same rule as the
+    // single-quoted form.
     out += `${linePad}${line.replace(/([\u2028\u2029])/g, "$1" + linePad)}\n`;
   }
   return out;
@@ -356,6 +421,15 @@ function applyFolding(token: string, columnBefore: number, continuationIndent: n
   let column = columnBefore;
   for (let i = 0; i < token.length; i += 1) {
     const ch = token[i];
+    // R4-N4a: a raw LS/PS is a break — the column resets to the continuation
+    // indent and no fold ever happens AT the break itself (previously the
+    // break was counted as a normal column, producing phantom folds right
+    // after it).
+    if (ch === "\u2028" || ch === "\u2029") {
+      out += ch;
+      column = continuationIndent;
+      continue;
+    }
     if (ch === " " && column > limit && token[i - 1] !== " " && token[i + 1] !== " " && token[i + 1] !== undefined) {
       out += "\n" + " ".repeat(continuationIndent);
       column = continuationIndent;
@@ -377,7 +451,7 @@ export function dumpRubyYaml(value: { readonly [key: string]: YamlValue }): stri
 }
 
 function inlineScalarToken(value: Scalar, columnBefore: number, continuationIndent: number): string {
-  const token = serializeScalar(value, continuationIndent - 2);
+  const token = serializeScalar(value, continuationIndent - 2, columnBefore);
   // Block forms carry their own lines; the caller's newline is already the
   // block's last line break, so trim the token's trailing one.
   if (token.startsWith("|") && token.endsWith("\n")) return token.slice(0, -1);
@@ -445,7 +519,7 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       // Probed compact nested form: `- - a` / `  - b` — the nested sequence's
       // first item rides the parent dash line, the rest indent +2.
       if (isScalar(item[0])) {
-        const token = serializeScalar(item[0]);
+        const token = serializeScalar(item[0], indent);
         // The nested item's own content starts after `- - ` (4 columns), so a
         // fold continuation lands at indent + 4 (probed).
         // The token carries its own `pad + "- - "` prefix, so it starts at
