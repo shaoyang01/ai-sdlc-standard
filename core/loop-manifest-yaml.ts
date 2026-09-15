@@ -197,12 +197,20 @@ function containsUnicodeBreak(s: string): boolean {
 }
 
 function singleQuotedWithBreaks(s: string, blockIndent = 0): string {
+  // R5-B1-Ⅳ: ruby inserts the continuation indent only after the LAST break
+  // of a consecutive run (`a<LS><PS>b` -> 'a<LS><PS>  b'), never after each.
+  const cont = " ".repeat(blockIndent + 2);
+  const chars = Array.from(s);
   let body = "";
-  for (const ch of s) {
+  for (let idx = 0; idx < chars.length; idx += 1) {
+    const ch = chars[idx]!;
     if (ch === "'") body += "''";
     else {
       body += ch;
-      if (ch === "\u2028" || ch === "\u2029") body += " ".repeat(blockIndent + 2);
+      const next = chars[idx + 1];
+      if ((ch === "\u2028" || ch === "\u2029") && next !== "\u2028" && next !== "\u2029") {
+        body += cont;
+      }
     }
   }
   return `'${body}'`;
@@ -295,7 +303,11 @@ function doubleQuotedFolded(s: string, blockIndent: number, columnBefore = 1): s
     const code = ch.codePointAt(0)!;
     if (ch === "\u2028" || ch === "\u2029") {
       out += ch === "\u2028" ? "\\L" : "\\P";
-      column = cont; // the break resets the column
+      // R5-B1-Ⅱ: \L/\P are ESCAPE TOKENS in the double-quoted form, not
+      // structural breaks — they count their own written width (2 columns)
+      // and do NOT reset the column (ruby-probed: folding past column 80
+      // after the escape uses the continued column).
+      column += 2;
       continue;
     }
     const token = ch === '"'
@@ -338,7 +350,11 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
     //     folding double emitter so \L/\P stay escaped;
     //   - everything else takes the single-quoted LS form, where the break
     //     RESETS the column (R4-N4a: no phantom folds after it).
-    const breakBeforeSpace = new RegExp(` [${"\u2028\u2029"}]`).test(s);
+    // R5-B1-Ⅰ: the value-fidelity gate covers blanks on BOTH sides of a
+    // break — a blank after the break would be silently stripped by the
+    // single-quoted reader (value corrosion), so such scalars take the
+    // double-escaped form too (`a<LS> b` -> "a\L b").
+    const breakAdjacentBlank = new RegExp(` [${"\u2028\u2029"}]|[${"\u2028\u2029"}] `).test(s);
     const doubleForced =
       /\t/.test(s) ||
       /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/.test(s) ||
@@ -346,7 +362,7 @@ function serializeScalarString(s: string, blockIndent = 0, columnBefore = 1): st
         const code = ch.codePointAt(0)!;
         return code > 0xffff || code === 0xfffe || code === 0xffff;
       });
-    if (style === "double" || doubleForced || breakBeforeSpace) {
+    if (style === "double" || doubleForced || breakAdjacentBlank) {
       return doubleQuotedFolded(s, blockIndent, columnBefore);
     }
     return singleQuotedWithBreaks(s, blockIndent);
@@ -398,7 +414,7 @@ function multilineScalar(s: string, blockIndent = 0): string {
     // Probed: a raw U+2028/U+2029 inside a block line is followed by the
     // continuation indent (owning indent + 2 — linePad), same rule as the
     // single-quoted form.
-    out += `${linePad}${line.replace(/([\u2028\u2029])/g, "$1" + linePad)}\n`;
+    out += `${linePad}${line.replace(/([\u2028\u2029])(?![\u2028\u2029])/g, "$1" + linePad)}\n`;
   }
   return out;
 }
@@ -421,13 +437,14 @@ function applyFolding(token: string, columnBefore: number, continuationIndent: n
   let column = columnBefore;
   for (let i = 0; i < token.length; i += 1) {
     const ch = token[i];
-    // R4-N4a: a raw LS/PS is a break — the column resets to the continuation
-    // indent and no fold ever happens AT the break itself (previously the
-    // break was counted as a normal column, producing phantom folds right
-    // after it).
+    // R4-N4a / R5-B1-Ⅲ: a raw LS/PS is a REAL break — the column resets to
+    // ZERO (Time-independence: the following continuation-indent blanks then
+    // count normally from 0; resetting to the continuation indent instead
+    // shifted every post-break fold point by two columns). No fold ever
+    // happens AT the break itself.
     if (ch === "\u2028" || ch === "\u2029") {
       out += ch;
-      column = continuationIndent;
+      column = 0;
       continue;
     }
     if (ch === " " && column > limit && token[i - 1] !== " " && token[i + 1] !== " " && token[i + 1] !== undefined) {
@@ -519,7 +536,7 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       // Probed compact nested form: `- - a` / `  - b` — the nested sequence's
       // first item rides the parent dash line, the rest indent +2.
       if (isScalar(item[0])) {
-        const token = serializeScalar(item[0], indent);
+        const token = serializeScalar(item[0], indent + 2);
         // The nested item's own content starts after `- - ` (4 columns), so a
         // fold continuation lands at indent + 4 (probed).
         // The token carries its own `pad + "- - "` prefix, so it starts at

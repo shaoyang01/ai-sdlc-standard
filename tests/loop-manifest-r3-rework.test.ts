@@ -13,6 +13,12 @@
 //                                       indicator+blank x quote, double-form
 //                                       LS/PS escapes, folding x LS (incl. a
 //                                       pub1-shaped end-to-end reload)
+//   6. scenarioQuoteResidualRoots        R5-B1-Ⅰ..Ⅳ: break-adjacency gate
+//                                       (blank after break), \L/\P pass-
+//                                       through column model, bare-break
+//                                       column reset to zero, consecutive-
+//                                       break indent, + pubC/D/E/F-shaped
+//                                       end-to-end reloads
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -286,6 +292,87 @@ async function scenarioQuoteChainClosures(): Promise<void> {
   }
 }
 
+// ===========================================================================
+async function scenarioQuoteResidualRoots(): Promise<void> {
+  const LS = "\u2028";
+  const PS = "\u2029";
+  // R5-B1-Ⅰ: blank AFTER a break is break-adjacent too (double+escape form;
+  // the single-quoted reader would silently strip it — value corrosion).
+  for (const form of [`a${LS} b`, `a${PS} b`, `x y${LS} z w`]) {
+    ok(dumpRubyYaml({ k: form }) === rubyScalarDoc(form), `B1-1 ${JSON.stringify(form)} byte-identical with ruby`);
+  }
+  // R5-B1-Ⅱ: \L/\P count their own 2 written columns (folding AFTER the
+  // escape uses the continued column).
+  const two = `pre ${"x ".repeat(60)}${LS}post ${"y ".repeat(60)}`;
+  ok(dumpRubyYaml({ k: two }) === rubyScalarDoc(two), "B1-2 pass-through column model byte-identical with ruby");
+  // R5-B1-Ⅲ: a bare break resets the column to ZERO (single-quoted fold
+  // position matches ruby exactly).
+  const three = `${"s".repeat(22)}${LS}${"t".repeat(60)}`;
+  ok(dumpRubyYaml({ k: three }) === rubyScalarDoc(three), "B1-3 bare-break zero reset byte-identical with ruby");
+  // R5-B1-Ⅳ: consecutive breaks take the indent only after the LAST one.
+  const four = [`hotfix${LS}${PS}rollout`, `a${LS}${LS}b`, `a${PS}${LS}b`];
+  for (const form of four) {
+    ok(dumpRubyYaml({ k: form }) === rubyScalarDoc(form), `B1-4 ${JSON.stringify(form)} byte-identical with ruby`);
+  }
+
+  // pubC/D/E/F-shaped end-to-end reloads: each root's title form must load,
+  // take over, and replay (R5 verdict: these were the wedging vectors).
+  const titles: Record<string, string> = {
+    pubC: `fix login${LS} retry flow`,
+    pubD: `${"s".repeat(22)}${LS}${"t".repeat(60)}`,
+    pubE: `pre ${"x ".repeat(60)}${LS}post ${"y ".repeat(60)}`,
+    pubF: `hotfix${LS}${PS}rollout`,
+  };
+  for (const [name, title] of Object.entries(titles)) {
+    const RUN = `run-${name.toLowerCase()}`;
+    const REQ = `req-${name.toLowerCase()}`;
+    const root = mkdtempSync(join(tmpdir(), `loop-${name.toLowerCase()}-`));
+    const store = new LoopRunStore(join(root, "journal.db"));
+    try {
+      mkdirSync(join(root, "repo"), { recursive: true });
+      mkdirSync(join(root, "library", REQ), { recursive: true });
+      const libraryDir = join(root, "library", REQ);
+      store.init();
+      store.createRun({
+        runId: RUN, requirementId: REQ, repository: "example", repositoryPath: join(root, "repo"),
+        baseBranch: "main", expectedBaseSha: "1".repeat(40), taskBranch: "t", controlRoot: join(root, "control"),
+        createdAt: "2026-09-11T00:00:00.000Z",
+      } as LoopRunIdentity);
+      store.appendEvent({
+        eventId: `${RUN}:2:run_started`, runId: RUN, sequence: 2, kind: "run_started", stage: null,
+        attempt: 0, createdAt: "2026-09-11T00:00:01.000Z", inputDigest: null, outputArtifactRef: null,
+        outputDigest: null, errorCode: null, retryable: null, reasonCode: null, bindingId: null,
+        bindingVersion: null, inputArtifactRef: null,
+      } as LoopRunEvent);
+      const request = { store, runId: RUN, requirementId: REQ, libraryDir };
+      const base: Record<string, unknown> = {
+        schema_version: LOOP_MANIFEST_SCHEMA_VERSION, requirement_id: REQ, title,
+        publish_seq: 1, projected_through: "MANUAL", updated_at: "2026-09-11T00:00:02.000Z",
+        depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "intake-init", required_depth: "STANDARD" },
+        entries: [
+          { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/req_需求摘要.md", version: "1.0.0", digest: "b".repeat(64), updated_at: "2026-09-11T00:00:02.000Z", source_event_ref: "00-需求资料/req_需求摘要.md" },
+          { node: "solution-design", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+          { node: "solution-gate", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+          { node: "task-planning", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+          { node: "implementation", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+          { node: "code-review", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+          { node: "knowledge-sync", status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null },
+        ],
+        finding_index: [], declaration_log: [],
+        repair_records: [{ who: "operator", when: "2026-09-11T00:00:03.000Z", reason: title, corrected_entries: "requirement-intake" }],
+      };
+      const sealed = sealManifest(base as never);
+      writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...base, manifest_digest: sealed.manifest_digest }), "utf8");
+      const outcome = projectLoopManifest({ ...request, takeoverAcceptedAt: "2026-09-11T00:00:04.000Z" });
+      ok(outcome.kind === "PUBLISHED", `${name}-shaped manifest loads and takes over (${JSON.stringify(outcome)})`);
+      ok(projectLoopManifest(request).kind === "NO_OP", `${name}-shaped replay is NO_OP`);
+    } finally {
+      try { store.close(); } catch { /* cleanup tolerance */ }
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+}
+
 async function main(): Promise<void> {
   console.log("G5-T5-R3 rework — quote-fallback family vs live ruby (B1+S1)");
   await scenarioQuoteFallbackFamily();
@@ -297,6 +384,8 @@ async function main(): Promise<void> {
   await scenarioRepairKeyOrderReload();
   console.log("G5-T5-R4 rework — quote chain closures incl. pub1-shaped reload (R4-N1..N4)");
   await scenarioQuoteChainClosures();
+  console.log("G5-T5-R5 rework — residual quote-chain roots incl. pubC/D/E/F reloads (R5-B1-Ⅰ..Ⅳ)");
+  await scenarioQuoteResidualRoots();
   console.log(`\ng5t5-r3-rework: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
