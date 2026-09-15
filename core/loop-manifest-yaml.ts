@@ -181,6 +181,9 @@ function doubleQuoted(s: string): string {
     const code = ch.codePointAt(0)!;
     if (ch === '"') out += '\\"';
     else if (ch === "\\") out += "\\\\";
+    // R6-B1-Ⅴ-β: LS/PS are escape tokens in the double-quoted form — the raw
+    // pass-through range must exclude them so they reach doubleEscape.
+    else if (code === 0x2028 || code === 0x2029) out += doubleEscape(code);
     else if (code >= 0x20 && code <= 0x7e) out += ch;
     else if (code >= 0xa1 && code <= 0xd7ff) out += ch;
     else if (code >= 0xe000 && code <= 0xfffd) out += ch;
@@ -397,25 +400,39 @@ function multilineScalar(s: string, blockIndent = 0): string {
   const extraTrailingEmpties = trailingEmpty && bodyLines.length > 0 && bodyLines[bodyLines.length - 1] === "";
   if (extraTrailingEmpties) return doubleQuoted(s); // keep-chomp: handled with the document-end marker below
   const contentLines = bodyLines;
-  const blockEligible = contentLines.every((line) => !line.includes("\t") && !/[ \t]$/.test(line));
+  // R6-B1-Ⅴ-α: LS/PS are line boundaries too, so a space/tab immediately
+  // before one is trailing whitespace on that boundary and disqualifies the
+  // whole block (ruby-probed: `a <LS>b` -> double-quoted with \L).
+  const blockEligible = contentLines.every(
+    (line) => !line.includes("\t") && !/[ \t]$/.test(line) && !/[ \t][\u2028\u2029]/.test(line),
+  );
   if (!blockEligible) return doubleQuoted(s);
   const firstLineLeadingSpace = /^[ \t]/.test(contentLines[0]);
   const firstLineEmpty = contentLines[0] === "";
-  const chomp = trailingEmpty ? "" : "-";
+  // A trailing LS/PS is a trailing line break: ruby clips with `|` (probed
+  // `l1\na<LS>` -> `|\n  l1\n  a<LS>`).
+  const endsWithBreak = /[\u2028\u2029]$/.test(s);
+  const chomp = trailingEmpty || endsWithBreak ? "" : "-";
   const indicator = firstLineLeadingSpace || (firstLineEmpty && contentLines.length > 1) ? "2" : "";
   const header = `|${indicator}${chomp}`;
   const linePad = " ".repeat(blockIndent + 2);
   let out = `${header}\n`;
-  for (const line of contentLines) {
+  contentLines.forEach((line, index) => {
     if (line === "") {
       out += "\n";
-      continue;
+      return;
     }
-    // Probed: a raw U+2028/U+2029 inside a block line is followed by the
-    // continuation indent (owning indent + 2 — linePad), same rule as the
-    // single-quoted form.
-    out += `${linePad}${line.replace(/([\u2028\u2029])(?![\u2028\u2029])/g, "$1" + linePad)}\n`;
-  }
+    // A line that STARTS with a break has an empty leading segment, which
+    // carries no indentation (probed `l1\n<LS>b` -> `  l1\n<LS>  b`).
+    const leadingPad = /^[\u2028\u2029]/.test(line) ? "" : linePad;
+    // The continuation indent follows a break only when content follows on
+    // the SAME physical line (a line-final break gets none).
+    const body = line.replace(/([\u2028\u2029])(?=[^\u2028\u2029])/g, "$1" + linePad);
+    // A string-final break IS the final line break: ruby emits no trailing
+    // newline for it (probed `l1\nx<LS>` -> `|\n  l1\n  x<LS>`).
+    const isLast = index === contentLines.length - 1;
+    out += isLast && endsWithBreak ? `${leadingPad}${body}` : `${leadingPad}${body}\n`;
+  });
   return out;
 }
 
@@ -469,11 +486,23 @@ export function dumpRubyYaml(value: { readonly [key: string]: YamlValue }): stri
 
 function inlineScalarToken(value: Scalar, columnBefore: number, continuationIndent: number): string {
   const token = serializeScalar(value, continuationIndent - 2, columnBefore);
-  // Block forms carry their own lines; the caller's newline is already the
-  // block's last line break, so trim the token's trailing one.
-  if (token.startsWith("|") && token.endsWith("\n")) return token.slice(0, -1);
+  if (token.startsWith("|")) return token; // block forms carry their own lines
   if (token.includes("\n")) return token; // pre-broken forms (single-fold)
   return applyFolding(token, columnBefore, continuationIndent);
+}
+
+/**
+ * R6-B1-Ⅴ: a block whose value ends with exactly one LS/PS is terminated by
+ * that break — ruby emits the next line immediately after it, with no
+ * newline of its own (probed in ALL positions: `a: |\n  l1\n  x<LS>b: "y"`,
+ * and the document-final form ends without a trailing newline). Every other
+ * scalar takes the caller's newline.
+ */
+function lineTerminatorFor(token: string): string {
+  // Block forms terminate their own line: a normal block already ends with
+  // its final newline, and a break-terminated block ends with the break
+  // itself. Neither takes the caller's newline.
+  return token.startsWith("|") ? "" : "\n";
 }
 
 function emitMapping(entries: readonly (readonly [string, YamlValue])[], indent: number): string {
@@ -496,7 +525,8 @@ function emitMapping(entries: readonly (readonly [string, YamlValue])[], indent:
     } else {
       // Probed: null prints as `key:` with NO trailing space.
       const valueColumn = pad.length + keyToken.length + 2;
-      out += val === null ? "\n" : ` ${inlineScalarToken(val, valueColumn, indent + 2)}\n`;
+      const valueToken = val === null ? null : inlineScalarToken(val, valueColumn, indent + 2);
+      out += valueToken === null ? "\n" : ` ${valueToken}${lineTerminatorFor(valueToken)}`;
     }
   }
   return out;
@@ -525,7 +555,10 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
           out += emitMapping(Object.entries(firstVal), indent + 2);
         }
       } else {
-        out += firstVal === null ? "\n" : ` ${inlineScalarToken(firstVal, pad.length + 4 + firstKey.length, indent + 4)}\n`;
+        const firstValueToken = firstVal === null
+          ? null
+          : inlineScalarToken(firstVal, pad.length + 4 + firstKey.length, indent + 4);
+        out += firstValueToken === null ? "\n" : ` ${firstValueToken}${lineTerminatorFor(firstValueToken)}`;
       }
       if (entries.length > 1) out += emitMapping(entries.slice(1), indent + 2);
     } else if (Array.isArray(item)) {
@@ -551,7 +584,8 @@ function emitSequence(items: readonly YamlValue[], indent: number): string {
       }
     } else {
       const token = emitScalar(item);
-      out += token === "" ? `${pad}-\n` : `${pad}- ${inlineScalarToken(item, pad.length + 2, indent + 2)}\n`;
+      const itemToken = token === "" ? null : inlineScalarToken(item, pad.length + 2, indent + 2);
+      out += itemToken === null ? `${pad}-\n` : `${pad}- ${itemToken}${lineTerminatorFor(itemToken)}`;
     }
   }
   return out;
@@ -738,24 +772,43 @@ function parseBlockScalar(lines: Line[], start: number, keyIndent: number, heade
   const collected: string[] = [];
   let i = start;
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
     if (line.indent === -1 || line.raw === "") {
       collected.push("");
       i += 1;
       continue;
     }
-    if (line.indent < contentIndent) break;
-    collected.push(" ".repeat(line.indent - contentIndent) + line.text);
+    // A break sitting at column 0 is block CONTENT (LS/PS are line breaks),
+    // not a dedent: the emitter writes `\u2028  b` for a line-initial break.
+    let raw = line.raw;
+    let lead = "";
+    while (raw.length > 0 && (raw[0] === "\u2028" || raw[0] === "\u2029")) {
+      lead += raw[0];
+      raw = raw.slice(1);
+    }
+    if (lead === "") {
+      if (line.indent < contentIndent) break;
+    } else {
+      const rest = /^( *)([\s\S]*)$/.exec(raw)!;
+      if (rest[2] !== "" && rest[1]!.length < contentIndent) break;
+    }
+    const body = raw.startsWith(" ".repeat(contentIndent))
+      ? raw.slice(contentIndent)
+      : raw.replace(/^ */, "");
+    collected.push(lead + body);
     i += 1;
   }
   while (collected.length > 0 && collected[collected.length - 1] === "") collected.pop();
-  // Reverse the raw-break continuation: a LS/PS inside a block line was
-  // written followed by the continuation indent (owning indent + 2) — strip
-  // ALL blanks after the break (R3-B3).
-  let value = collected.join("\n").replace(/([\u2028\u2029])[ \t]*/g, "$1");
-  if (!strip && value !== "") value += "\n";
+  // Reverse the emitter's break continuation: it writes a break followed by
+  // exactly the content indent, so strip EXACTLY that many blanks (stripping
+  // all of them would eat whitespace that is part of the value).
+  const pad = new RegExp("([\u2028\u2029])[ \t]{" + contentIndent + "}", "g");
+  let value = collected.join("\n").replace(pad, "$1");
+  // Clip keeps one trailing break; a value already ending in a break has it.
+  if (!strip && value !== "" && !/[\u2028\u2029]$/.test(value)) value += "\n";
   return { value, next: i };
 }
+
 
 function parseMappingAt(lines: Line[], start: number, indent: number): ParseResult {
   const result: Record<string, YamlValue> = {};
