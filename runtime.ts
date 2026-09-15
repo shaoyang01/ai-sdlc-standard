@@ -620,7 +620,7 @@ export function releaseManifestProjectionBlock(request: Readonly<{
     if (routeManifestProjectionOutcome(projected).blocksRun) {
       const code = projected.kind === "STOP" ? projected.code : "unknown";
       const reason = projected.kind === "STOP" ? projected.reason : "unknown";
-      reject(`the manifest still stops (${code}): ${reason}`);
+      reject(`the manifest still stops: ${reason}`);
     }
   }
   const sequence = snapshot.state.lastSequence + 1;
@@ -840,8 +840,8 @@ export async function run(
           "ILLEGAL_TRANSITION",
           `manifest projection stop ${stop.code} could not be recorded durably: capability ` +
             `execution is still active in run ${blockRunId} (crash window). ` +
-            `Reason: ${stop.reason}. Close the interrupted attempt (resume the run) ` +
-            "or repair the manifest before re-entering.",
+            `Reason: ${stop.reason}. Repair the manifest per contract §6.2.6 ` +
+            "(the interrupted attempt resumes only after the preflight accepts the repaired manifest).",
         );
       }
       return manifestProjectionBlockedResult(
