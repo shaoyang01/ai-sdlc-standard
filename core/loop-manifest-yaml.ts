@@ -13,18 +13,22 @@
  *     sit AT their owning key's indent; nested sequences are compact
  *     (`- - a` / `  - b`); null prints as an empty value; empty map `{}`,
  *     empty array `[]`
- *   - a leading YAML indicator character (including `-`, `?`, `:`, `+`, `.`,
- *     `~`) forces DOUBLE quotes; strings resolving to a scalar type (int,
- *     float, bool, sexagesimal, timestamp, broken octal, radix 0x/0b) get
- *     SINGLE quotes; exactly `y`/`n` get DOUBLE quotes (`Y`/`N` stay plain);
- *     mid-string indicators (`it's`, `a:b`, `a #b` minus the space form) are
- *     plain; `: `/` #`/trailing-`:` single-quote; leading/trailing space or
- *     tab double-quote
+ *   - a leading UNCONDITIONAL YAML indicator or `:` forces DOUBLE quotes;
+ *     strings resolving to a scalar type (int, float, bool, sexagesimal,
+ *     timestamp, broken octal, radix 0x/0b) get SINGLE quotes; exactly `y`/`n`
+ *     get DOUBLE quotes (`Y`/`N` stay plain); a leading double quote always
+ *     takes the double-escaped form; soft indicators (`-` `?` `+` `.` `~`)
+ *     with a double quote inside stay PLAIN, while hard indicators with a
+ *     double quote inside fall back to SINGLE (`:"y` / `!"z`); mid-string
+ *     indicators (`it's`, `a:b`, `a #b` minus the space form) are plain;
+ *     `: `/` #`/trailing-`:` single-quote; leading space or tab double-quote,
+ *     trailing space single-quote
  *   - double-quote escapes: `\0 \a \b \t \n \v \f \r \e \" \\ \N` (NEL),
  *     `\xNN` / `\uNNNN` / `\UNNNNNNNN` with UPPERCASE hex (libyaml prints
  *     only #x20-#x7E, #xA0-#xD7FF, #xE000-#xFFFD raw; astral always escapes)
- *   - U+2028/U+2029 (no LF): single-quoted with the break written raw plus a
- *     two-space continuation indent (`a<LS>b` -> `'a<LS>  b'`)
+ *   - U+2028/U+2029 (no LF): single-quoted with the break written raw plus
+ *     the continuation indent = owning indent + 2 (`a<LS>b` at top level ->
+ *     `'a<LS>  b'`; deeper positions indent deeper — R3-B3)
  *   - embedded LF: clean block literals (`|-` strip / `|` clip / `|2` explicit
  *     indent when the first line starts with space); tabs or trailing spaces
  *     on any line fall back to double-quoted escapes; a single trailing LF
@@ -79,7 +83,9 @@ const PSYCH_SEXAGESIMAL_FLOAT = /^[-+]?[0-9][0-9_]*(:[0-5]?[0-9]){1,2}\.[0-9_]*$
 const PSYCH_BROKEN_OCTAL = /^0[0-7]*[89]/;
 
 /** Psych parse_time/strptime are wrapped in `rescue ArgumentError -> String`:
- * an out-of-range month/day/time makes the scalar stay a String (plain). */
+ * month 0/13 and day 0/>=32 raise -> the scalar stays a String (plain); days
+ * 1-31 normalise past the real calendar exactly like Time.utc (2019-02-29 ->
+ * 2019-03-01 — R3-B2); hh==24 only as 24:00:00. */
 function isLeapYear(y: number): boolean {
   return y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
 }
@@ -92,7 +98,12 @@ function timeScalarResolves(s: string): boolean {
   if (!PSYCH_TIME.test(s)) return false;
   const datePart = s.split(/[Tt]|\s+/)[0]!;
   const [y, m, d] = datePart.split("-").map((v) => Number(v));
-  if (!validCalendarDate(y!, m!, d!)) return false;
+  // Psych parse_time calls Time.utc(y, m, d, ...): month 1-12 and day 1-31
+  // are ALL accepted — days normalise past the real calendar (2019-02-29 ->
+  // 2019-03-01, 2020-04-31 -> 2020-05-01); only m=0/13 and d=0/>=32 raise
+  // (R3-B2: the strict calendar check under-quoted the normalising forms).
+  // The date-only path keeps the strict calendar (Date.strptime semantics).
+  if (m === undefined || d === undefined || m < 1 || m > 12 || d < 1 || d > 31) return false;
   const md = /(\d{1,2}):(\d\d):(\d\d)/.exec(s);
   if (md === null) return false;
   const hh = Number(md[1]);
@@ -182,13 +193,13 @@ function containsUnicodeBreak(s: string): boolean {
   return s.includes("\u2028") || s.includes("\u2029");
 }
 
-function singleQuotedWithBreaks(s: string): string {
+function singleQuotedWithBreaks(s: string, blockIndent = 0): string {
   let body = "";
   for (const ch of s) {
     if (ch === "'") body += "''";
     else {
       body += ch;
-      if (ch === "\u2028" || ch === "\u2029") body += "  ";
+      if (ch === "\u2028" || ch === "\u2029") body += " ".repeat(blockIndent + 2);
     }
   }
   return `'${body}'`;
@@ -215,6 +226,10 @@ function psychStyleOf(s: string): PsychStyle {
     }
   }
   if (s === "y" || s === "n") return "double";
+  // Probed: a scalar whose FIRST character is a double quote always takes the
+  // double-escaped form (`"a` -> "\"a"), regardless of the rest of the string
+  // (G5-T5-R3-B1).
+  if (s.length > 0 && s[0] === '"') return "double";
   if (s.length > 0 && !PSYCH_WORD.test(s[0]) && !s.includes('"')) return "double";
   if (tokenizeResolvesNonString(s) || PSYCH_BROKEN_OCTAL.test(s)) return "single";
   return "plain";
@@ -223,26 +238,37 @@ function psychStyleOf(s: string): PsychStyle {
 
 
 /** libyaml plain-analysis fallback for a PLAIN-requested scalar. */
-function plainFallbackToken(s: string): string {
+// Unconditional YAML indicators plus the resolver-significant `:` — when one
+// of these starts a plain-style scalar (which now only happens when the
+// string contains a double quote), libyaml's plain analysis still refuses and
+// the reference falls back to the single-quoted form with apostrophe doubling
+// (probed: :"y / !"z / |"w / #"u -> single).
+const HARD_FIRST = new Set([
+  ",", "[", "]", "{", "}", "#", "&", "*", "!", "|", ">", "'", "%", "@", "`", ":",
+]);
+
+function plainFallbackToken(s: string, blockIndent = 0): string {
   if (s === "") return "''";
   // Exactly one trailing LF takes the single-quoted fold form (probed
   // 'ab\n' -> 'ab\n\n  '); this must precede the control-character gate,
   // since LF is itself a control character.
   if (s.endsWith("\n") && !s.slice(0, -1).includes("\n") && !s.slice(0, -1).includes("\t")) {
     // Probed: 'ab\n' -> 'ab\n\n  ' — the breaks and continuation indent sit
-    // INSIDE the quotes.
+    // INSIDE the quotes; the continuation indent is the owning indent + 2
+    // (R3-B3: no longer hardcoded for nested positions).
     const body = s.slice(0, -1).replace(/'/g, "''");
-    return `'${body}\n\n  '`;
+    return `'${body}\n\n${" ".repeat(blockIndent + 2)}'`;
   }
   if (/\t/.test(s)) return doubleQuoted(s);
   for (const ch of s) {
     const code = ch.codePointAt(0)!;
     if (code > 0xffff || code === 0xfffe || code === 0xffff) return doubleQuoted(s);
   }
-  // A leading indicator the double-quote rule passed over (because the string
-  // contains a double quote) is still plain-unsafe for libyaml: it falls back
-  // to the single-quoted form with apostrophe doubling.
-  if (DOUBLE_FIRST.has(s[0]) && s[0] !== '"') return singleQuoted(s);
+  if (s[0] === '"') return doubleQuoted(s);
+  if (HARD_FIRST.has(s[0])) return singleQuoted(s);
+  // Soft indicators (`-` `?` `+` `.` `~`) with a double quote inside stay
+  // PLAIN (probed: -"hi / ?"x / +"o / ."n / ~"m — G5-T5-R3-S1); the remaining
+  // plain-unsafe conditions below still apply to them.
   if (/[\x00-\x1f\x7f-\x9f\x85\u2028\u2029]/.test(s)) return doubleQuoted(s);
   if (s.includes(": ") || s.includes(" #") || s.endsWith(":")) return singleQuoted(s);
   if (/ $/.test(s)) return singleQuoted(s);
@@ -257,8 +283,8 @@ function serializeScalarString(s: string, blockIndent = 0): string {
   if (style === "literal") return multilineScalar(s, blockIndent);
   if (style === "double") return doubleQuoted(s);
   if (style === "single") return singleQuoted(s);
-  if (containsUnicodeBreak(s)) return singleQuotedWithBreaks(s);
-  return plainFallbackToken(s);
+  if (containsUnicodeBreak(s)) return singleQuotedWithBreaks(s, blockIndent);
+  return plainFallbackToken(s, blockIndent);
 }
 
 function serializeScalar(value: Scalar, blockIndent = 0): string {
@@ -307,7 +333,7 @@ function multilineScalar(s: string, blockIndent = 0): string {
     }
     // Probed: a raw U+2028/U+2029 inside a block line is followed by a
     // two-space continuation indent (same rule as the single-quoted form).
-    out += `${linePad}${line.replace(/([\u2028\u2029])/g, "$1  ")}\n`;
+    out += `${linePad}${line.replace(/([\u2028\u2029])/g, "$1" + linePad)}\n`;
   }
   return out;
 }
@@ -519,9 +545,12 @@ function decodeDoubleQuoted(token: string): string {
 function parseQuoted(token: string): string | undefined {
   if (token.startsWith("'") && token.endsWith("'") && token.length >= 2) {
     let body = token.slice(1, -1).replace(/''/g, "'");
-    // Single-quoted Unicode-break continuation: the break was written raw with
-    // a two-space indent after it — the fold strips exactly that indent.
-    body = body.replace(/([\u2028\u2029])  /g, "$1");
+    // Single-quoted Unicode-break continuation: the break was written raw
+    // followed by the continuation indent (owning indent + 2) — strip ALL
+    // blanks after the break, so deeper-nested producers read back clean
+    // (R3-B3: reading ruby 4/6-space continuations no longer grows phantom
+    // spaces).
+    body = body.replace(/([\u2028\u2029])[ \t]*/g, "$1");
     // Psych single-quoted folding: trailing spaces are stripped at a break,
     // one break folds to a space, and a run of n >= 2 breaks folds to n - 1
     // breaks (the closing-quote form 'ab\n\n  ' therefore reads back as "ab\n").
@@ -630,8 +659,9 @@ function parseBlockScalar(lines: Line[], start: number, keyIndent: number, heade
   }
   while (collected.length > 0 && collected[collected.length - 1] === "") collected.pop();
   // Reverse the raw-break continuation: a LS/PS inside a block line was
-  // written followed by a two-space indent.
-  let value = collected.join("\n").replace(/([\u2028\u2029])  /g, "$1");
+  // written followed by the continuation indent (owning indent + 2) — strip
+  // ALL blanks after the break (R3-B3).
+  let value = collected.join("\n").replace(/([\u2028\u2029])[ \t]*/g, "$1");
   if (!strip && value !== "") value += "\n";
   return { value, next: i };
 }

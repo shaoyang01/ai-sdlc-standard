@@ -257,11 +257,15 @@ function stateToYamlMap(state: ManifestState): { readonly [key: string]: YamlVal
   // entirely — a missing key must round-trip as a missing key so the digest
   // semantics match the manual publisher byte for byte. Never inject [].
   if (state.declaration_log !== undefined) map.declaration_log = [...state.declaration_log];
-  if (state.corrections !== undefined) map.corrections = [...state.corrections];
+  // Freeze §6.2.6 publisher key order (R3-B4): real repair products carry
+  // declaration_log -> repair_records -> corrections (corrections is only
+  // appended by a repair action). The previous corrections-first order made
+  // every real repaired manifest fail self-digest at load/takeover.
   if (state.projection_provenance !== undefined) {
     map.projection_provenance = provenanceToYamlMap(state.projection_provenance);
   }
   if (state.repair_records !== undefined) map.repair_records = [...state.repair_records];
+  if (state.corrections !== undefined) map.corrections = [...state.corrections];
   // The digest key participates ONLY after sealing — the hash input is the
   // document with the key entirely absent (publisher `state.delete` semantics).
   if (state.manifest_digest !== undefined) map.manifest_digest = state.manifest_digest;

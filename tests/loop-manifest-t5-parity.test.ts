@@ -6,10 +6,12 @@
 //   3. scenarioDeferredThenPublish        real D-9 DEFERRED then publish
 //   4. scenarioRealPublisherProductsReadable  title-less init + folded repair reason
 //   5. scenarioRepairFullFlow             §6.2.6 repair end to end (corrected_entries)
+//   6. scenarioAcceptedMixedV9            ACCEPTED mixed V9 (scan ledger + PWR
+//                                         ruling + acceptFindingRisk + planning
+//                                         tail in ONE atomic publish)
 // NOT covered here (declared, with the owning task): D-21/§7.4 cross-face
 // resolution (no T2 caller), cross-face legal lag (manual OPEN vs store
-// RESOLVED). ACCEPTED mixed V9 ownership is recorded by the T5 closure, not
-// as a silent omission.
+// RESOLVED).
 import { strict as assert } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
