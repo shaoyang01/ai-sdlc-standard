@@ -454,6 +454,37 @@ assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" 'St
 assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" '.sdlc/business_domain'
 
 # ---------------------------------------------------------------------------
+CASE_NAME="19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path"
+R="${WORK_ROOT}/t19b"; new_repo "${R}"
+bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
+WRAPPER="${R}/.sdlc/scripts/bash/audit-entry-coverage.sh"
+# Reproduce a pre-R13 wrapper: it bakes a username-specific absolute default and
+# carries no managed marker, so the initializer must preserve it untouched.
+cat > "${WRAPPER}" <<'WRAP'
+#!/usr/bin/env bash
+set -euo pipefail
+SDLC_HOME="${AI_SDLC_STANDARD_HOME:-/Users/someone-else/meicai/projects/ai-sdlc-standard}"
+exec ruby "${SDLC_HOME}/scripts/audit-entry-coverage.rb" "$@"
+WRAP
+chmod +x "${WRAPPER}"
+WRAPPER_DIGEST="$(digest_file "${WRAPPER}")"
+rm "${R}/.sdlc/business_domain/00UbiquitousLanguage.md"   # force a later init pass
+bash "${INITIALIZER}" "${R}" > "${WORK_ROOT}/t19b.out" 2>&1
+assert_exit 0 $?
+assert_eq "${WRAPPER_DIGEST}" "$(digest_file "${WRAPPER}")"
+# The skip is recorded while staging and must survive into the plan summary:
+# write_managed_file is fed by process substitution, never by a pipeline
+# (a pipeline element runs in a subshell and loses the record).
+assert_contains "${WORK_ROOT}/t19b.out" 'user-modified managed file preserved (managed marker missing): scripts/bash/audit-entry-coverage.sh'
+# The notice must be actionable (R2 suggestion 一.4), not just descriptive.
+assert_contains "${WORK_ROOT}/t19b.out" 'set AI_SDLC_STANDARD_HOME for the gate'
+# AUDIT mode must surface a baked default path that no longer exists.
+bash "${INITIALIZER}" "${R}" --audit > "${WORK_ROOT}/t19b-audit.out" 2>&1
+AUDIT_REPORT_19B="$(ls -t "${R}"/.sdlc/reports/knowledge_target_audit_report.* 2>/dev/null | head -1)"
+assert_contains "${AUDIT_REPORT_19B}" '## Audit Wrapper Portability (actionable)'
+assert_contains "${AUDIT_REPORT_19B}" '/Users/someone-else/meicai/projects/ai-sdlc-standard'
+
+# ---------------------------------------------------------------------------
 CASE_NAME="20. audit --dry-run: zero writes"
 R="${WORK_ROOT}/t20"; new_repo "${R}"
 OUT="${WORK_ROOT}/t20.out"
@@ -2183,6 +2214,40 @@ SHIMEOF
   find "${D}/.sdlc/legacy" -name "*.tmp.*" 2>/dev/null | grep -q . && fail "90[${mode}]: temp archive leaked" || pass
 done
 
+
+# ---------------------------------------------------------------------------
+# bootstrap-current-project.sh entry (convenience wrapper; R1-P1-6 fail-closed
+# plus the R2 suggestion RC-6: --legacy-speckit must never be forwarded to the
+# successor as an unknown option, and an empty forwarded list must not leak an
+# empty positional argument).
+WRAPPER="${STANDARD_HOME}/scripts/bootstrap-current-project.sh"
+
+CASE_NAME="W1. wrapper: --here alone initializes the current directory (no leaked empty arg)"
+R="${WORK_ROOT}/w1"; new_repo "${R}"
+( cd "${R}" && bash "${WRAPPER}" --here > "${WORK_ROOT}/w1.out" 2>&1 )
+assert_exit 0 $?
+assert_not_contains "${WORK_ROOT}/w1.out" 'Only one target project path is allowed'
+[[ -f "${R}/.sdlc/business_domain/knowledge-target.yaml" ]] && pass || fail "wrapper did not initialize the current directory"
+
+CASE_NAME="W2. wrapper: --legacy-speckit with the successor present is explained, not rc=2"
+R="${WORK_ROOT}/w2"; new_repo "${R}"
+( cd "${R}" && bash "${WRAPPER}" --here --legacy-speckit > "${WORK_ROOT}/w2.out" 2>&1 )
+assert_exit 0 $?
+assert_contains "${WORK_ROOT}/w2.out" '--legacy-speckit is not applicable while the successor'
+assert_not_contains "${WORK_ROOT}/w2.out" 'Unexpected argument'
+
+CASE_NAME="W3. wrapper: missing successor fails closed (exit 3) without the opt-in"
+ISOLATED="${WORK_ROOT}/w3-bin"; mkdir -p "${ISOLATED}"; cp "${WRAPPER}" "${ISOLATED}/"
+R="${WORK_ROOT}/w3"; new_repo "${R}"
+( cd "${R}" && bash "${ISOLATED}/bootstrap-current-project.sh" --here > "${WORK_ROOT}/w3.out" 2>&1 )
+assert_exit 3 $?
+assert_contains "${WORK_ROOT}/w3.out" 'Refusing to fall back'
+[[ -e "${R}/.specify" ]] && fail "fail-closed path created a legacy .specify tree" || pass
+
+CASE_NAME="W4. wrapper: missing successor + opt-in + missing legacy script is still exit 3"
+( cd "${R}" && bash "${ISOLATED}/bootstrap-current-project.sh" --here --legacy-speckit > "${WORK_ROOT}/w4.out" 2>&1 )
+assert_exit 3 $?
+assert_contains "${WORK_ROOT}/w4.out" 'legacy initializer is not executable'
 
 echo ""
 echo "==== regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="

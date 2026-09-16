@@ -160,7 +160,7 @@ fi
 # that still depends on it) — a new project in an incomplete installation must
 # stop, not silently enter .specify.
 LEGACY_OPT_IN="false"
-for a in "${FORWARDED_ARGS[@]:-}"; do
+for a in ${FORWARDED_ARGS[@]+"${FORWARDED_ARGS[@]}"}; do
   [[ "${a}" == "--legacy-speckit" ]] && LEGACY_OPT_IN="true"
 done
 
@@ -170,7 +170,24 @@ if [[ -x "${SUCCESSOR_SCRIPT}" ]]; then
   echo "  stable knowledge facts are written later via sdlc-knowledge-sync," >&2
   echo "  then confirmed by the Owner (route confirmation), then audited" >&2
   echo "  via scripts/audit-entry-coverage.sh." >&2
-  exec "${SUCCESSOR_SCRIPT}" "${TARGET_PATH}" "${FORWARDED_ARGS[@]:-}"
+  # R2 suggestion (RC-6): `--legacy-speckit` is the opt-in for the RETIRED chain
+  # and carries no meaning for the successor — forwarding it only made the
+  # successor exit 2 on an unknown option. Strip it and state the boundary.
+  SUCCESSOR_ARGS=()
+  for a in ${FORWARDED_ARGS[@]+"${FORWARDED_ARGS[@]}"}; do
+    if [[ "${a}" == "--legacy-speckit" ]]; then
+      echo "bootstrap-current-project: --legacy-speckit is not applicable while the successor" >&2
+      echo "  initializer is present: this entry delegates to the successor and never" >&2
+      echo "  enters the retired .specify chain. To run the retired chain deliberately:" >&2
+      echo "    ${LEGACY_SCRIPT} <target-project-path> <args>" >&2
+      continue
+    fi
+    SUCCESSOR_ARGS+=("${a}")
+  done
+  if [[ "${#SUCCESSOR_ARGS[@]}" -gt 0 ]]; then
+    exec "${SUCCESSOR_SCRIPT}" "${TARGET_PATH}" ${SUCCESSOR_ARGS[@]+"${SUCCESSOR_ARGS[@]}"}
+  fi
+  exec "${SUCCESSOR_SCRIPT}" "${TARGET_PATH}"
 fi
 
 if [[ "${LEGACY_OPT_IN}" != "true" ]]; then
@@ -197,8 +214,11 @@ echo "  speckit initializer. This chain is retired for new projects;" >&2
 echo "  prefer bootstrap-knowledge-target.sh." >&2
 # strip the opt-in flag before forwarding
 LEGACY_FORWARD=()
-for a in "${FORWARDED_ARGS[@]:-}"; do
+for a in ${FORWARDED_ARGS[@]+"${FORWARDED_ARGS[@]}"}; do
   [[ "${a}" == "--legacy-speckit" ]] && continue
   LEGACY_FORWARD+=("${a}")
 done
-exec "${LEGACY_SCRIPT}" "${TARGET_PATH}" "${LEGACY_FORWARD[@]:-}"
+if [[ "${#LEGACY_FORWARD[@]}" -gt 0 ]]; then
+  exec "${LEGACY_SCRIPT}" "${TARGET_PATH}" ${LEGACY_FORWARD[@]+"${LEGACY_FORWARD[@]}"}
+fi
+exec "${LEGACY_SCRIPT}" "${TARGET_PATH}"

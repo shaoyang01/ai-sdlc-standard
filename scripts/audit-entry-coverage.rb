@@ -279,6 +279,14 @@ PAGE_FRAGMENT_ROLE_PATTERN = %r{/(?:header|footer|taglib[s]?|tag|inc|fragment[s]
 WEAK_FRAGMENT_DIR_PATTERN = %r{/common(?:/|[^/]*\.(?:jsp|html|ftl|vm)\z)}i
 # Structural markers of a REAL business page (form bound to a business action,
 # a business route reference, or a data-action/data-page hook).
+#
+# R2 boundary note (RC-5): the trigger direction is deliberately safe. A
+# navigation page that carries a business route literal (e.g. `nav.jsp` under
+# `common/`) is reported as a business entry even though a human would call it
+# chrome. Trusting the role name instead could hide a real business page behind
+# its directory name — the very failure R1-P1-5 exists to prevent — so the audit
+# reports the page and leaves the reading to the reviewer rather than widening
+# the fragment rule.
 BUSINESS_PAGE_MARKERS = %r{(?:<form\b[^>]*action=|<[^>]+(?:data-action|data-page|data-module)=|["'`]/(?:\w+/)+\w+["'`]|\bcontroller\b)}i
 
 def content_based_classification(text, path)
@@ -866,6 +874,13 @@ all_text_cache.each { |path, text| type_refs[path] = extract_type_references(tex
 # (`OrderServiceImpl`) — or vice versa. Both directions are one logical unit
 # (the same convention DEFAULT_LAYER_PATTERNS already encodes), so a type
 # reference resolves through the `X` <-> `XImpl` alias pair.
+#
+# R2 boundary note (RC-4): this covers the `X` <-> `XImpl` convention only. An
+# interface with SEVERAL implementations — or one whose impls do not follow the
+# naming convention — is deliberately NOT bridged further: a reference to `X`
+# does not prove which implementation the entry calls, and this audit never
+# fabricates a call edge (same principle as the ambiguity rule below). Such core
+# units stay unresolved, hence visible, instead of being counted as covered.
 symbol_aliases = lambda do |name|
   base = name.sub(/Impl\z/, "")
   [name, "#{base}Impl", base].uniq

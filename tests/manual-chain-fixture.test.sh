@@ -578,6 +578,31 @@ bash "${PUBLISHER}" "${LIB}" check-admission --node code-review > "${WORK_ROOT}/
 assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f13.out" "ADMISSION ELIGIBLE: code-review"
 
+CASE_NAME="G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors"
+VALIDATOR="${STANDARD_HOME}/scripts/validate-canonical-artifacts.rb"
+# (a) the chain-built library is canonical
+ruby "${VALIDATOR}" "${LIB}" > "${WORK_ROOT}/f14-pass.out" 2>&1
+assert_exit 0 $?
+assert_contains "${WORK_ROOT}/f14-pass.out" "canonical-artifacts: PASS"
+# (b) the manifest requirement_id must match the directory it lives in; the node
+#     level checks compare against the DIRECTORY name, so a copied or renamed
+#     requirement would otherwise pass whenever no node file contradicts it
+cp -R "${LIB}" "${WORK_ROOT}/20260906-renamed"
+ruby "${VALIDATOR}" "${WORK_ROOT}/20260906-renamed" > "${WORK_ROOT}/f14-id.out" 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "manifest id mismatch rejected (exit 1)"; else fail "manifest id mismatch: expected exit 1, got ${RC}"; fi
+assert_contains "${WORK_ROOT}/f14-id.out" "A9-7[manifest-id-mismatch]"
+# (c) a missing path is a usage error with a message — never a Ruby backtrace
+ruby "${VALIDATOR}" "${WORK_ROOT}/does-not-exist" > "${WORK_ROOT}/f14-usage.out" 2>&1
+RC=$?
+if [[ "${RC}" == "2" ]]; then pass "missing path exits 2"; else fail "missing path: expected exit 2, got ${RC}"; fi
+assert_contains "${WORK_ROOT}/f14-usage.out" "not a directory"
+if grep -q 'validate-canonical-artifacts.rb:' "${WORK_ROOT}/f14-usage.out"; then fail "ruby backtrace leaked on a usage error"; else pass "no ruby backtrace on a usage error"; fi
+# (d) a file argument is a usage error too (it used to pass silently)
+ruby "${VALIDATOR}" "${LIB}/manifest.md" > "${WORK_ROOT}/f14-file.out" 2>&1
+RC=$?
+if [[ "${RC}" == "2" ]]; then pass "file argument exits 2"; else fail "file argument: expected exit 2, got ${RC}"; fi
+
 echo ""
 echo "==== manual-chain fixture summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
 if [[ "${FAIL_COUNT}" -eq 0 ]]; then
