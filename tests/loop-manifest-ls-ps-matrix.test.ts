@@ -10,7 +10,7 @@
 // emitter-derived golden is what let the R2 phantom-width bug survive a
 // round, so the rule here is: goldens only from the reference interpreter.
 import { strict as assert } from "node:assert";
-import { dumpRubyYaml, parseRubyYaml, type YamlValue } from "../core/loop-manifest-yaml";
+import { dumpRubyYaml, parseRubyYaml, LoopManifestYamlError, type YamlValue } from "../core/loop-manifest-yaml";
 
 let passed = 0;
 let failed = 0;
@@ -168,13 +168,107 @@ function main(): void {
       JSON.stringify(parseRubyYaml("---\n'a: b': 1\n")) !== JSON.stringify({ "a: b": 1 }),
       "residual(4a) colon-bearing quoted key: mis-split at the first colon (historical gap, declared)",
     );
+    // residual(4b) — R10-RC3-1(c) truthful registration (three elements):
+    //   shape:   a seq-item whose FIRST VALUE is a NON-EMPTY MAPPING
+    //            ({l:[{a:{x:1,b:2}}]}); scalar first values are NOT affected
+    //            (probe12 byteEQ + both reads exact).
+    //   truth:   we FLATTEN the nested mapping (`- a:\n  x: 1\n  b: 2` — the
+    //            continuation indent is 2, ruby uses 4) and BOTH our reader and
+    //            ruby cross-reading our bytes silently corrupt the value to
+    //            {a: null, x: 1, b: 2} — the most severe dual-direction silent
+    //            corruption on the residual surface.
+    //   reach:   unreachable - entries.node / finding_id / sequence first keys
+    //            are always scalars in the frozen manifest schema (verified
+    //            against the projector field domain).
     ok(
       JSON.stringify(parseRubyYaml("---\nl:\n- a: 1\n  b: 2\n")) === JSON.stringify({ l: [{ a: 1, b: 2 }] }),
-      "residual(4b) seq-item map keys: normal shape is correct (gap only for a container first value, unreachable)",
+      "residual(4b) scalar first values: the normal shape is correct (probe12 byteEQ)",
+    );
+    const flatMapped = dumpRubyYaml({ l: [{ a: { x: 1, b: 2 } }] });
+    ok(
+      flatMapped === "---\nl:\n- a:\n  x: 1\n  b: 2\n",
+      "residual(4b) non-empty mapping first value: we flatten the nested mapping (declared shape)",
+    );
+    ok(
+      JSON.stringify(parseRubyYaml(flatMapped)) === JSON.stringify({ l: [{ a: null, x: 1, b: 2 }] }),
+      "residual(4b) DUAL-DIRECTION silent corruption: {a:{x:1,b:2}} reads back as {a:null,x:1,b:2} (declared truth)",
     );
     ok(
       (parseRubyYaml("---\nk: 1.5\n") as { k: unknown }).k === "1.5",
       "residual(4c) float/null literals read as strings (historical gap, declared: the manifest has no such fields)",
+    );
+
+    // (4a execution-position extension, adopted with R10 suggestion 1): the
+    // same first-colon mis-split holds at seq-item and chain-head positions
+    // and for quoted scalar sequence items.
+    ok(
+      JSON.stringify(parseRubyYaml("---\nl:\n- 'a: b': 1\n")) !== JSON.stringify({ l: [{ "a: b": 1 }] }),
+      "residual(4a) extended: colon-bearing quoted key mis-splits at a seq-item position (declared)",
+    );
+    ok(
+      JSON.stringify(parseRubyYaml("---\nl:\n- a: 1\n- b: 2\n")) === JSON.stringify({ l: [{ a: 1 }, { b: 2 }] }),
+      "residual(4a) extended: plain scalar sequence items read as mapping values (probe-verified; the mis-split affects only QUOTED colon-bearing keys)",
+    );
+    ok(
+      JSON.stringify(parseRubyYaml("---\nl:\n- 'a: b'\n")) === JSON.stringify({ l: [{ "'a": "b'" }] }),
+      "residual(4a) extended: a QUOTED scalar sequence item is mis-split at the first colon (same root as 4a, declared)",
+    );
+
+    // (5) family A - R10-RC3-1(a): a NULL first element inside nested
+    //     sequences (seq-item mapping value / chain-head mapping value
+    //     positions).
+    //   shape:   {l:[{a:[null]}]} and deeper nestings ({l:[[{a:[null]}]]}).
+    //   truth:   at flat seq-item positions our emission is byte-identical
+    //            with ruby; at nested seq-HEAD positions the emission differs
+    //            (`-\n  -` vs `- -`); ruby ALWAYS reads the bytes fine; OUR
+    //            reader ALWAYS fails closed (LoopManifestYamlError: expected
+    //            'key: value'). Same behaviour on the r7/r8/r9/r10 heads =
+    //            R2-era, not a regression.
+    //   reach:   unreachable - the frozen manifest schema has no null sequence
+    //            elements (null appears only as mapping values); fail-closed
+    //            is the safe direction.
+    const famA = { l: [{ a: [null] }] };
+    const famAEmit = dumpRubyYaml(famA);
+    ok(
+      famAEmit === "---\nl:\n- a:\n  -\n",
+      "residual(5) family A flat position: emission captured (this form byte-identical with ruby, probe-verified)",
+    );
+    let famASelfRead = "ok";
+    try {
+      parseRubyYaml(famAEmit);
+    } catch (error) {
+      famASelfRead = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+    }
+    ok(famASelfRead === "fail-closed", "residual(5) family A: our reader fails closed (declared, R2-era)");
+
+    // (6) family B - R10-RC3-1(b): QUOTED KEYS at seq-item mapping / chain-
+    //     head positions (YAML 1.1 boolean words y/n/yes, space-bearing keys).
+    //   shape:   {l:[{y:1}]} / {l:[[{y:1}]]} / {z:[{n:"x"}]} / {l:[{"a b":1}]}.
+    //   truth:   flat seq-item emission is byte-identical with ruby (`- "y": 1`
+    //            — we quote exactly like ruby); nested seq-HEAD emission
+    //            differs (`-\n  -` vs `- -`); ruby reads fine; OUR reader
+    //            FAILS CLOSED on boolean-word keys ("unterminated quoted
+    //            scalar", R2-era) — while space-bearing keys read back EXACT
+    //            (probed R5 rework, value-faithful).
+    //   reach:   unreachable - the manifest key vocabulary is all snake_case
+    //            (no boolean-word or space-bearing keys anywhere in the
+    //            frozen schema).
+    const famB = { l: [{ y: 1 }] };
+    const famBEmit = dumpRubyYaml(famB);
+    ok(
+      famBEmit === "---\nl:\n- \"y\": 1\n",
+      "residual(6) family B flat position: emission quotes exactly like ruby (probe-verified)",
+    );
+    let famBSelfRead = "ok";
+    try {
+      parseRubyYaml(famBEmit);
+    } catch (error) {
+      famBSelfRead = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+    }
+    ok(famBSelfRead === "fail-closed", "residual(6) family B boolean-word key: our reader fails closed (declared, R2-era)");
+    ok(
+      JSON.stringify(parseRubyYaml(dumpRubyYaml({ l: [{ "a b": 1 }] }))) === JSON.stringify({ l: [{ "a b": 1 }] }),
+      "residual(6) family B space-bearing key: reads back value-exact (probed, not fail-closed)",
     );
   }
 
