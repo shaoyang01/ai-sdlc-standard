@@ -115,6 +115,13 @@ Conflict policy:
     --update-declaration.
   - machine artifacts (other YAMLs + wrapper): missing -> created; existing ->
     preserved and reported (never rewritten).
+  - upgrading an existing target repo whose wrapper predates the portable form
+    (it bakes a username-specific absolute default and carries no managed
+    marker) is explicit, never silent: (1) delete
+    .sdlc/scripts/bash/audit-entry-coverage.sh and re-run this initializer to
+    regenerate the portable wrapper, or (2) keep the file and export
+    AI_SDLC_STANDARD_HOME=<absolute path to ai-sdlc-standard> for the gate.
+    AUDIT mode reports a baked default path that no longer exists.
 
 Exit codes: 0 ok/no-op/audit-findings, 1 blocked or missing git identity,
 2 usage/validation error.
@@ -3151,6 +3158,26 @@ RUBY
 
       } >> "${FINAL_AUDIT_REPORT}"
     fi
+    # R2 suggestion (一.4): a pre-R13 wrapper in the target repo may bake a
+    # username-specific absolute default. The initializer never rewrites a
+    # wrapper whose managed marker is gone, so the audit reports the dead baked
+    # path together with the two documented upgrade steps instead of staying
+    # silent about a gate that cannot run on this machine.
+    AUDIT_WRAPPER="${TARGET_PATH}/.sdlc/scripts/bash/audit-entry-coverage.sh"
+    if [[ -f "${AUDIT_WRAPPER}" ]]; then
+      WRAPPER_BAKED_DEFAULT="$(sed -n 's/^[[:space:]]*SDLC_HOME="\${AI_SDLC_STANDARD_HOME:-\(.*\)}"[[:space:]]*$/\1/p' "${AUDIT_WRAPPER}" | head -1)"
+      if [[ -n "${WRAPPER_BAKED_DEFAULT}" && ! -e "${WRAPPER_BAKED_DEFAULT}" ]]; then
+        {
+          printf '\n## Audit Wrapper Portability (actionable)\n\n'
+          printf '| Item | Value |\n| --- | --- |\n'
+          printf '| Baked default path | `%s` |\n' "${WRAPPER_BAKED_DEFAULT}"
+          printf '| Path exists on this machine | no |\n'
+          printf '\nUpgrade (either step restores the gate):\n\n'
+          printf '1. Delete `.sdlc/scripts/bash/audit-entry-coverage.sh` and re-run this initializer — the regenerated wrapper resolves the standard package relative to the repository (or through the validated `AI_SDLC_STANDARD_HOME` override) and never bakes a username path.\n'
+          printf '2. Keep the file as it is and set `AI_SDLC_STANDARD_HOME=<absolute path to ai-sdlc-standard>` whenever the gate runs.\n'
+        } >> "${FINAL_AUDIT_REPORT}"
+      fi
+    fi
     echo "AUDIT_FILLED: ${AUDIT_FILLED[*]:-}"
     echo "REPORT=${FINAL_AUDIT_REPORT#${TARGET_PATH}/}"
   fi
@@ -3458,9 +3485,11 @@ generate_governance_profile | write_staging_file "project-governance-profile.yam
 generate_entry_coverage_profile | write_staging_file "entry-coverage-profile.yaml"
 generate_map_template | write_staging_file "business-domain-map.yaml"
 # R13-B4: the wrapper carries the managed marker; regeneration overwrites it
-# only when the previous copy is still generator-managed (see write_staging_file
-# + is_user_modified_wrapper guard below).
-generate_audit_wrapper | write_managed_file "scripts/bash/audit-entry-coverage.sh"
+# only when the previous copy is still generator-managed (the marker check lives
+# in write_managed_file). Fed by process substitution, never by a pipeline: a
+# pipeline element runs in a subshell, and the MANAGED_SKIPPED_RELS record that
+# write_managed_file adds on a skip would be lost there.
+write_managed_file "scripts/bash/audit-entry-coverage.sh" < <(generate_audit_wrapper)
 if [[ -f "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh" ]]; then
   chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
 fi
@@ -3735,7 +3764,7 @@ for PAIR in \
   # so instead of reporting the generic digest mismatch.
   if managed_skip_recorded "${REL}"; then
     declare_plan_line "${REL}" "preserve"
-    NOTICE_LINES+=("user-modified managed file preserved (managed marker missing): ${REL}")
+    NOTICE_LINES+=("user-modified managed file preserved (managed marker missing): ${REL} — delete the file and re-run this initializer to regenerate a portable copy, or keep it and set AI_SDLC_STANDARD_HOME for the gate")
     continue
   fi
   if [[ ! -e "${TARGET_FILE}" ]]; then

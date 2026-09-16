@@ -276,9 +276,12 @@ case "${ACTION}" in
         warn "NON_CANONICAL_PATH: #{r.reason} (contract §3.1)"
         exit 1
       end
-      # solution-gate: the manifest CURRENT pointer must never be the ledger.
+      # solution-gate: the manifest CURRENT pointer must never be the ledger. The
+      # ledger ({id}_方案审核问题台账.md) is the scan-side binding record: the
+      # adversarial scan writes it and the verdict consumes it, so it is never
+      # published through this gate and no flag records it as a current pointer.
       if ENV["PUB_NODE"] == "solution-gate" && binding == "adversarial_scan"
-        warn "NON_CANONICAL_PATH: the adversarial-scan ledger is a binding record, not the solution-gate current pointer; publish the formal verdict as current and pass --binding adversarial_scan only with --record-ledger"
+        warn "NON_CANONICAL_PATH: the adversarial-scan ledger is a binding record written by the scan, not the solution-gate manifest current pointer; publish the formal verdict with --binding formal_verdict (contract §3.1)"
         exit 1
       end
     ' 2>&1 >/dev/null || true)"

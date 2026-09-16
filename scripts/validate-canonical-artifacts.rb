@@ -70,7 +70,6 @@ def violations_for(req_dir)
   manifest = File.join(req_dir, "manifest.md")
   if File.file?(manifest)
     text = File.read(manifest)
-    entries = text.scan(/^\s*-\s*node:\s*(\S+).*?artifact_path:\s*(\S+)/m)
     text.scan(/node:\s*(\S+)\s*$\s*artifact_path:\s*([^\s\n]+)/).each do |node_name, ap|
       ap = ap.to_s.strip
       next if ap.empty? || ap == "null"
@@ -90,9 +89,15 @@ def violations_for(req_dir)
         problems << "A9-6[gate-pointer] solution-gate manifest current 必须是正式裁决 #{id}_方案审核.md，不得指向对抗扫描台账: #{ap}"
       end
     end
-    # 版本/digest 一致性（Metadata Version ↔ manifest version）抽样
-    text.scan(/node:\s*solution-gate.*?version:\s*(\S+)/m).each do
-      # version format sanity only; deep binding is publisher's job
+    # R2 suggestion (RC-2): cross-check the manifest's own requirement_id against
+    # the library directory it lives in. Every node-level check compares file
+    # names against the DIRECTORY basename, so a manifest copied from another
+    # requirement — or a renamed directory — would otherwise pass whenever the
+    # node dirs do not contradict it.
+    fenced = text[/```yaml\n(.*?)```/m, 1]
+    declared_id = fenced && fenced[/^requirement_id:\s*(\S+)\s*$/, 1]
+    if declared_id && declared_id != id
+      problems << "A9-7[manifest-id-mismatch] manifest 的 requirement_id (#{declared_id}) 与所在目录 (#{id}) 不一致（稳定路径按需求 ID 绑定，二者必须同一需求）"
     end
   end
 
@@ -102,6 +107,14 @@ end
 targets = ARGV.dup
 if targets.empty?
   warn "usage: validate-canonical-artifacts.rb <library_dir | requirement_dir> [...]"
+  exit 2
+end
+# R2 suggestion (RC-2): a missing or non-directory argument is a usage error and
+# must fail closed with a message — never a Ruby backtrace out of Dir.children,
+# and never a silent PASS.
+not_dirs = targets.reject { |t| File.directory?(t) }
+unless not_dirs.empty?
+  warn "canonical-artifacts: not a directory: #{not_dirs.join(', ')}"
   exit 2
 end
 
