@@ -287,12 +287,13 @@ function main(): void {
     //        (R2-era; class name widened per R11 — the R10 registration only
     //        said "boolean words");
     //     b) colon-TAIL / colon-HEAD keys (`ab:` / `:ab`) -> FAIL CLOSED;
-    //     c) colon-WITHOUT-space keys WITHOUT a leading blank (`a:b`) ->
-    //        SILENT CORRUPTION: our bytes read back as a STRING ITEM
-    //        {l:["a:b: 1"]} while ruby cross-reading our bytes is EXACT
-    //        ({l:[{"a:b":1}]}); WITH a leading blank (` a:b`) the behaviour
-    //        flips to FAIL CLOSED (R12 boundary fix — the leading blank
-    //        changes the reader route);
+    //     c) colon-WITHOUT-space keys WITHOUT a leading OR TRAILING blank
+    //        (`a:b`) -> SILENT CORRUPTION: our bytes read back as a STRING
+    //        ITEM {l:["a:b: 1"]} while ruby cross-reading our bytes is EXACT
+    //        ({l:[{"a:b":1}]}); WITH a leading blank (` a:b`) or a TRAILING
+    //        blank/tab (`a:b ` / `a:b\t`) the behaviour flips to FAIL CLOSED
+    //        (R12 boundary fix — the leading blank changes the reader route;
+    //        R13 boundary fix — the trailing blank does the same, symmetric);
     //     d) space-bearing keys that DO NOT carry a colon (`a b`) ->
     //        value-FAITHFUL; space-bearing keys WITH a colon corrupt or
     //        mis-split (`a b:c` -> string item; `a b: c` -> mis-split) and
@@ -335,7 +336,7 @@ function main(): void {
       const selfValue = JSON.stringify(parseRubyYaml(colonNoSpace));
       ok(
         selfValue === JSON.stringify({ l: ["a:b: 1"] }),
-        "residual(6c) colon-without-space quoted key WITHOUT leading blank: SILENT CORRUPTION to a string item (declared, R11)",
+        "residual(6c) colon-without-space quoted key WITHOUT leading/trailing blank: SILENT CORRUPTION to a string item (declared, R11)",
       );
       const rubyCross = execFileSync("ruby", ["-ryaml", "-rjson", "-e", 'puts JSON.generate(YAML.load(STDIN.read))'], {
         input: colonNoSpace,
@@ -354,6 +355,18 @@ function main(): void {
         leadingBlankCls === "fail-closed",
         "residual(6c) WITH a leading blank the same key form flips to FAIL CLOSED (R12 boundary fix — route change)",
       );
+      for (const trailingForm of ["a:b ", "a:b  ", "a:b\t"]) {
+        let trailingCls = "ok";
+        try {
+          parseRubyYaml(dumpRubyYaml({ l: [{ [trailingForm]: 1 }] }));
+        } catch (error) {
+          trailingCls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+        }
+        ok(
+          trailingCls === "fail-closed",
+          `residual(6c) WITH a trailing blank/tab (${JSON.stringify(trailingForm)}) the same key form flips to FAIL CLOSED (R13 boundary fix — symmetric route change)`,
+        );
+      }
     }
     for (const [key, expectedClass] of [["a b:c", "string-item"], ["a b: c", "mis-split"]] as const) {
       const emitted = dumpRubyYaml({ l: [{ [key]: 1 }] });
@@ -363,6 +376,14 @@ function main(): void {
       ok(
         isStringItem || isMisSplit,
         `residual(6d) space-bearing key WITH a colon (${JSON.stringify(key)}): ${expectedClass} (declared, R12 boundary fix — not value-faithful)`,
+      );
+    }
+    for (const key of ["a b:c", "a :b"]) {
+      const emitted = dumpRubyYaml({ l: [{ [key]: 1 }] });
+      const selfValue = JSON.stringify(parseRubyYaml(emitted));
+      ok(
+        selfValue === JSON.stringify({ l: [`${key}: 1`] }),
+        `residual(6d) space-before-colon key (${JSON.stringify(key)}): corrupts to a string item (declared, R13 — probed; the R10-reviewer table listing it as fail-closed was a table slip, our live probe is authoritative)`,
       );
     }
     ok(
