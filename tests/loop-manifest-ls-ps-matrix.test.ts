@@ -273,10 +273,13 @@ function main(): void {
       ok(dumpRubyYaml(doc) === rubyDumpFor(doc), `residual(5) family A nested ${JSON.stringify(Object.keys(doc)[0]!)}: BYTE-EQ with ruby`);
     }
 
-    // (6) family B - R10-RC3-1(b) / R11-RC1-1 variant 3: QUOTED KEYS at
-    //     seq-item mapping / chain-head positions, classified EXHAUSTIVELY
-    //     (R11 probe: emission is BYTE-EQ with ruby across all 15 key forms —
-    //     the divergence is entirely in OUR reader's self-read).
+    // (6) family B - R10-RC3-1(b) / R11-RC1-1 v3 / R12-RC1-1 boundary fix:
+    //     QUOTED KEYS at seq-item mapping / chain-head positions. Emission is
+    //     BYTE-EQ with ruby across all 17 probed key forms — the divergence is
+    //     entirely in OUR reader's self-read, classified into the following
+    //     (NON-exhaustive) behaviour classes; forms outside them (leading-
+    //     indicator keys, astral keys) are fail-closed with the same
+    //     reachability argument.
     //   shape:   {l:[{<quoted-key>:1}]} — key forms below.
     //   truth (reader behaviour classes):
     //     a) resolver-sensitive keys (boolean words y/n/yes/no/true/false/
@@ -284,14 +287,24 @@ function main(): void {
     //        (R2-era; class name widened per R11 — the R10 registration only
     //        said "boolean words");
     //     b) colon-TAIL / colon-HEAD keys (`ab:` / `:ab`) -> FAIL CLOSED;
-    //     c) colon-WITHOUT-space keys (`a:b`) -> SILENT CORRUPTION: our bytes
-    //        read back as a STRING ITEM {l:["a:b: 1"]} while ruby cross-reading
-    //        our bytes is EXACT ({l:[{"a:b":1}]}) — the only class outside the
-    //        fail-closed principle (R11-registered);
-    //     d) space-bearing keys (`a b`) -> value-FAITHFUL (R5-probed).
+    //     c) colon-WITHOUT-space keys WITHOUT a leading blank (`a:b`) ->
+    //        SILENT CORRUPTION: our bytes read back as a STRING ITEM
+    //        {l:["a:b: 1"]} while ruby cross-reading our bytes is EXACT
+    //        ({l:[{"a:b":1}]}); WITH a leading blank (` a:b`) the behaviour
+    //        flips to FAIL CLOSED (R12 boundary fix — the leading blank
+    //        changes the reader route);
+    //     d) space-bearing keys that DO NOT carry a colon (`a b`) ->
+    //        value-FAITHFUL; space-bearing keys WITH a colon corrupt or
+    //        mis-split (`a b:c` -> string item; `a b: c` -> mis-split) and
+    //        the colon+space mis-split case is registered as residual(4a)
+    //        extension — cross-reference there (R12 boundary fix: (d) is not
+    //        a blanket guarantee);
+    //     e) leading-indicator keys (`@x` `x %x` `&x` `*x` `!x` `|x` `>x`
+    //        `?x` `=x` `#x`) and astral keys (emoji, emoji-in-word) -> FAIL
+    //        CLOSED (R12-registered subclasses, 6a-same shape).
     //   reach:   unreachable - the manifest key vocabulary is all snake_case
-    //            (no boolean-word / numeric / colon-bearing / space-bearing
-    //            keys anywhere in the frozen schema).
+    //            (no boolean-word / numeric / colon-bearing / space-bearing /
+    //            indicator / astral keys anywhere in the frozen schema).
     const famB = { l: [{ y: 1 }] };
     const famBEmit = dumpRubyYaml(famB);
     ok(
@@ -322,7 +335,7 @@ function main(): void {
       const selfValue = JSON.stringify(parseRubyYaml(colonNoSpace));
       ok(
         selfValue === JSON.stringify({ l: ["a:b: 1"] }),
-        "residual(6c) colon-without-space quoted key: SILENT CORRUPTION to a string item (declared, R11)",
+        "residual(6c) colon-without-space quoted key WITHOUT leading blank: SILENT CORRUPTION to a string item (declared, R11)",
       );
       const rubyCross = execFileSync("ruby", ["-ryaml", "-rjson", "-e", 'puts JSON.generate(YAML.load(STDIN.read))'], {
         input: colonNoSpace,
@@ -331,19 +344,79 @@ function main(): void {
         rubyCross === JSON.stringify({ l: [{ "a:b": 1 }] }),
         "residual(6c) ruby cross-reading our bytes is EXACT (the corruption is one-sided, declared)",
       );
+      let leadingBlankCls = "ok";
+      try {
+        parseRubyYaml(dumpRubyYaml({ l: [{ " a:b": 1 }] }));
+      } catch (error) {
+        leadingBlankCls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+      }
+      ok(
+        leadingBlankCls === "fail-closed",
+        "residual(6c) WITH a leading blank the same key form flips to FAIL CLOSED (R12 boundary fix — route change)",
+      );
+    }
+    for (const [key, expectedClass] of [["a b:c", "string-item"], ["a b: c", "mis-split"]] as const) {
+      const emitted = dumpRubyYaml({ l: [{ [key]: 1 }] });
+      const selfValue = JSON.stringify(parseRubyYaml(emitted));
+      const isStringItem = selfValue === JSON.stringify({ l: [`${key}: 1`] });
+      const isMisSplit = expectedClass === "mis-split" && selfValue.includes("'");
+      ok(
+        isStringItem || isMisSplit,
+        `residual(6d) space-bearing key WITH a colon (${JSON.stringify(key)}): ${expectedClass} (declared, R12 boundary fix — not value-faithful)`,
+      );
     }
     ok(
       JSON.stringify(parseRubyYaml(dumpRubyYaml({ l: [{ "a b": 1 }] }))) === JSON.stringify({ l: [{ "a b": 1 }] }),
-      "residual(6d) family B space-bearing key: reads back value-exact (probed, not fail-closed)",
+      "residual(6d) family B space-bearing key WITHOUT a colon: reads back value-exact (probed, not fail-closed)",
     );
+    const leadingIndicatorKeys = ["@x", "`x", "%x", "&x", "*x", "!x", "|x", ">x", "?x", "=x", "#x"];
+    for (const key of leadingIndicatorKeys) {
+      let cls = "ok";
+      try {
+        parseRubyYaml(dumpRubyYaml({ l: [{ [key]: 1 }] }));
+      } catch (error) {
+        cls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+      }
+      ok(cls === "fail-closed", `residual(6e) leading-indicator quoted key ${JSON.stringify(key)}: our reader fails closed (R12-registered subclass)`);
+    }
+    for (const key of ["\u{1F600}", `a\u{1F600}b`]) {
+      let cls = "ok";
+      try {
+        parseRubyYaml(dumpRubyYaml({ l: [{ [key]: 1 }] }));
+      } catch (error) {
+        cls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+      }
+      ok(cls === "fail-closed", `residual(6e) astral quoted key ${JSON.stringify(key.slice(0, 2))}…: our reader fails closed (R12-registered subclass)`);
+    }
 
-    // (7) R10 suggestion 2 note (registered in situ): the rc2-values probe's
-    //     "seq-of-seq-item block (3rd level)" form is rejected BY RUBY TOO —
-    //     a ruby-same-reject shape, i.e. bidirectional fail-closed, NOT a
-    //     divergence. Recorded here so later rounds do not misread it.
+    // (7) R10 suggestion 2 note — EXECUTED (R12 boundary fix: the claim
+    //     "ruby-same-reject, bidirectional fail-closed" is now on the
+    //     execution path, not just in a message string). The rc2-values
+    //     probe's "seq-of-seq-item block (3rd level)" form (a seq-item whose
+    //     value is a bare nested sequence missing the inline indicator) is
+    //     rejected BY RUBY (Psych::SyntaxError) AND BY OUR READER
+    //     (LoopManifestYamlError) — bidirectional fail-closed, NOT a
+    //     divergence. Normal seq-item map values stay exact (control).
+    const missingIndicator = "---\nl:\n- -\n  a: 1\n";
+    let rubyVerdict = "loads";
+    try {
+      execFileSync("ruby", ["-ryaml", "-rjson", "-e", "v = YAML.load(STDIN.read); puts JSON.generate(v)"], {
+        input: missingIndicator,
+      });
+    } catch {
+      rubyVerdict = "REJECT";
+    }
+    ok(rubyVerdict === "REJECT", "suggestion-2 EXECUTED: ruby REJECTS the missing-indicator block form (Psych::SyntaxError)");
+    let selfVerdict = "reads";
+    try {
+      parseRubyYaml(missingIndicator);
+    } catch (error) {
+      selfVerdict = error instanceof LoopManifestYamlError ? "FAIL_CLOSED" : "OTHER";
+    }
+    ok(selfVerdict === "FAIL_CLOSED", "suggestion-2 EXECUTED: our reader FAILS CLOSED on the same form (bidirectional fail-closed)");
     ok(
       JSON.stringify(parseRubyYaml("---\nl:\n- a: 1\n  b: 2\n")) === JSON.stringify({ l: [{ a: 1, b: 2 }] }),
-      "suggestion-2 note: normal seq-item map values stay exact; the 3rd-level block form is ruby-same-reject (bidirectional fail-closed, not a divergence)",
+      "suggestion-2 control: normal seq-item map values stay exact",
     );
   }
 
