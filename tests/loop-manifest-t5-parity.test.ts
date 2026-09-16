@@ -169,19 +169,19 @@ function driveManualChain(libDir: string, runId: string, artifactStore: LoopArti
   ]);
   publisher(libDir, [
     "entry-update", "--node", "requirement-intake", "--declaration-seq", "2",
-    "--artifact-path", "00-需求资料/00-需求资料.md", "--version", "1.0.0",
-    "--digest", intakeDigest, "--source-ref", "00-需求资料/00-需求资料.md",
+    "--artifact-path", `00-需求资料/${REQ}_需求摘要.md`, "--version", "1.0.0",
+    "--digest", intakeDigest, "--source-ref", `00-需求资料/${REQ}_需求摘要.md`,
   ]);
   publisher(libDir, [
     "entry-update", "--node", "solution-design", "--declaration-seq", "3",
-    "--artifact-path", "01-技术方案/01-技术方案.md", "--version", "1.0.0",
-    "--digest", designDigest, "--source-ref", "01-技术方案/01-技术方案.md",
+    "--artifact-path", `01-技术方案/${REQ}_技术方案.md`, "--version", "1.0.0",
+    "--digest", designDigest, "--source-ref", `01-技术方案/${REQ}_技术方案.md`,
   ]);
   const designV2Digest = sha256(`# ${REQ} design v2\n`);
   publisher(libDir, [
     "entry-update", "--node", "solution-design", "--declaration-seq", "4",
-    "--artifact-path", "01-技术方案/01-技术方案.md", "--version", "2.0.0",
-    "--digest", designV2Digest, "--source-ref", "01-技术方案/01-技术方案.md",
+    "--artifact-path", `01-技术方案/${REQ}_技术方案.md`, "--version", "2.0.0",
+    "--digest", designV2Digest, "--source-ref", `01-技术方案/${REQ}_技术方案.md`,
   ]);
   const fixStored = artifactStore.put("technical_design", "fix-evidence\n");
   publisher(libDir, [
@@ -469,8 +469,8 @@ async function scenarioDeferredThenPublish(): Promise<void> {
       publish_seq: 1, projected_through: "MANUAL", updated_at: TS,
       depth: { decision_scope: "solution", requested_depth: "STANDARD", initial_depth_basis: "user_requested", required_depth: "STANDARD" },
       entries: [
-        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/00-需求资料.md", version: "1.0.0", digest: intakeStored.digest, updated_at: TS, source_event_ref: intakeStored.artifactRef },
-        { node: "solution-design", status: "current", artifact_path: "01-技术方案/01-技术方案.md", version: "1.0.0", digest: designStored.digest, updated_at: TS, source_event_ref: "01-技术方案/01-技术方案.md" },
+        { node: "requirement-intake", status: "current", artifact_path: `00-需求资料/${REQ}_需求摘要.md`, version: "1.0.0", digest: intakeStored.digest, updated_at: TS, source_event_ref: intakeStored.artifactRef },
+        { node: "solution-design", status: "current", artifact_path: `01-技术方案/${REQ}_技术方案.md`, version: "1.0.0", digest: designStored.digest, updated_at: TS, source_event_ref: `01-技术方案/${REQ}_技术方案.md` },
         ...["solution-gate", "task-planning", "implementation", "code-review", "knowledge-sync"].map((n) => ({
           node: n, status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null,
         })),
@@ -537,18 +537,22 @@ async function scenarioRepairFullFlow(): Promise<void> {
       "init", "--requirement-id", REQ, "--requested-depth", "STANDARD",
       "--depth-basis", "user_requested", "--decision-scope", "FULL_REQUIREMENT",
     ]);
-    writeFileSync(join(libDir, "00-需求资料", "x.md"), "# intake artifact\n", "utf8");
-    writeFileSync(join(libDir, "01-技术方案", "y.md"), "# design artifact\n", "utf8");
+    // R1-P0-2: canonical names bind the requirement id (contract §3.1).
+    const rId = REQ;
+    const intakeRel = `00-需求资料/${rId}_需求摘要.md`;
+    const designRel = `01-技术方案/${rId}_技术方案.md`;
+    writeFileSync(join(libDir, "00-需求资料", `${rId}_需求摘要.md`), "# intake artifact\n", "utf8");
+    writeFileSync(join(libDir, "01-技术方案", `${rId}_技术方案.md`), "# design artifact\n", "utf8");
     // Bind deliberately wrong digests so repair has real drift to correct.
     publisher(libDir, [
       "entry-update", "--node", "requirement-intake", "--declaration-seq", "2",
-      "--artifact-path", "00-需求资料/x.md", "--version", "1.0.0",
-      "--digest", "0".repeat(64), "--source-ref", "00-需求资料/x.md",
+      "--artifact-path", intakeRel, "--version", "1.0.0",
+      "--digest", "0".repeat(64), "--source-ref", intakeRel,
     ]);
     publisher(libDir, [
       "entry-update", "--node", "solution-design", "--declaration-seq", "3",
-      "--artifact-path", "01-技术方案/y.md", "--version", "1.0.0",
-      "--digest", "1".repeat(64), "--source-ref", "01-技术方案/y.md",
+      "--artifact-path", designRel, "--version", "1.0.0",
+      "--digest", "1".repeat(64), "--source-ref", designRel,
     ]);
     publisher(libDir, ["repair", "--who", "reviewer", "--reason", "drift repair with corrections"]);
 
@@ -690,12 +694,12 @@ async function scenarioAcceptedMixedV9(): Promise<void> {
       publish_seq: 1, projected_through: "MANUAL", updated_at: TS,
       depth: { decision_scope: "FULL_REQUIREMENT", requested_depth: "STANDARD", initial_depth_basis: "user_requested", required_depth: "STANDARD" },
       entries: [
-        { node: "requirement-intake", status: "current", artifact_path: "00-需求资料/00-需求资料.md", version: "1.0.0", digest: sourceStored.digest, updated_at: TS, source_event_ref: sourceStored.artifactRef },
+        { node: "requirement-intake", status: "current", artifact_path: `00-需求资料/${REQ}_需求摘要.md`, version: "1.0.0", digest: sourceStored.digest, updated_at: TS, source_event_ref: sourceStored.artifactRef },
         // The scan finding invalidated the examined design revision, so the
         // manual face must mirror that truth (status stale) — a current row
         // here is a genuine B2 divergence, not a fixture convenience.
-        { node: "solution-design", status: "stale", artifact_path: "01-技术方案/01-技术方案.md", version: "1.0.0", digest: designStored.digest, updated_at: TS, source_event_ref: designStored.artifactRef },
-        { node: "solution-gate", status: "current", artifact_path: "02-方案审核/02-方案审核.md", version: "1.0.0", digest: gateResultBlob.digest, updated_at: TS, source_event_ref: gateResultBlob.artifactRef,
+        { node: "solution-design", status: "stale", artifact_path: `01-技术方案/${REQ}_技术方案.md`, version: "1.0.0", digest: designStored.digest, updated_at: TS, source_event_ref: designStored.artifactRef },
+        { node: "solution-gate", status: "current", artifact_path: `02-方案审核/${REQ}_方案审核.md`, version: "1.0.0", digest: gateResultBlob.digest, updated_at: TS, source_event_ref: gateResultBlob.artifactRef,
           gate_result: "PASS_WITH_RISK", decision_depth: "STANDARD", decision_status: "CONFIRMED" },
         ...["task-planning", "implementation", "code-review", "knowledge-sync"].map((n) => ({
           node: n, status: "pending", artifact_path: null, version: null, digest: null, updated_at: null, source_event_ref: null,

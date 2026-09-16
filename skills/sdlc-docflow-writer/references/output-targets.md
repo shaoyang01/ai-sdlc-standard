@@ -66,15 +66,31 @@ Use:
 {requirement_id}_{artifact_type}.{ext}
 ```
 
+Canonical 当前文件（contract §3.1；solution-gate 双 binding 为唯一双文件节点）：
+
+```text
+00-需求资料/{id}_需求摘要.md
+01-技术方案/{id}_技术方案.md
+02-方案审核/{id}_方案审核问题台账.md   # adversarial_scan 台账（原 {id}_FindingLedger.md，2026-09-16 更名）
+02-方案审核/{id}_方案审核.md           # formal_verdict（manifest solution-gate 当前指针指向此文件）
+03-任务规划/{id}_任务计划.md
+04-实现记录/{id}_实现记录.md
+05-代码审核/{id}_代码审核.md           # 初审/返工复验/最终复验同一文件
+06-知识同步/{id}_知识同步结果.md
+```
+
 Examples:
 
 ```text
 20260629-ai-sdlc-standard_技术方案.html
+20260629-ai-sdlc-standard_方案审核问题台账.md
 20260629-ai-sdlc-standard_方案审核.html
 20260629-ai-sdlc-standard_实现记录.md
 20260629-ai-sdlc-standard_代码审核.html
 20260629-ai-sdlc-standard_测试验收.html
 ```
+
+Forbidden top-level suffix patterns（创建即稳定路径违规；完整清单与历史迁移规则见 artifact-versioning.md 与 contract §3.1）：`_vN`、`_R1`、`-R2`、`_round2`、`_第N轮`、`_对抗扫描`、`_闭环复核`、`_再次复核`、`_正式裁决`、`_复验`、`_再次复验`、`_准入修正`、`_最终复验`、`_最终版`、`_最新版`。英文 `{id}_FindingLedger.md` 不再作为新需求的当前产物路径。历史文件迁 `{node_directory}/evidence/history/` 并附迁移表；`evidence/**` 不计入顶层当前文件数量，也不得成为 manifest 当前指针。
 
 ## Version And Update Mode
 

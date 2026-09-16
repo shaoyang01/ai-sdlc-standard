@@ -428,9 +428,27 @@ grep -q 'business-domain-map.yaml' "${WORK_ROOT}/t18.out" && pass || fail "custo
 CASE_NAME="19. minimal entry-coverage skeleton drives the standard audit gate"
 R="${WORK_ROOT}/t19"; new_repo "${R}"
 bash "${INITIALIZER}" "${R}" > /dev/null 2>&1
-"${R}/.sdlc/scripts/bash/audit-entry-coverage.sh" > "${WORK_ROOT}/t19.out" 2>&1
+# R1-P0-1/B4: the generated wrapper is PORTABLE — it never bakes a
+# username-specific absolute path (task book B4-5). Out-of-tree repos resolve
+# the standard package through the documented AI_SDLC_STANDARD_HOME override;
+# a repo that is a sibling of the standard checkout resolves it by discovery.
+AI_SDLC_STANDARD_HOME="${STANDARD_HOME}" "${R}/.sdlc/scripts/bash/audit-entry-coverage.sh" > "${WORK_ROOT}/t19.out" 2>&1
 GATE_EXIT=$?
 if [[ "${GATE_EXIT}" == "0" || "${GATE_EXIT}" == "1" ]]; then pass; else fail "standard gate crashed on minimal skeleton (exit ${GATE_EXIT})"; fi
+
+# New contract assertion: with NEITHER an override NOR a discoverable sibling,
+# the wrapper fails closed (exit 3) with actionable guidance — it must never
+# silently fall back to a stale baked path.
+UNSET_OUT="${WORK_ROOT}/t19-portable.out"
+( unset AI_SDLC_STANDARD_HOME; "${R}/.sdlc/scripts/bash/audit-entry-coverage.sh" ) > "${UNSET_OUT}" 2>&1
+PORTABLE_EXIT=$?
+if [[ "${PORTABLE_EXIT}" == "3" ]]; then pass; else fail "wrapper without override/ sibling discovery should fail closed with exit 3, got ${PORTABLE_EXIT}"; fi
+assert_contains "${UNSET_OUT}" 'AI_SDLC_STANDARD_HOME'
+if grep -q "$(id -un)" "${R}/.sdlc/scripts/bash/audit-entry-coverage.sh"; then
+  fail "generated wrapper bakes a username-specific absolute path"
+else
+  pass
+fi
 if [[ -f "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" ]]; then pass; else fail "gate report not generated under .sdlc"; fi
 assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" 'Status | PENDING'
 assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" '.sdlc/business_domain'

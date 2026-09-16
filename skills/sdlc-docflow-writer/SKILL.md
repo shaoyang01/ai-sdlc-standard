@@ -17,6 +17,27 @@ Support three output targets:
 - HTML file
 - Lark/Feishu online document through `lark-cli` user identity
 
+## Canonical 当前文件表（contract §3.1——写入前必须命中其一）
+
+| 节点 / binding | canonical 当前文件 |
+| --- | --- |
+| requirement-intake | `00-需求资料/{id}_需求摘要.md` |
+| solution-design | `01-技术方案/{id}_技术方案.md` |
+| solution-gate / adversarial_scan | `02-方案审核/{id}_方案审核问题台账.md` |
+| solution-gate / formal_verdict | `02-方案审核/{id}_方案审核.md` |
+| task-planning | `03-任务规划/{id}_任务计划.md` |
+| implementation | `04-实现记录/{id}_实现记录.md` |
+| code-review | `05-代码审核/{id}_代码审核.md` |
+| knowledge-sync | `06-知识同步/{id}_知识同步结果.md` |
+
+solution-gate 是唯一双 canonical 文件节点（两个隔离 binding 各一）；manifest 的 solution-gate 当前指针指向 `{id}_方案审核.md`；正式裁决经路径/版本/digest 绑定当前 `{id}_方案审核问题台账.md`；台账不创建第二个 manifest 节点。
+
+## 多轮更新规则（contract §3.1）
+
+再次扫描、复核、裁决或复验一律**更新同一 canonical 文件**：读取已有文件 → 更新正文为当前有效内容 → 按语义变化递增 Metadata Version（PATCH/MINOR/MAJOR）→ 更新 `Updated At` → 追加「修订记录」行 → 经 `scripts/publish-requirement-manifest.sh` 更新 manifest 版本/digest/状态/结果。Finding 状态迁移经 publisher 生命周期操作记录，不为关闭 Finding 创建新报告文件。
+
+**禁止**在 canonical 文件之外创建同节点、同职责、带轮次或状态后缀的顶层当前文档。禁止后缀（中英文，完整清单见 artifact-versioning.md）：`_v1`、`_v2`、`_vN`、`_R1`、`-R2`、`_round2`、`_第1轮`、`_第2轮`、`_第N轮`、`_对抗扫描`、`_闭环复核`、`_再次复核`、`_正式裁决`、`_复验`、`_再次复验`、`_准入修正`、`_最终复验`、`_最终版`、`_最新版`。历史证据归 `{node_directory}/evidence/history/` + 迁移表；历史文件不成为 current、不被 publisher 登记为当前路径、不被下游当当前输入；`evidence/**` 不计入顶层当前文件数量。
+
 ## Core Rules
 
 1. Classify the requested artifact node before generating content.
@@ -96,12 +117,18 @@ For Lark/Feishu output:
 
 Before changing files or publishing documents, report the dry-run result from `references/execution-scenarios.md`:
 
-- Artifact node and node directory
-- Output format
 - Requirement ID
-- Target local path or Lark/Feishu document target
-- Whether this creates a new stable artifact file or updates the existing stable file, including the Metadata Version change
+- Artifact node and node directory
+- Binding 或 role（solution-gate 必须区分 adversarial_scan / formal_verdict）
+- Canonical target path（必须命中上表；台账用 `{id}_方案审核问题台账.md`）
+- 文件是否已存在
+- 本次是 CREATE 还是 UPDATE
+- 原 Metadata Version → 目标 Metadata Version
+- 是否发现同节点非 canonical 顶层文件（轮次/状态后缀文件）
+- manifest 当前路径
 - Blocking questions, if any
+
+发现同节点已有轮次/状态后缀文件时：停止创建新文件 → 标记为稳定路径违规 → 给出整理或迁移计划（evidence/history/ + 迁移表）→ 不删除被历史 Finding 引用的证据 → 不把旧轮次文件继续登记为 current。
 
 Stop before writing or publishing if any blocking question remains.
 

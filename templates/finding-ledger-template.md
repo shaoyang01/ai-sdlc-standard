@@ -1,6 +1,7 @@
 # Finding Ledger: <Requirement Title>（adversarial_scan 第 N 轮）
 
 > 状态：Draft（2026-09-02，Decision-084 P-L 收口波新增；canonical 模板，产出必须遵循本结构）
+> 输出路径（2026-09-16 起，contract §3.1）：`02-方案审核/{id}_方案审核问题台账.md`（模板文件保留英文内部名，生成产物必须使用中文 canonical 路径；多轮扫描/复核更新同一文件，Round 字段在 Metadata 内递增表达，不以文件名区分轮次）
 > 关联：[Artifact Flow · Finding Ledger](../ai-sdlc/artifact-flow.md) · [Node Contract 4.3](../ai-sdlc/node-capability-contract.md) · [Gate Result Template](gate-result-template.md) · [Finding Lifecycle](../ai-sdlc/loop-finding-lifecycle.md)
 
 ## Metadata

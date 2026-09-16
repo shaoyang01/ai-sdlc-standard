@@ -77,13 +77,13 @@ intake 同时承担反馈分类：新需求 / 补充 / 变更 / 返工 / 反馈�
 
 必须遵循 `ess/specification-schema.md`，并按已裁决深度档位（LIGHT/STANDARD/DEEP）确定章节深度。
 
-### Finding Ledger（solution-gate / adversarial_scan）
+### 方案审核问题台账（solution-gate / adversarial_scan）
 
-对抗扫描首轮建立不可变 Finding Ledger baseline，每项包含 finding ID、category（REQUIREMENT / SOLUTION / PLANNING / IMPLEMENTATION / REVIEW / KNOWLEDGE）、severity、evidence、source revision 与 earliest affected node；后续轮次为 closure review，只逐项验证 baseline finding 的修复证据，不给正式 Gate。
+canonical 路径 `02-方案审核/{id}_方案审核问题台账.md`（2026-09-16 由 `{id}_FindingLedger.md` 更名，contract §3/§3.1；机器字段与协议名不变）。对抗扫描首轮建立不可变台账 baseline，每项包含 finding ID、category（REQUIREMENT / SOLUTION / PLANNING / IMPLEMENTATION / REVIEW / KNOWLEDGE）、severity、evidence、source revision 与 earliest affected node；后续轮次为 closure review，**在同一台账文件内更新**（递增 Metadata Version + 追加修订记录，正文保持当前有效内容），禁止新建 `_第N轮`/`_闭环复核`/`_对抗扫描` 等轮次文件；只逐项验证 baseline finding 的修复证据，不给正式 Gate。历史轮次文件迁 `02-方案审核/evidence/history/` + 迁移表，不成为 current。
 
 ### Gate Result（solution-gate / formal_verdict）
 
-必须遵循 `templates/gate-result-template.md`，包含 Gate Result（PASS / FAIL / PASS_WITH_RISK）、Reviewed Artifact / Reviewed Artifact Version、设计深度裁决（depth + decision_status）与 Finding Ledger 引用。`BLOCKED_UNKNOWN` 不进入实现。
+canonical 路径 `02-方案审核/{id}_方案审核.md`（manifest solution-gate 当前指针指向此文件）。必须遵循 `templates/gate-result-template.md`，包含 Gate Result（PASS / FAIL / PASS_WITH_RISK）、Reviewed Artifact / Reviewed Artifact Version、设计深度裁决（depth + decision_status）与台账引用。正式裁决通过路径/版本/digest **绑定当前台账**；多轮裁决更新同一文件。`BLOCKED_UNKNOWN` 不进入实现。
 
 ### Task Plan（task-planning）
 

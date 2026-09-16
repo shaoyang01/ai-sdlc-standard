@@ -238,6 +238,54 @@ case "${ACTION}" in
 
   entry-update)
     NODE="$(req_opt node)"; APATH="$(req_opt artifact-path)"; VER="$(req_opt version)"; DG="$(req_opt digest)"
+    # Canonical stable-path gate (contract §3.1; R1-P0-2): the decision binds
+    # requirement_id + node + binding + artifact_path through the SHARED
+    # library, so an arbitrary requirement ID and a ledger-as-current pointer
+    # are both rejected. `--binding` is required for solution-gate
+    # (adversarial_scan = 台账 binding, formal_verdict = manifest current).
+    BINDING="$(opt_or_empty binding)"
+    standard_scripts_dir() {
+      local self_dir
+      self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      printf '%s' "${self_dir}"
+    }
+    PUB_STANDARD_SCRIPTS="$(standard_scripts_dir)"
+    # requirement_id comes from the manifest itself (the state file is not yet
+    # materialised at this point). The manifest is markdown with an embedded
+    # fenced yaml block — same extraction the state loader uses.
+    RID_FOR_GATE="$(ruby -ryaml -e '
+      raw = File.read(ARGV[0])
+      block = raw[/```yaml\n(.*?)```/m, 1]
+      if block
+        d = YAML.safe_load(block, permitted_classes: [Time], aliases: false) || {}
+        print d["requirement_id"].to_s
+      end
+    ' "${MANIFEST}" 2>/dev/null || true)"
+    CANON_ERR="$(RID_FOR_GATE="${RID_FOR_GATE}" PUB_NODE="${NODE}" PUB_BINDING="${BINDING}" PUB_APATH="${APATH}" PUB_STANDARD_SCRIPTS="${PUB_STANDARD_SCRIPTS}" ruby -rjson -e '
+      require File.expand_path("lib/canonical-artifact-path.rb", ENV["PUB_STANDARD_SCRIPTS"])
+      rid = ENV["RID_FOR_GATE"].to_s
+      binding = ENV["PUB_BINDING"].to_s.empty? ? nil : ENV["PUB_BINDING"]
+      if ENV["PUB_NODE"] == "solution-gate" && binding.nil?
+        warn "NON_CANONICAL_PATH: solution-gate requires --binding (adversarial_scan|formal_verdict) — the two isolated bindings have different canonical files (contract §3.1)"
+        exit 1
+      end
+      r = CanonicalArtifactPath.decide(
+        requirement_id: rid, node: ENV["PUB_NODE"], binding: binding, artifact_path: ENV["PUB_APATH"],
+      )
+      unless r.ok
+        warn "NON_CANONICAL_PATH: #{r.reason} (contract §3.1)"
+        exit 1
+      end
+      # solution-gate: the manifest CURRENT pointer must never be the ledger.
+      if ENV["PUB_NODE"] == "solution-gate" && binding == "adversarial_scan"
+        warn "NON_CANONICAL_PATH: the adversarial-scan ledger is a binding record, not the solution-gate current pointer; publish the formal verdict as current and pass --binding adversarial_scan only with --record-ledger"
+        exit 1
+      end
+    ' 2>&1 >/dev/null || true)"
+    if [ -n "${CANON_ERR}" ]; then
+      echo "${CANON_ERR}" >&2
+      exit 1
+    fi
     DSEQ="$(req_opt declaration-seq)"
     case "${NODE}" in requirement-intake|solution-design|solution-gate|task-planning|implementation|code-review|knowledge-sync) ;; *) echo "Unknown node: ${NODE}" >&2; exit 2 ;; esac
     case "${DSEQ}" in ''|*[!0-9]*) echo "Invalid --declaration-seq: must be a positive integer" >&2; exit 2 ;; esac

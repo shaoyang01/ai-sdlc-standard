@@ -1,7 +1,7 @@
 # Manual/Runtime Semantic Contract（手动与 runtime 共同语义合同）
 
-> Version: 1.0.0
-> Status: ACCEPTED（2026-09-05，独立复审 R13 轮最终建议 FREEZE @ v0.13.0 工作区字节，Current User 裁决冻结；本版并入非阻塞引用更正与保证 B 裁决记录，语义与 v0.13.0 无变化）——冻结为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
+> Version: 1.1.0
+> Status: ACCEPTED（2026-09-16，Current User 授权的受控修订：§3 solution-gate 台账 canonical 路径中文化 + §3.1 稳定产物与多轮更新规则新增；§4/§5/§6/§7/§8.2 冻结语义零变更。1.0.0（2026-09-05，独立复审 R13 轮最终建议 FREEZE @ v0.13.0 工作区字节，Current User 裁决冻结）——本合同为 G3（手动主路径修复）与 G5（runtime 投影/parity）的唯一语义权威
 > 上游: Decision-090 及其[冻结执行计划](../docs/reports/decision-090-c03e-prerun-governance-plan.md) §4/G2 · [需求拆分 v1.0.0](../docs/reports/decision-090-c03e-prerun-requirement-decomposition.md) §4（DP1–DP5）· Decision-084/086 · [v3 规格 v1.1.0](../docs/reports/d088-01-v3-behavior-spec.md)
 > 修订: v0.4.0 按 G2-R3-H1/H2/H3/M1 全量修订——深度触发枚举单一化，complexity-routing 引用本合同不再自维护清单（H1）；finding 登记与发现节点解耦、复用现役类别×来源矩阵，全组合合法（H2）；manifest 增加 `projectedThrough` 投影基线，区分合法待投影/真分叉/损坏，重放幂等规则固定（H3）；恢复完整 C1–C20 与 N1–N9 表、更正残留引用（M1）。
 
@@ -30,14 +30,38 @@
 | --- | --- | --- | --- |
 | requirement-intake | 用户原始输入 | `00-需求资料/{id}_需求摘要.md`；`00-需求资料/intake.manifest.json`（§6.1 对象一）；`library/{id}/manifest.md`（**本节点创建**） | 归一化事实完备；深度提案产出（§4） |
 | solution-design | `{id}_需求摘要.md`（current）；`requiredDepth` + 深度提案（§4） | `01-技术方案/{id}_技术方案.md`（含 `depthCoverageLedger`） | 摘要 current；**不等待 Gate** |
-| solution-gate / adversarial_scan | 技术方案 current | `02-方案审核/{id}_FindingLedger.md`（行式追加，§5） | 方案 current；异 binding |
-| solution-gate / formal_verdict | 技术方案 + FindingLedger | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | Ledger current 且 `scannedDesignVersion` 匹配（§5.4）；异 binding |
+| solution-gate / adversarial_scan | 技术方案 current | `02-方案审核/{id}_方案审核问题台账.md`（行式追加，§5；2026-09-16 Owner 授权由 `{id}_FindingLedger.md` 更名——面向用户与人工产物统一中文名） | 方案 current；异 binding |
+| solution-gate / formal_verdict | 技术方案 + 方案审核问题台账 | `02-方案审核/{id}_方案审核.md`（Gate Result，§5.4） | 台账 current 且 `scannedDesignVersion` 匹配（§5.4）；异 binding |
 | task-planning | Gate Result（current）+ 技术方案（current） | `03-任务规划/{id}_任务计划.md` | A1（§7.3） |
 | implementation | 任务计划（current） | `04-实现记录/{id}_实现记录.md` + 生产代码变更 | A2（§7.3） |
 | code-review | 实现记录（current）+ 代码变更证据（§5.5） | `05-代码审核/{id}_代码审核.md` | A3（§7.3） |
 | knowledge-sync | 代码与验证证据 + routed 声明 | `06-知识同步/{id}_知识同步结果.md` + `.sdlc/business_domain/**`（受 G1 规格约束） | A4（§7.3） |
 
 **代码变更证据绑定**：implementation 在实现记录中固定 `{baseRevision, reviewedRevision, changeDigest}`（content-addressed）；code-review 消费同一标识并回写审核结果——两执行面审的是同一份变更。
+
+## 3.1 稳定产物与多轮更新规则（2026-09-16，Owner 授权修订）
+
+每节点 canonical 当前文件（solution-gate 为唯一双文件节点——adversarial_scan 与 formal_verdict 两个隔离 binding 各一个）：
+
+| 节点 / binding | canonical 当前文件 |
+| --- | --- |
+| requirement-intake | `00-需求资料/{id}_需求摘要.md` |
+| solution-design | `01-技术方案/{id}_技术方案.md` |
+| solution-gate / adversarial_scan | `02-方案审核/{id}_方案审核问题台账.md` |
+| solution-gate / formal_verdict | `02-方案审核/{id}_方案审核.md`（manifest solution-gate 当前指针指向此文件） |
+| task-planning | `03-任务规划/{id}_任务计划.md` |
+| implementation | `04-实现记录/{id}_实现记录.md` |
+| code-review | `05-代码审核/{id}_代码审核.md`（初审、返工复验、最终复验均更新此文件） |
+| knowledge-sync | `06-知识同步/{id}_知识同步结果.md` |
+
+多轮更新规则（再次扫描、复核、裁决或复验）：
+
+1. 读取并**更新同一 canonical 文件**；不改变路径。
+2. 按语义变化递增 PATCH/MINOR/MAJOR；更新 `Updated At`。
+3. 正文只保留当前有效结论与事实；变更记入文档内「修订记录」。
+4. 经 publisher 更新 manifest 版本、digest、状态与结果；Finding 状态迁移经 publisher 生命周期操作记录。
+5. **禁止**在 canonical 文件之外创建同节点、同职责、带轮次或状态后缀的顶层当前文档（禁止后缀清单见 artifact-versioning.md；含中英文：`_vN`、`_R1`、`-R2`、`_round2`、`_第N轮`、`_对抗扫描`、`_闭环复核`、`_再次复核`、`_正式裁决`、`_复验`、`_再次复验`、`_准入修正`、`_最终复验`、`_最终版`、`_最新版`）。
+6. 历史证据：正常版本更新不新建轮次文件；被不可变 Finding/closure evidence/历史 manifest 引用的旧文件不删除，可迁移至 `{node_directory}/evidence/history/` 并生成迁移表（原路径/归档路径/历史用途/当前 canonical 路径）；历史文件不得成为 current、不得被 publisher 登记为当前节点路径、不得被下游当作当前输入；英文 `{id}_FindingLedger.md` 存量按迁移表迁至中文名后，当前引用/版本/digest 以新路径为准。
 
 ## 4. 域二：深度语义（封闭状态机）
 
@@ -120,7 +144,7 @@
 
 ### 5.3 Gate Ledger 的专属边界
 
-`{id}_FindingLedger.md` 是 **solution-gate 的设计阶段台账**：只承载 adversarial_scan 登记的方案类 finding。其他来源的 finding 登记在发现节点自己的产物 finding 段（§5.1），不经由 Gate Ledger——代码返工 therefore 不产生任何 Gate 仪式（I-D）。所有来源的 finding 统一汇入 manifest finding 索引（§6.2），下游消费索引而非逐文件扫描。
+`{id}_方案审核问题台账.md`（原 `{id}_FindingLedger.md`，2026-09-16 更名；机器字段/协议名 `finding_id`/`finding_index`/`finding-register`/`finding-action` 等不变）是 **solution-gate 的设计阶段台账**：只承载 adversarial_scan 登记的方案类 finding。多轮扫描与复核**更新同一台账文件**（Metadata Version 递增 + 修订记录 + 正文保持当前有效内容），不得按轮次/状态后缀新建顶层文件（详见 §3.1 稳定产物与多轮更新规则）。其他来源的 finding 登记在发现节点自己的产物 finding 段（§5.1），不经由 Gate Ledger——代码返工 therefore 不产生任何 Gate 仪式（I-D）。所有来源的 finding 统一汇入 manifest finding 索引（§6.2），下游消费索引而非逐文件扫描。
 
 ### 5.4 版本绑定、失效传播与发布时点
 
@@ -270,9 +294,18 @@ FREEZE 后 G3/G5 执行注意：C10 publisher 必须实现 §6.2 自证格式与
 | `skills/sdlc-code-review/SKILL.md:26` | PWR 接受者/证据 | 清除 + 全链 finding 登记职责 | C6 @ G3 |
 | `skills/sdlc-docflow-writer/SKILL.md:92,157` | manifest 直写 | 改 publisher 调用 | C7 @ G3 |
 | `shared-business-domain-governance.md:8` / `standard-package-resolution.md:22` | 旧 `.specify` 活动根/profile 解析 | G1 根语义引用同步（不重开旧根路由） | C19 @ G3 |
+| `artifact-versioning.md` 稳定文件表/禁止清单/历史迁移 | "每节点一个稳定文件" 未表达 solution-gate 双 binding；禁止清单缺中文后缀；历史 evidence 无迁移规则 | 已对齐：双 binding 表 + 19 类禁止后缀（中英文）+ `evidence/history/` 迁移规则 | v1.1.0（2026-09-16） |
+| `artifact-storage.md` 稳定当前文件节 + adversarial_scan 示例 | 单文件表达；示例把台账写成 `..._方案审核.md` | 已对齐：双 binding 例外显式；示例改为 `{id}_方案审核问题台账.md` | v1.1.0（2026-09-16） |
+| `artifact-flow.md` manifest/Gate 节 | 未同步中文 canonical 路径、多轮同文件更新、历史迁移边界 | 已对齐：路径表 + 多轮同文件 + `evidence/history/` | v1.1.0（2026-09-16） |
+| `skills/sdlc-docflow-writer/{SKILL.md,references/output-targets.md,references/execution-scenarios.md}` | 无 canonical 路径表；无多轮同文件规则；无禁止后缀；dry-run 字段不足 | 已对齐：canonical 表 + 多轮规则 + 禁止清单 + dry-run 字段（binding/CREATE-UPDATE/版本迁移/非 canonical 检测） | v1.1.0（2026-09-16） |
+| `skills/sdlc-solution-gate/SKILL.md:8a`、`skills/sdlc-code-review/SKILL.md:11` | "本轮 scan" / 复验未声明同文件更新 | 已对齐：两处显式同文件多轮更新 + 禁止清单 | v1.1.0（2026-09-16） |
+| `templates/finding-ledger-template.md` | 模板未声明输出路径 | 已对齐：输出路径注记（模板英文内部名保留，产物强制中文 canonical） | v1.1.0（2026-09-16） |
+| `scripts/publish-requirement-manifest.sh` canonical 门、`scripts/validate-canonical-artifacts.rb`、`scripts/lib/canonical-artifact-path.rb` | 无 canonical 硬门；无写后校验器；判定未绑定 requirement id/binding | 已新增/对齐：共享判定库（requirement_id + node + binding + path），publisher 拒绝、validator 双向校验、solution-gate current 仅允许正式裁决 | v1.1.0（2026-09-16） |
+| `tests/manual-chain-fixture.test.sh`、`tests/loop-manifest-t5-parity.test.ts` | 活跃 finding evidence 与发布路径仍用旧英文台账名/占位名 | 已对齐：改名 `{id}_方案审核问题台账.md`；parity 夹具路径绑定 requirement id | v1.1.0（2026-09-16） |
 
 ## 11. Revision Record
 
+- 1.1.0（2026-09-16）：Owner 授权修订（G6 前置治理修复）——①§3 台账 canonical 路径更名 `02-方案审核/{id}_FindingLedger.md` → `02-方案审核/{id}_方案审核问题台账.md`（面向用户与人工产物中文名；机器字段与协议名不变；solution-gate 双 binding 隔离、Finding 生命周期状态机、publisher 唯一写 manifest、准入规则均不变）；②新增 §3.1 稳定产物与多轮更新规则（canonical 路径表、多轮同文件更新、禁止轮次/状态后缀清单、历史 evidence 迁移规则）。同步更新 §10 同步清单所列消费者（artifact-versioning/artifact-storage/artifact-flow/三个 Skill/output-targets/模板/validator/publisher/fixture）。
 - 1.0.0（2026-09-05）：**冻结**。Current User 依据 R13 轮 FREEZE 建议（绑定 v0.13.0 字节）裁决 G2 合同冻结；本版仅并入两项非语义变更：①G2-R14-L1 引用更正（字段双语义引用 §5.1 第 5 条、动作机制引用手动生命周期动作规则、职责仍引 §5.2）；②保证 B 裁决入案（§5.1 第 8 条：接受保证 A 为手动面审计最终口径）。修订史 R1–R13 见下。
 - 0.13.0（2026-09-05）：按 G2-R13-H1 修订——撤销 v0.12.0 将 runtime"ACCEPTED 不要求 closureBoundRevisionId"误扩展为手动面"不携带"的规则：手动 ACCEPTED 行**携带**该字段，语义按状态区分（RESOLVED=修复依据 revision；ACCEPTED=formal_verdict PWR 裁决依据 revision，非 resolvedByRevisionId、不要求新增修复 revision）；runtime 映射条款改为仅声明 runtime 接受路径无该对应字段、手动语义见 §5.2；手动自洽校验与 §5.2 引用同一字段规则（不再维护两份清单）；保证 A 的"依据绑定 revision 可追溯"承载恢复；N6 增手动合法 PWR 正例（首次发布成功/重放 no-op/缺失错误绑定拒绝）。
 - 0.12.0（2026-09-05）：按 G2-R12-H1 修订——第 2 步（状态一致）重写为**投影字段整行交叉绑定**：runtime 经现役已验证读接口取得 finding 当前记录及证明绑定，按固定字段映射生成期望索引行（RESOLVED：closedBy/closureEvidence*/resolvedByRevisionId；ACCEPTED：closedBy←riskAcceptedBy/closureEvidence*，不要求 closureBoundRevisionId）并逐字段比对，任一适用投影字段漂移 → MISMATCH_STOP（堵住"status 一致、仅篡改 closureEvidenceRef 并重算 self-digest"的反例）；store 内部不变量验证仍归现役读回机制，publisher 仅做投影交叉绑定；N7 增 V6′ 承重变体。

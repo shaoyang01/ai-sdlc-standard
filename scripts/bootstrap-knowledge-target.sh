@@ -2071,6 +2071,32 @@ file_digest() {
   ruby -rdigest -e 'puts Digest::SHA256.file(ARGV[0]).hexdigest' "$1"
 }
 
+# R13-B4 / R1-P0-1: managed-file update guard. The guard decides whether
+# regeneration is allowed; the CONTENT always goes to the staging tree so the
+# existing atomic publish/rollback transaction owns every write (a direct
+# target write bypassed the transaction and even fired under --dry-run).
+# A final copy that lost the managed marker (user-modified) is left untouched
+# and recorded so the plan preserves it explicitly.
+MANAGED_SKIPPED_RELS=()
+managed_skip_recorded() { # $1 = rel ; exit 0 when skipped at staging
+  local r
+  for r in "${MANAGED_SKIPPED_RELS[@]:-}"; do
+    [[ "${r}" == "$1" ]] && return 0
+  done
+  return 1
+}
+write_managed_file() { # $1 = .sdlc-relative path ; stdin = content
+  local rel="${1}"
+  local target="${SDLC_DIR}/${rel}"
+  local marker="Managed marker: this wrapper is generator-managed"
+  if [[ -f "${target}" ]] && ! grep -q "${marker}" "${target}"; then
+    echo "skip regeneration (user-modified, marker missing): .sdlc/${rel}" >&2
+    MANAGED_SKIPPED_RELS+=("${rel}")
+    return 0
+  fi
+  mkdir -p "${STAGING_DIR}/$(dirname "${rel}")"
+  cat > "${STAGING_DIR}/${rel}"
+}
 write_staging_file() {
   local rel="$1"
   mkdir -p "${STAGING_DIR}/$(dirname "${rel}")"
@@ -2190,14 +2216,59 @@ EOF
 }
 
 generate_audit_wrapper() {
+  # R13-B4: no username-specific absolute path is baked in. The generated
+  # wrapper discovers the standard repo RELATIVE to its own location
+  # (../../../../../ = <repo>/.sdlc/scripts/bash -> repo root), keeps the
+  # AI_SDLC_STANDARD_HOME explicit override (validated), and fails with an
+  # actionable error when discovery fails. Paths with spaces survive because
+  # every expansion stays quoted.
   cat <<EOF
 #!/usr/bin/env bash
-# Gate thin wrapper (D-088-01 v2): adapter to the standard entry coverage audit.
-# Standard package root: \${AI_SDLC_STANDARD_HOME} env override, else the path
-# recorded at generation time. Default target is this repository root.
+# Gate thin wrapper (D-088-01 v2; R13-B4 portable discovery): adapter to the
+# standard entry coverage audit. Resolution order:
+#   1. \${AI_SDLC_STANDARD_HOME} explicit override (validated below)
+#   2. git-upstream discovery relative to this file:
+#      .sdlc/scripts/bash -> repo root -> ../ai-sdlc-standard
+# Managed marker: this wrapper is generator-managed (see marker line below).
 set -euo pipefail
-SDLC_HOME="\${AI_SDLC_STANDARD_HOME:-${STANDARD_PACKAGE}}"
+
+SDLC_HOME="\${AI_SDLC_STANDARD_HOME:-}"
 REPO_ROOT="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")/../../.." && pwd)"
+
+discover_standard_home() {
+  # a) repo-local standard checkout (same parent as the business repo)
+  local candidate="\${REPO_ROOT}/../ai-sdlc-standard"
+  if [[ -f "\${candidate}/scripts/audit-entry-coverage.rb" ]]; then
+    printf '%s' "\${candidate}"
+    return 0
+  fi
+  # b) walk up from the business repo looking for a sibling checkout
+  local dir="\${REPO_ROOT}"
+  local i
+  for i in 1 2 3; do
+    dir="\$(dirname "\${dir}")"
+    candidate="\${dir}/ai-sdlc-standard"
+    if [[ -f "\${candidate}/scripts/audit-entry-coverage.rb" ]]; then
+      printf '%s' "\${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+if [[ -z "\${SDLC_HOME}" ]]; then
+  if ! SDLC_HOME="\$(discover_standard_home)"; then
+    echo "audit-entry-coverage: cannot locate the ai-sdlc-standard repo." >&2
+    echo "Fix: set AI_SDLC_STANDARD_HOME to the absolute path of the ai-sdlc-standard checkout, e.g." >&2
+    echo "  AI_SDLC_STANDARD_HOME=/path/to/ai-sdlc-standard \${BASH_SOURCE[0]} ..." >&2
+    exit 3
+  fi
+fi
+if [[ ! -f "\${SDLC_HOME}/scripts/audit-entry-coverage.rb" ]]; then
+  echo "audit-entry-coverage: AI_SDLC_STANDARD_HOME is set but the audit script is missing: \${SDLC_HOME}/scripts/audit-entry-coverage.rb" >&2
+  exit 3
+fi
+
 if [[ "\${#}" -eq 0 ]]; then
   set -- "\${REPO_ROOT}"
 elif [[ ! -d "\${1}" ]]; then
@@ -3386,8 +3457,13 @@ generate_catalog "${CATALOG_L1L2_ROWS}" "${ROUTED_L4_ROWS}" \
 generate_governance_profile | write_staging_file "project-governance-profile.yaml"
 generate_entry_coverage_profile | write_staging_file "entry-coverage-profile.yaml"
 generate_map_template | write_staging_file "business-domain-map.yaml"
-generate_audit_wrapper | write_staging_file "scripts/bash/audit-entry-coverage.sh"
-chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
+# R13-B4: the wrapper carries the managed marker; regeneration overwrites it
+# only when the previous copy is still generator-managed (see write_staging_file
+# + is_user_modified_wrapper guard below).
+generate_audit_wrapper | write_managed_file "scripts/bash/audit-entry-coverage.sh"
+if [[ -f "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh" ]]; then
+  chmod +x "${STAGING_DIR}/scripts/bash/audit-entry-coverage.sh"
+fi
 
 # Decision-091: governance corpus skeletons (create-if-missing; anti-occupation
 # guard inside stage_corpus_skeleton keeps un-adopted legacy sources collision-free)
@@ -3655,6 +3731,13 @@ for PAIR in \
   esac
   TARGET_FILE="${PAIR#*:}"
   STAGED="${STAGING_DIR}/${REL}"
+  # R1-P0-1: a user-modified managed file was not staged — preserve it and say
+  # so instead of reporting the generic digest mismatch.
+  if managed_skip_recorded "${REL}"; then
+    declare_plan_line "${REL}" "preserve"
+    NOTICE_LINES+=("user-modified managed file preserved (managed marker missing): ${REL}")
+    continue
+  fi
   if [[ ! -e "${TARGET_FILE}" ]]; then
     declare_plan_line "${REL}" "create"
   elif cmp -s "${TARGET_FILE}" "${STAGED}"; then
@@ -3803,5 +3886,12 @@ echo "REMAINING_CONFIRMATION: $([[ "${ROUTABLE}" == "false" ]] && echo 'owner �
 echo ""
 echo "NOTES:"
 echo "- 初始化器只建结构与候选事实（代码可验证），不发明业务语义；稳定事实由 sdlc-knowledge-sync"
+# R13 (state distinction): initialization != knowledge completion. Distinct
+# stages: (1) bootstrap = structure + candidate facts ONLY; (2) knowledge
+# filling = sdlc-knowledge-sync (code-driven); (3) route confirmation =
+# OWNER action on the domain map; (4) entry audit = audit-entry-coverage.sh
+# (strict). "routed=true" means the Owner confirmed the domain map — it does
+# NOT mean repository-wide knowledge is complete. Re-runs are idempotent and
+# never overwrite human-written knowledge prose.
 echo "  从当前需求 library/{requirement_id}/ 产物、代码与验证证据写入 .sdlc/business_domain/**。"
 exit 0

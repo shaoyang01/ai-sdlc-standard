@@ -24,13 +24,14 @@ version semantics.
 
 ## Stable File Paths
 
-Each DocFlow node owns one stable current artifact file for a requirement.
+Each DocFlow node owns one stable current artifact file for a requirement — the single exception is solution-gate, which owns **two** isolated-binding stable files (方案审核问题台账 for adversarial_scan, 方案审核 for formal_verdict; manual-runtime-semantic-contract §3.1). code-review 初审、返工复验、最终复验均更新同一 `{requirement_id}_代码审核.md`。
 
 | Node | Stable file |
 | --- | --- |
 | 00 需求资料 (requirement-intake) | `{requirement_id}_需求摘要.md` |
 | 01 技术方案 (solution-design) | `{requirement_id}_技术方案.md` |
-| 02 方案审核 (solution-gate) | `{requirement_id}_方案审核.md` |
+| 02 方案审核 (solution-gate / adversarial_scan) | `{requirement_id}_方案审核问题台账.md`（设计阶段台账；多轮扫描/复核更新同一文件） |
+| 02 方案审核 (solution-gate / formal_verdict) | `{requirement_id}_方案审核.md`（manifest solution-gate 当前指针指向此文件；多轮裁决更新同一文件） |
 | 03 任务规划 (task-planning) | `{requirement_id}_任务计划.md` |
 | 04 实现记录 (implementation) | `{requirement_id}_实现记录.md` |
 | 05 代码审核 (code-review) | `{requirement_id}_代码审核.md` |
@@ -43,14 +44,41 @@ registered separately in the manifest and does not map to a node capability.
 HTML, Lark, PDF, or other rendered outputs may use the same stable base name
 with the appropriate extension.
 
-Forbidden official path pattern:
+Forbidden official path patterns (suffixes, Chinese and English — creating a
+same-node, same-duty TOP-LEVEL current document beyond the canonical files
+above):
 
 ```text
-{requirement_id}_{artifact_type}_vN.md  # forbidden
+# forbidden: filename-based versioning
+{requirement_id}_{artifact_type}_vN.md      # forbidden (_v1/_v2/_vN)
+{requirement_id}_{artifact_type}_R1.md      # forbidden (_R1/-R2)
+{requirement_id}_{artifact_type}_round2.md  # forbidden (_round2)
+{requirement_id}_{artifact_type}_第1轮.md    # forbidden (_第N轮)
+{requirement_id}_{artifact_type}_对抗扫描.md  # forbidden
+{requirement_id}_{artifact_type}_闭环复核.md  # forbidden
+{requirement_id}_{artifact_type}_再次复核.md  # forbidden
+{requirement_id}_{artifact_type}_正式裁决.md  # forbidden
+{requirement_id}_{artifact_type}_复验.md      # forbidden
+{requirement_id}_{artifact_type}_再次复验.md  # forbidden
+{requirement_id}_{artifact_type}_准入修正.md  # forbidden
+{requirement_id}_{artifact_type}_最终复验.md  # forbidden
+{requirement_id}_{artifact_type}_最终版.md    # forbidden
+{requirement_id}_{artifact_type}_最新版.md    # forbidden
 ```
 
 That pattern is allowed only in documentation that explicitly labels it as a
-forbidden or legacy example.
+forbidden or legacy example. `{requirement_id}_方案审核问题台账.md` and
+`{requirement_id}_方案审核.md` are the two legal solution-gate canonical files
+and are NOT third-authority duplicates of each other (different bindings).
+
+Historical evidence: legacy files referenced by immutable findings, closure
+evidence, or historical manifests are not deleted — they may move to
+`{node_directory}/evidence/history/` with a migration table (原路径 / 归档路径 /
+历史用途 / 当前 canonical 路径). Historical files never become current, are
+never registered by the publisher as the current node path, and are never
+consumed downstream as current input. The legacy English
+`{requirement_id}_FindingLedger.md` is no longer a valid current-product path
+for new requirements (renamed 2026-09-16, contract §3.1).
 
 ## Scope And Exceptions
 

@@ -91,7 +91,7 @@ grep -q "档位未裁决前不产出" "${STANDARD_HOME}/skills/sdlc-solution-des
 
 # ---------------------------------------------------------------------------
 CASE_NAME="G3-F3: solution-gate scan+verdict (CONFIRMED) -> entry-update with gate fields"
-LEDGER="${LIB}/02-方案审核/20260905-fixture_FindingLedger.md"
+LEDGER="${LIB}/02-方案审核/20260905-fixture_方案审核问题台账.md"
 cat > "${LEDGER}" <<'EOF'
 # Finding Ledger（adversarial_scan 第 1 轮）
 - Version: 1.0.0
@@ -112,7 +112,7 @@ cat > "${GATE}" <<'EOF'
 | STANDARD 全要素 | 已覆盖 |
 EOF
 DG_GATE="$(digest_file "${GATE}")"
-bash "${PUBLISHER}" "${LIB}" entry-update --node solution-gate --declaration-seq 4 \
+bash "${PUBLISHER}" "${LIB}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 4 \
   --artifact-path "02-方案审核/20260905-fixture_方案审核.md" --version 1.0.0 --digest "${DG_GATE}" \
   --gate-result PASS --decision-depth STANDARD --decision-status CONFIRMED \
   > "${WORK_ROOT}/f3.out" 2>&1
@@ -204,19 +204,20 @@ echo s > "${V4_LIB}/00-需求资料/s.md"
 bash "${PUBLISHER}" "${V4_LIB}" init --requirement-id 20260905-v4 \
   --requested-depth STANDARD --depth-basis normalized_proposal --decision-scope FULL_REQUIREMENT > /dev/null 2>&1
 assert_exit 0 $?
-DG_S="$(digest_file "${V4_LIB}/00-需求资料/s.md")"
+echo s > "${V4_LIB}/00-需求资料/20260905-v4_需求摘要.md"
+DG_S="$(digest_file "${V4_LIB}/00-需求资料/20260905-v4_需求摘要.md")"
 bash "${PUBLISHER}" "${V4_LIB}" entry-update --node requirement-intake --declaration-seq 2 \
-  --artifact-path "00-需求资料/s.md" --version 1.0.0 --digest "${DG_S}" > /dev/null 2>&1
+  --artifact-path "00-需求资料/20260905-v4_需求摘要.md" --version 1.0.0 --digest "${DG_S}" > /dev/null 2>&1
 assert_exit 0 $?
-echo p > "${V4_LIB}/01-技术方案/p.md"
-DG_P="$(digest_file "${V4_LIB}/01-技术方案/p.md")"
+echo p > "${V4_LIB}/01-技术方案/20260905-v4_技术方案.md"
+DG_P="$(digest_file "${V4_LIB}/01-技术方案/20260905-v4_技术方案.md")"
 bash "${PUBLISHER}" "${V4_LIB}" entry-update --node solution-design --declaration-seq 3 \
-  --artifact-path "01-技术方案/p.md" --version 1.0.0 --digest "${DG_P}" > /dev/null 2>&1
+  --artifact-path "01-技术方案/20260905-v4_技术方案.md" --version 1.0.0 --digest "${DG_P}" > /dev/null 2>&1
 assert_exit 0 $?
-echo g > "${V4_LIB}/02-方案审核/g.md"
-DG_G="$(digest_file "${V4_LIB}/02-方案审核/g.md")"
-bash "${PUBLISHER}" "${V4_LIB}" entry-update --node solution-gate --declaration-seq 4 \
-  --artifact-path "02-方案审核/g.md" --version 1.0.0 --digest "${DG_G}" \
+echo g > "${V4_LIB}/02-方案审核/20260905-v4_方案审核.md"
+DG_G="$(digest_file "${V4_LIB}/02-方案审核/20260905-v4_方案审核.md")"
+bash "${PUBLISHER}" "${V4_LIB}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 4 \
+  --artifact-path "02-方案审核/20260905-v4_方案审核.md" --version 1.0.0 --digest "${DG_G}" \
   --gate-result PASS_WITH_RISK --decision-depth STANDARD --decision-status CONFIRMED > /dev/null 2>&1
 assert_exit 0 $?
 # Register a non-scan finding on the PWR copy
@@ -371,7 +372,7 @@ cat > "${GATE2}" <<'G3EOF'
 | 跨系统接口契约 | 未覆盖（升档缺口） |
 G3EOF
 DG_G2="$(digest_file "${GATE2}")"
-bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 4 \
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 4 \
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 1.0.0 --digest "${DG_G2}" \
   --gate-result PASS_WITH_RISK --decision-depth DEEP --decision-status ESCALATED \
   --stale-nodes solution-design > /dev/null 2>&1
@@ -428,7 +429,7 @@ cat > "${GATE2}" <<'G3EOF'
 | 状态机/回滚 | 已覆盖 |
 G3EOF
 DG_G2B="$(digest_file "${GATE2}")"
-bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 6 \
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 assert_exit 0 $?
@@ -496,7 +497,7 @@ cat > "${WORK_ROOT}/decl-esc.json" <<'G3EOF'
   "decision_depth": "DEEP",
   "decision_status": "CONFIRMED",
   "finding_registers": [
-    {"finding_id": "20260905-esc-F01", "discovered_at": "solution-gate", "root_cause_category": "design-risk", "earliest_affected_node_id": "solution-design", "source_revision": "2.0.0", "evidence_ref": "02-方案审核/20260905-esc_FindingLedger.md#F01"}
+    {"finding_id": "20260905-esc-F01", "discovered_at": "solution-gate", "root_cause_category": "design-risk", "earliest_affected_node_id": "solution-design", "source_revision": "2.0.0", "evidence_ref": "02-方案审核/20260905-esc_方案审核问题台账.md#F01"}
   ],
   "finding_actions": []
 }
@@ -534,7 +535,7 @@ assert_exit 0 $?
 assert_contains "${WORK_ROOT}/f11c.out" "NO-OP REPLAY"
 # H2: entry replay byte-identical assertion (same seq + same inputs -> no-op)
 MD_BEFORE="$(digest_file "${LIB2}/manifest.md")"
-bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 6 \
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 RC=$?
@@ -548,7 +549,7 @@ RC=$?
 if [[ "${RC}" == "1" ]]; then pass "H2: conflicting binding replay rejected"; else fail "H2: conflicting binding replay expected rejection, got ${RC}"; fi
 # entry 重放字节不变断言（H2）
 MD_BEFORE="$(digest_file "${LIB2}/manifest.md")"
-bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --declaration-seq 6 \
+bash "${PUBLISHER}" "${LIB2}" entry-update --node solution-gate --binding formal_verdict --declaration-seq 6 \
   --artifact-path "02-方案审核/20260905-esc_方案审核.md" --version 2.0.0 --digest "${DG_G2B}" \
   --gate-result PASS --decision-depth DEEP --decision-status CONFIRMED > /dev/null 2>&1
 RC=$?
