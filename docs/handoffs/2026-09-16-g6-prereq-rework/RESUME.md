@@ -1,108 +1,64 @@
-# G6 前置治理修复 跨机交接（R1 整改已推送，待 R2 复审）
+# G6 前置治理修复 跨机交接（收口与出版已完成；下一轮 = R1-P0-2 补完）
 
-> Date: 2026-09-16 · Author: AI_SDLC_PROJECT_CONTROLLER（实施会话）
-> 用途：换机恢复现场。新会话**先读本文件**，再按 §6 推进。
-> 本文件随分支入库——`git fetch --all` 后即可见，无需额外搬运材料。
+> Date: 2026-09-17 · Author: AI_SDLC_PROJECT_CONTROLLER（实施会话）
+> 用途：换机恢复现场。新会话**先读本文件**，再读同目录 `NEXT-ROUND-BRIEF.md`（下一轮工作项全文）。
+> 本文件随主线入库——`git fetch --all` 后即可见，无需额外搬运材料。
 
 ## 0. 一分钟恢复（新机器，先读这段）
 
 ```
 git fetch --all --prune
-git checkout fix/g6-prereq-governance-repair && git pull
-npm ci                      # 若无 node_modules
-npx tsc --noEmit            # 应 0
+git checkout feature/loop-runtime-v1 && git pull      # 本文件所在分支
+npm ci                                               # 若无 node_modules
+npx tsc --noEmit                                     # 应 0
 ```
 
-⚠️ **整改代码在 `fix/g6-prereq-governance-repair` @ `97a0030`（PR #171，OPEN）**，
-不在 `feature/loop-runtime-v1`（其头为 `63cde48`，即本分支的父提交）。
+然后按 §1 核对位置、§3 决定是否开工（需 Current User 授权）、`NEXT-ROUND-BRIEF.md` 拿到下一轮全部细节。
 
 ## 1. 当前位置（精确）
 
-- 产品仓 `shaoyang01/ai-sdlc-standard`：`feature/loop-runtime-v1` @ `63cde48`（基线，
-  G5 收口后）；整改分支 `fix/g6-prereq-governance-repair` @ `97a0030`（父 = `63cde48`，
-  单提交，19 文件 `+961/−98`）。
-- **PR #171 OPEN**（base = `feature/loop-runtime-v1`）——本 PR 是**复审对象**，复审
-  结论出来前不要合并。
-- G6 授权状态：**G6 未启动**。本轮是「G6 前置治理修复」的 R1 整改；R2 复审 PASS 后
-  G6 才可启动。
-- Control Plane：主状态 `main`（G5 完结出版已登记，`publication.status=COMPLETED`）。
-  **本轮未写 Control Plane**（按任务书边界）。
+- 产品仓主线 `feature/loop-runtime-v1` @ **`0b3fa7f`**（PR #172 合并）。
+- 提交链：`df94eb6`（#171 合并，六项阻塞整改）→ `fd4411e`（建议项收口提交）→ **`0b3fa7f`（#172 合并）**。
+- **G6 前置治理修复已收口并出版完成**；建议项轮已复审 PASS 并合并。
+- **G6 未启动**：进入 G6 仍需 Current User 单独授权；run8 / C03-E 完成判断 / C05 / D091 业务收编同样未授权。
+- **唯一未决**：复审在建议项轮发现两条 pre-existing 阻塞 **NEW-B1 / NEW-B2**（阻塞 G6 readiness，不阻塞已合并内容）→ 见 `NEXT-ROUND-BRIEF.md`。
 
-## 2. 任务性质与判定口径
+## 2. 已完成的收口链（可作凭证，勿重做）
 
-任务书 = Current User 的 G6 前置治理修复（两工作流 A/B），完成口径见其 §十：
-A 9 条（DocFlow）+ B 10 条（知识库初始化与审计）。
-真实回归样本 = `wms-monitor`（本机路径 `/Users/eric_shaoooo/meicai/projects/wms-monitor`；
-换机后按实际用户名解析，**不要硬编码**）。
-
-## 3. R1 裁决的 6 项阻塞与整改对照（R2 复核基线）
-
-| 编号 | 阻塞 | 整改（文件） |
-| --- | --- | --- |
-| P0-1 | 初始化器绕过暂存事务，`--dry-run` 也写入目标仓；chmod 暂存文件失败；回归 570/229 | `scripts/bootstrap-knowledge-target.sh`：`write_managed_file` 仅守marker、内容写 `STAGING_DIR`、路径补 `.sdlc/`、chmod 加存在守卫、跳过项进计划；`tests/bootstrap-knowledge-target.test.sh` 场景 19 改新契约 |
-| P0-2 | canonical 硬门只查形状，不绑需求 ID 与 binding；台账可当 solution-gate current；validator 未跟踪 | 新增 `scripts/lib/canonical-artifact-path.rb`（requirement_id+node+binding+path）；`scripts/publish-requirement-manifest.sh` 硬门接共享库 + `--binding` 强制；`scripts/validate-canonical-artifacts.rb` 同源 + gate-pointer 规则；`tests/loop-manifest-t5-parity.test.ts` 夹具路径绑定 REQ |
-| P1-3 | 合同头仍 1.0.0、§10 未登记、storage/flow/fixture 未同步 | `ai-sdlc/manual-runtime-semantic-contract.md`（头 →1.1.0 + 状态 + 修订记录 + §10 八行）、`artifact-storage.md`、`artifact-flow.md`、`artifact-versioning.md`（禁止清单逐行标注）、`tests/manual-chain-fixture.test.sh` |
-| P1-4 | 反向覆盖仍是一跳无上下文字符串匹配 | `scripts/audit-entry-coverage.rb`：`extract_type_references` + 类型化引用图 + BFS 逐层（≤6）+ 接口↔实现桥接 + 同名歧义保留未解析 + `Method=` 需 owner 上下文 |
-| P1-5 | `common/` 目录无条件判为页面片段，可隐藏业务入口 | `scripts/audit-entry-coverage.rb`：目录名降为弱证据（纯结构角色名仍片段；带业务结构则 business_entry） |
-| P1-6 | successor 缺失时旧入口自动执行退役 speckit 链 | `scripts/bootstrap-current-project.sh`：fail-closed（exit 3），退役链仅 `--legacy-speckit` 可达 |
-
-**两处冲突解决（须在 R2 复核中确认口径）**：
-1. 场景 19 断言「烘焙绝对路径」，与任务书 B4-5（不得写死用户名绝对路径）冲突 →
-   按「合同 > 低权威消费者」改写测试为新契约（显式 `AI_SDLC_STANDARD_HOME` 可用于
-   跨仓；无 override 且无可发现同级仓 → exit 3；生成物不含用户名路径）。
-2. T5 parity 夹具用目录名占位路径，与合同 §3.1（路径绑定 requirement_id）冲突 →
-   夹具路径改绑 `REQ`（低权威方修改），T5 恢复 32/32；**未改 `core/loop-manifest-yaml.ts`**。
-
-## 4. R1 整改验证结果（实施方实跑，R2 须独立复跑）
-
-| 项 | 结果 |
+| 环节 | 锚点 |
 | --- | --- |
-| bootstrap 90 场景 | **803/0**（原 570 passed / 229 failed） |
-| manual-chain fixture | **87/87** |
-| T5 parity / ls-ps / r3-rework | 32/32 · 93/93 · 90/90 |
-| tsc --noEmit | 0 |
-| 三 Ruby 校验器 | 全 PASS（skill-contracts 因禁止清单语境误判已修） |
-| 全量套件 | **166 文件 / 1767 断言 / 0 失败**（原 4 个失败文件清零） |
-| `git diff --check` | clean |
-| wms-monitor 临时副本 | BEFORE `14/182/287` → AFTER `39/131/207`，breakdown `90/23/18/142` 全在 BLOCKED 侧 |
+| 产品合并 | #171 → `df94eb6`（六项阻塞整改）；#172 → `0b3fa7f`（建议项收口） |
+| 独立复审 | R2 PASS（对象 `d0c3700`）；建议项轮 PASS（对象 `fd4411e`，含回退实验与同类缺陷全量扫掠） |
+| Exchange | Issue #124 → run `ba4cf79` → pointer `cff1e8d`；handoff sha256 `eafc65cd…`（5256 B）；`force_used: false` |
+| PKB 归档 | commit `a3bd51a`（handoff + `current.md` 同一提交，分支 `feature/knowledge-base-v1`） |
+| PKB 更正 | commit `4935534`（G5 completion 的 `artifact_sha256` 更正记录 + `current.md` 导航） |
+| CP 登记 | PR #83 → CP main `039e1f2`（publication COMPLETED，product_commit → `df94eb6`） |
+| CP Errata | PR #84 → CP main `09636c6`（历史 sha 更正记录） |
 
-## 5. 证据资产与复跑方法
+## 3. 恢复步骤与下一步
 
-- 临时副本：`/tmp/wms-mon-repro2`（不随仓迁移；换机后按 §7 重建）。
-- 修复前基线仓：`git worktree add /tmp/sdlc-before 63cde48`（BEFORE 审计用）。
-- BEFORE/AFTER 报告集：`/tmp/before2`、`/tmp/after4`（可独立复跑覆盖）。
-- 复跑命令（在副本内）：
-  ```
-  AI_SDLC_STANDARD_HOME=/tmp/sdlc-before            ./.sdlc/scripts/bash/audit-entry-coverage.sh --strict .
-  AI_SDLC_STANDARD_HOME=<整改分支工作区绝对路径>      ./.sdlc/scripts/bash/audit-entry-coverage.sh --strict .
-  ```
+1. 执行 §0；核验工作区干净、无未推送。
+2. 读 `NEXT-ROUND-BRIEF.md`（NEW-B1/NEW-B2 实证、复现命令、最小修复边界、四条非阻塞建议）。
+3. **向 Current User 确认是否开工**该轮（属新工作项，需授权）；确认后按既有流程：先实测复现 → 修复 → 定向套件 → 全量回归（`tsc` / `npm test` / 两个 shell 套件 / 三 Ruby 校验器 / 越界零 diff）→ 提交推送 → 开 PR（base 必须是 `feature/loop-runtime-v1`，否则 CI 不触发）→ **先独立复审再合并**。
+4. 复审 PASS 后再议：是否在 CP/PKB 补一笔「R1-P0-2 补完 + G6 readiness 真实状态」的登记（当前收口记录未含这两条阻塞，fresh Controller 会误判前置条件已满足）。
+5. 中途再换机：更新本文件 §1/§2 与 `NEXT-ROUND-BRIEF.md` 状态。
 
-## 6. 恢复步骤与下一步
+## 4. 环境与工具链前置（换机必读）
 
-1. 执行 §0 两条命令 + 自检（skeleton 见 §1）。
-2. 向 Current User **索取 R2 复审 prompt**（按既有模板文体：全量、只读、深度根因合并式；
-   对象 = 本文件所在分支头 `97a0030`，PR #171；判据 = 任务书 §十 A9/B10 + R1 六项阻塞关闭）。
-   **prompt 不入仓**（沿既有口径：会话内展示）。
-3. 交独立复审方（其他 agent）。R2 判定：
-   - **FAIL** → 逐阻塞**先实测复现**再修复；提交叠放在 `97a0030` 之上（新分支 + 新 PR）。
-   - **PASS** → 任务书两项治理修复收口（Current User 验收 + 合并授权）→ **G6 才可启动**。
-4. 中途再换机：更新本文件 §1/§3/§4。
-
-## 7. 环境与工具链前置（换机必读）
-
-- Node **v24.x / ABI 137**（本机实测 v24.12.0，`require('better-sqlite3')` 通过）。
-  v22（ABI 127）下 store 测试会以 `STORE_FAILURE` 失败——ABI 不匹配，非代码缺陷。
+- Node **v24.x / ABI 137**（本机实测 v24.12.0，`require('better-sqlite3')` 通过）。v22（ABI 127）下 store 测试会以 `STORE_FAILURE` 失败——ABI 不匹配，非代码缺陷。
 - **ruby 3.3.12 + Psych 5.1.2**（本机实测）。
-- 真实样本路径按实际用户名解析：本机 `/Users/eric_shaoooo/meicai/projects/wms-monitor`；
-  换机后可能是 `/Users/<当前用户>/meicai/projects/wms-monitor`——**先验证存在性**。
-- `~/.agents` / `~/.codex` 安装副本与权威源不一致，且 `scripts/sync-skills.sh` 不覆盖
-  这两个目标：按任务书 A11-6 **报告阻断**，未自建覆盖脚本。
+- ⚠️ **两个 shell 套件不在 CI**：`bash tests/bootstrap-knowledge-target.test.sh`（应 820/0）、`bash tests/manual-chain-fixture.test.sh`（应 95/0）必须手动跑；CI 只跑 `tsc` / `npm test`（166 文件 1767 断言）/ 三 Ruby 校验器 / 变异 harness。
+- 真实样本 `wms-monitor`：路径按当前用户名解析（本机 `/Users/<user>/meicai/projects/wms-monitor`），**只读**；审计一律在临时副本内（CoW 克隆 `cp -cR` 瞬时完成）。
+- `tests/loop-codex-implementation-adapter.test.ts` 的 D05 全仓纯净守卫：并发写仓工作区会翻转为 file-level 失败（已知运维项）。
 
-## 8. 记录用 wms-monitor 审计数字（换机后对照）
+## 5. 证据资产与复现
 
-2026-09-14（任务书 §五 基线，旧脚本口径）：L4 35 / 具体流程文档 26 / 入口覆盖文档 9 /
-入口 270 / 核心单元 379 / 未归档入口 12 / 未归档核心单元 165 / 跨域冲突 306（入口 211 +
-核心 95）——混合真实遗漏与误判，**不得机械清零**。
+- NEW-B1 / NEW-B2 的**完整复现命令**（含 fixture 构造每一步）在 `NEXT-ROUND-BRIEF.md` §2/§3——`/tmp` 下的探针副本不随仓迁移，按 brief 重建即可。
+- 本轮主线上一次交接（R1 整改、R2 复审前）见本目录 git 历史（commit `d0c3700`）。
 
-本机 R1 复跑（旧脚本 BEFORE / 整改后 AFTER）：未归档入口 14 → 39、核心单元 182 → 131、
-跨域冲突 287 → 207。差异原因见 §4 与 PR #171 描述。
+## 6. 本次交接刻意未做的事
+
+- 未启动下一轮整改（等 Current User 授权）。
+- 未为 #172 这轮合并写 CP/PKB（收口后的改进轮，不是新的 closure event；`source_refs.product_commit` 是登记时刻快照，不需追每一笔合并）。
+- 未改写任何历史（无 force push / rebase / amend）。
+- 未触碰 G5 冻结面、`wms-monitor` 真实仓、合同冻结语义。
