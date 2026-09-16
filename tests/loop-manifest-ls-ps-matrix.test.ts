@@ -10,10 +10,18 @@
 // emitter-derived golden is what let the R2 phantom-width bug survive a
 // round, so the rule here is: goldens only from the reference interpreter.
 import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
 import { dumpRubyYaml, parseRubyYaml, LoopManifestYamlError, type YamlValue } from "../core/loop-manifest-yaml";
 
 let passed = 0;
 let failed = 0;
+/** LIVE ruby reference for a whole document — never a baked golden. */
+function rubyDumpFor(mapping: Record<string, YamlValue>): string {
+  return execFileSync("ruby", ["-ryaml", "-rjson", "-e", 'puts YAML.dump(JSON.parse(STDIN.read))'], {
+    input: JSON.stringify(mapping),
+  }).toString();
+}
+
 function ok(condition: boolean, message: string): void {
   if (condition) {
     passed += 1;
@@ -217,13 +225,21 @@ function main(): void {
     // (5) family A - R10-RC3-1(a): a NULL first element inside nested
     //     sequences (seq-item mapping value / chain-head mapping value
     //     positions).
-    //   shape:   {l:[{a:[null]}]} and deeper nestings ({l:[[{a:[null]}]]}).
-    //   truth:   at flat seq-item positions our emission is byte-identical
-    //            with ruby; at nested seq-HEAD positions the emission differs
-    //            (`-\n  -` vs `- -`); ruby ALWAYS reads the bytes fine; OUR
-    //            reader ALWAYS fails closed (LoopManifestYamlError: expected
-    //            'key: value'). Same behaviour on the r7/r8/r9/r10 heads =
-    //            R2-era, not a regression.
+    //   shape:   {l:[{a:[null]}]} and deeper nestings ({l:[[{a:[null]}]]},
+    //            depth >= 3, null-only / mixed elements — R11 verified 7/7
+    //            forms BYTE-EQ).
+    //   truth (R11-corrected layered history; the R10 registration claiming
+    //   "nested seq-HEAD emission differs" and an undifferentiated
+    //   "same behaviour on the r7..r10 heads" were BOTH false):
+    //     - flat seq-item AND chain-head positions: our emission is
+    //       byte-identical with ruby and our reader fails closed
+    //       (LoopManifestYamlError: expected 'key: value') — identical on
+    //       all four heads, R2-era;
+    //     - nested seq-HEAD positions: the r7 head crashed UNCONTROLLED
+    //       (TypeError from the emitter), the r8 head emitted DIFF bytes
+    //       with the null sequence silently truncated (self-read "ok" —
+    //       content loss invisible), and the r9 head onward is BYTE-EQ +
+    //       fail-closed (fixed during R8/R9).
     //   reach:   unreachable - the frozen manifest schema has no null sequence
     //            elements (null appears only as mapping values); fail-closed
     //            is the safe direction.
@@ -231,7 +247,7 @@ function main(): void {
     const famAEmit = dumpRubyYaml(famA);
     ok(
       famAEmit === "---\nl:\n- a:\n  -\n",
-      "residual(5) family A flat position: emission captured (this form byte-identical with ruby, probe-verified)",
+      "residual(5) family A flat position: emission captured (byte-identical with ruby, probe-verified)",
     );
     let famASelfRead = "ok";
     try {
@@ -239,36 +255,95 @@ function main(): void {
     } catch (error) {
       famASelfRead = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
     }
-    ok(famASelfRead === "fail-closed", "residual(5) family A: our reader fails closed (declared, R2-era)");
+    ok(famASelfRead === "fail-closed", "residual(5) family A: our reader fails closed (R2-era, flat position)");
 
-    // (6) family B - R10-RC3-1(b): QUOTED KEYS at seq-item mapping / chain-
-    //     head positions (YAML 1.1 boolean words y/n/yes, space-bearing keys).
-    //   shape:   {l:[{y:1}]} / {l:[[{y:1}]]} / {z:[{n:"x"}]} / {l:[{"a b":1}]}.
-    //   truth:   flat seq-item emission is byte-identical with ruby (`- "y": 1`
-    //            — we quote exactly like ruby); nested seq-HEAD emission
-    //            differs (`-\n  -` vs `- -`); ruby reads fine; OUR reader
-    //            FAILS CLOSED on boolean-word keys ("unterminated quoted
-    //            scalar", R2-era) — while space-bearing keys read back EXACT
-    //            (probed R5 rework, value-faithful).
+    // R5-B1-Ⅱ family A nested seq-HEAD forms: BYTE-EQ on the current head
+    // (7/7 nested variants verified against ruby — R11 variant-1 correction:
+    // the R10 registration claiming a nested emission difference was false).
+    const famANested: Record<string, YamlValue>[] = [
+      { l: [[{ a: [null] }]] },
+      { l: [{ a: [{ b: [null] }] }] },
+      { l: [[null]] },
+      { l: [{ a: [null, 1] }] },
+      { l: [[{ a: [null] }, { b: 1 }]] },
+      { l: [{ a: [[null]] }] },
+      { o: { i: { k: [null] } } },
+    ];
+    for (const doc of famANested) {
+      ok(dumpRubyYaml(doc) === rubyDumpFor(doc), `residual(5) family A nested ${JSON.stringify(Object.keys(doc)[0]!)}: BYTE-EQ with ruby`);
+    }
+
+    // (6) family B - R10-RC3-1(b) / R11-RC1-1 variant 3: QUOTED KEYS at
+    //     seq-item mapping / chain-head positions, classified EXHAUSTIVELY
+    //     (R11 probe: emission is BYTE-EQ with ruby across all 15 key forms —
+    //     the divergence is entirely in OUR reader's self-read).
+    //   shape:   {l:[{<quoted-key>:1}]} — key forms below.
+    //   truth (reader behaviour classes):
+    //     a) resolver-sensitive keys (boolean words y/n/yes/no/true/false/
+    //        on/off, numeric forms 1/1.5, ~) -> FAIL CLOSED
+    //        (R2-era; class name widened per R11 — the R10 registration only
+    //        said "boolean words");
+    //     b) colon-TAIL / colon-HEAD keys (`ab:` / `:ab`) -> FAIL CLOSED;
+    //     c) colon-WITHOUT-space keys (`a:b`) -> SILENT CORRUPTION: our bytes
+    //        read back as a STRING ITEM {l:["a:b: 1"]} while ruby cross-reading
+    //        our bytes is EXACT ({l:[{"a:b":1}]}) — the only class outside the
+    //        fail-closed principle (R11-registered);
+    //     d) space-bearing keys (`a b`) -> value-FAITHFUL (R5-probed).
     //   reach:   unreachable - the manifest key vocabulary is all snake_case
-    //            (no boolean-word or space-bearing keys anywhere in the
-    //            frozen schema).
+    //            (no boolean-word / numeric / colon-bearing / space-bearing
+    //            keys anywhere in the frozen schema).
     const famB = { l: [{ y: 1 }] };
     const famBEmit = dumpRubyYaml(famB);
     ok(
       famBEmit === "---\nl:\n- \"y\": 1\n",
       "residual(6) family B flat position: emission quotes exactly like ruby (probe-verified)",
     );
-    let famBSelfRead = "ok";
-    try {
-      parseRubyYaml(famBEmit);
-    } catch (error) {
-      famBSelfRead = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+    const resolverSensitive = ["y", "n", "yes", "no", "true", "false", "on", "off", "1", "1.5", "~"];
+    for (const key of resolverSensitive) {
+      let cls = "ok";
+      try {
+        parseRubyYaml(dumpRubyYaml({ l: [{ [key]: 1 }] }));
+      } catch (error) {
+        cls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+      }
+      ok(cls === "fail-closed", `residual(6a) resolver-sensitive quoted key ${JSON.stringify(key)}: our reader fails closed (declared)`);
     }
-    ok(famBSelfRead === "fail-closed", "residual(6) family B boolean-word key: our reader fails closed (declared, R2-era)");
+    for (const key of ["ab:", ":ab"]) {
+      let cls = "ok";
+      try {
+        parseRubyYaml(dumpRubyYaml({ l: [{ [key]: 1 }] }));
+      } catch (error) {
+        cls = error instanceof LoopManifestYamlError ? "fail-closed" : "other";
+      }
+      ok(cls === "fail-closed", `residual(6b) colon-tail/head quoted key ${JSON.stringify(key)}: our reader fails closed (declared)`);
+    }
+    {
+      const colonNoSpace = dumpRubyYaml({ l: [{ "a:b": 1 }] });
+      const selfValue = JSON.stringify(parseRubyYaml(colonNoSpace));
+      ok(
+        selfValue === JSON.stringify({ l: ["a:b: 1"] }),
+        "residual(6c) colon-without-space quoted key: SILENT CORRUPTION to a string item (declared, R11)",
+      );
+      const rubyCross = execFileSync("ruby", ["-ryaml", "-rjson", "-e", 'puts JSON.generate(YAML.load(STDIN.read))'], {
+        input: colonNoSpace,
+      }).toString().trim();
+      ok(
+        rubyCross === JSON.stringify({ l: [{ "a:b": 1 }] }),
+        "residual(6c) ruby cross-reading our bytes is EXACT (the corruption is one-sided, declared)",
+      );
+    }
     ok(
       JSON.stringify(parseRubyYaml(dumpRubyYaml({ l: [{ "a b": 1 }] }))) === JSON.stringify({ l: [{ "a b": 1 }] }),
-      "residual(6) family B space-bearing key: reads back value-exact (probed, not fail-closed)",
+      "residual(6d) family B space-bearing key: reads back value-exact (probed, not fail-closed)",
+    );
+
+    // (7) R10 suggestion 2 note (registered in situ): the rc2-values probe's
+    //     "seq-of-seq-item block (3rd level)" form is rejected BY RUBY TOO —
+    //     a ruby-same-reject shape, i.e. bidirectional fail-closed, NOT a
+    //     divergence. Recorded here so later rounds do not misread it.
+    ok(
+      JSON.stringify(parseRubyYaml("---\nl:\n- a: 1\n  b: 2\n")) === JSON.stringify({ l: [{ a: 1, b: 2 }] }),
+      "suggestion-2 note: normal seq-item map values stay exact; the 3rd-level block form is ruby-same-reject (bidirectional fail-closed, not a divergence)",
     );
   }
 
