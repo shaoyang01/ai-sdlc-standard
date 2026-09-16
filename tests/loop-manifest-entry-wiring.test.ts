@@ -24,6 +24,7 @@ import {
   sealManifest,
 } from "../core/loop-manifest-projector";
 import { dumpRubyYaml, parseRubyYaml } from "../core/loop-manifest-yaml";
+import { extractManifestYaml } from "../core/loop-manifest-projector";
 import {
   releaseManifestProjectionBlock,
   resolveManifestReadiness,
@@ -134,7 +135,7 @@ function manifestExists(libraryDir: string): boolean {
 }
 
 function readManifestDoc(libraryDir: string): Record<string, unknown> {
-  return parseRubyYaml(readFileSync(join(libraryDir, "manifest.md"), "utf8")) as Record<string, unknown>;
+  return parseRubyYaml(extractManifestYaml(readFileSync(join(libraryDir, "manifest.md"), "utf8"))) as Record<string, unknown>;
 }
 
 /**

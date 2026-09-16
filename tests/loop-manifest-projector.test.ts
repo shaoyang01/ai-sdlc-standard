@@ -31,6 +31,7 @@ function initEntryForTest(node: "solution-gate"): Parameters<typeof foldEventOnt
   } as Parameters<typeof foldEventOntoEntry>[0];
 }
 import { dumpRubyYaml, parseRubyYaml, LoopManifestYamlError } from "../core/loop-manifest-yaml";
+import { extractManifestYaml } from "../core/loop-manifest-projector";
 
 let passed = 0;
 let failed = 0;
@@ -247,8 +248,8 @@ console.log("G5-T2 manifest projector — YAML emitter byte shapes (D-5)");
   ok(quoted.includes("f: '1.5'\n"), "float-shaped string quoted");
   ok(quoted.includes("i: '42'\n"), "int-shaped string quoted");
   ok(quoted.includes("b: 'true'\n"), "bool-shaped string quoted");
-  ok(quoted.includes("y: 'yes'\n"), "YAML 1.1 bool yes quoted");
-  ok(quoted.includes("n: 'null'\n"), "null-shaped string quoted");
+  ok(quoted.includes("\"y\": 'yes'\n"), "YAML 1.1 bool yes quoted (key y double-quoted per Ruby)");
+  ok(quoted.includes("\"n\": 'null'\n"), "null-shaped string quoted (key n double-quoted per Ruby)");
   ok(quoted.includes("colon: 'a: b'\n"), "colon-space string single-quoted");
   ok(quoted.includes("hash: 'a #b'\n"), "space-hash string single-quoted");
   ok(quoted.includes('lead: " a"\n'), "leading-space string double-quoted");
@@ -305,7 +306,7 @@ console.log("G5-T2 manifest projector — takeover A, catch-up, replay no-op, ta
     const takeoverOutcome = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
     ok(takeoverOutcome.kind === "PUBLISHED" && takeoverOutcome.tookOver, `takeover A publishes (${JSON.stringify(takeoverOutcome)})`);
 
-    const afterTakeover = parseRubyYaml(readManifestText(libraryDir));
+    const afterTakeover = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     const prov = afterTakeover.projection_provenance as Record<string, never>;
     ok(prov !== undefined, "provenance present after takeover");
     ok(prov.mode === "manual-takeover-A", "mode is manual-takeover-A");
@@ -354,7 +355,7 @@ console.log("G5-T2 manifest projector — takeover A, catch-up, replay no-op, ta
     const tailOutcome = projectLoopManifest(request);
     ok(tailOutcome.kind === "PUBLISHED", `tail projection publishes (${JSON.stringify(tailOutcome)})`);
 
-    const afterTail = parseRubyYaml(readManifestText(libraryDir));
+    const afterTail = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     ok(afterTail.projected_through === 2, "projected_through advanced to the tail head");
     const intakeEntry = (afterTail.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
     ok(intakeEntry.status === "current" && intakeEntry.digest === dg("c"), "artifact binding slot updated from the revision");
@@ -365,7 +366,7 @@ console.log("G5-T2 manifest projector — takeover A, catch-up, replay no-op, ta
 
     // Rehashed tamper on a bound field → prefix re-derivation catches it.
     const tamperedText = readManifestText(libraryDir);
-    const tampered = parseRubyYaml(tamperedText);
+    const tampered = parseRubyYaml(extractManifestYaml(tamperedText));
     const tamperedEntries = (tampered.entries as readonly Record<string, unknown>[]).map((e, i) =>
       i === 0 ? { ...e, digest: dg("9") } : { ...e },
     );
@@ -431,7 +432,7 @@ console.log("G5-T2 manifest projector — takeover A with W2-style manual findin
     const outcome = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
     ok(outcome.kind === "PUBLISHED", `W2 takeover publishes (${JSON.stringify(outcome)})`);
 
-    const state = parseRubyYaml(readManifestText(libraryDir));
+    const state = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     const map = (state.projection_provenance as Record<string, never>).logical_identity_map as Record<string, unknown>;
     const mapFindings = map.findings as Record<string, unknown>[];
     ok(mapFindings.length === 2, `both manual findings registered (got ${mapFindings.length})`);
@@ -537,7 +538,7 @@ console.log("G5-T2 manifest projector — finding registration, lag alignment, D
 
     const regOutcome = projectLoopManifest(request);
     ok(regOutcome.kind === "PUBLISHED", `new registration published (${JSON.stringify(regOutcome)})`);
-    const afterReg = parseRubyYaml(readManifestText(libraryDir));
+    const afterReg = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     const rows = afterReg.finding_index as Record<string, unknown>[];
     ok(rows.length === 1 && rows[0]!.finding_id === finding.findingId && rows[0]!.status === "OPEN", "OPEN finding projected into the index");
     ok(afterTailEntriesUnchanged(afterReg, readManifestBeforeRegistration(libraryDir, request)), "V9 discipline: registration publication leaves entries untouched");
@@ -572,7 +573,7 @@ function readManifestBeforeRegistration(libraryDir: string, request: { store: Lo
 }
 
 function afterTailEntriesUnchanged(after: Record<string, unknown>, before: string): boolean {
-  const beforeState = parseRubyYaml(before);
+  const beforeState = parseRubyYaml(extractManifestYaml(before));
   return JSON.stringify(beforeState.entries) === JSON.stringify(after.entries);
 }
 
@@ -684,7 +685,7 @@ console.log("G5-T2-R1 rework — invalidation propagation stays write/read consi
 
     const propOutcome = projectLoopManifest(request);
     ok(propOutcome.kind === "PUBLISHED", `edge propagates through publication (${JSON.stringify(propOutcome)})`);
-    let state = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir))));
+    let state = JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)))));
     const designEntry = state.entries.find((e: Record<string, unknown>) => e.node === "solution-design");
     ok(designEntry.status === "stale", `design entry carries the propagated staleness (${String(designEntry.status)})`);
 
@@ -793,7 +794,7 @@ console.log("G5-T2-R1 rework — depth/extra-key/missing-row/duplicate-row tampe
     ok(projectLoopManifest(request).kind === "PUBLISHED", "baseline published");
 
     const rewriteTampered = (mutate: (doc: Record<string, unknown>) => void): void => {
-      const doc = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+      const doc = JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(readManifestText(libraryDir))))) as Record<string, unknown>;
       mutate(doc);
       const resealed = sealManifest(doc as never);
       writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...doc, manifest_digest: resealed.manifest_digest }), "utf8");
@@ -840,7 +841,7 @@ console.log("G5-T2-R1 rework — depth/extra-key/missing-row/duplicate-row tampe
       },
     ]));
     projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
-    const doc2 = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+    const doc2 = JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(readManifestText(libraryDir))))) as Record<string, unknown>;
     doc2.finding_index = [doc2.finding_index as unknown[]][0]![0] === undefined ? [] : [
       ...(doc2.finding_index as Record<string, unknown>[]),
       ...(doc2.finding_index as Record<string, unknown>[]).slice(0, 1),
@@ -924,7 +925,7 @@ console.log("G5-T2-R1 rework — takeover-B consistent takeover with REAL manual
 
     const bOutcome = projectLoopManifest(request);
     ok(bOutcome.kind === "PUBLISHED" && bOutcome.tookOver, `takeover-B with real Chinese basename publishes (RC4-1(a); ${JSON.stringify(bOutcome)})`);
-    const bState = parseRubyYaml(readManifestText(libraryDir));
+    const bState = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     ok((bState.projection_provenance as Record<string, unknown>).mode === "manual-takeover-B", "mode B recorded");
     ok(bState.projected_through === 4, "cursor advanced to the journal head at acceptance");
 
@@ -1012,7 +1013,7 @@ console.log("G5-T2-R2 rework — reconciled-domain comparison has a journal refe
     ok(projectLoopManifest(request).kind === "PUBLISHED", "takeover-B baseline publishes");
 
     const rewriteTampered = (mutate: (doc: Record<string, unknown>) => void): void => {
-      const doc = JSON.parse(JSON.stringify(parseRubyYaml(readManifestText(libraryDir)))) as Record<string, unknown>;
+      const doc = JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(readManifestText(libraryDir))))) as Record<string, unknown>;
       mutate(doc);
       const resealed = sealManifest(doc as never);
       writeFileSync(join(libraryDir, "manifest.md"), dumpRubyYaml({ ...doc, manifest_digest: resealed.manifest_digest }), "utf8");
@@ -1167,7 +1168,7 @@ console.log("G5-T2-R2 rework — branch-2 write side keeps the manual face, prop
 
     const outcome = projectLoopManifest(request);
     ok(outcome.kind === "PUBLISHED", `mixed publish (${JSON.stringify(outcome)})`);
-    const state = parseRubyYaml(readManifestText(libraryDir));
+    const state = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     const intake = (state.entries as Record<string, unknown>[]).find((e) => e.node === "requirement-intake")!;
     const design = (state.entries as Record<string, unknown>[]).find((e) => e.node === "solution-design")!;
     ok(intake.artifact_path === "00-需求资料/req_需求摘要.md", `branch-2 keeps the manual path (${String(intake.artifact_path)})`);
@@ -1221,7 +1222,7 @@ console.log("G5-T2-R2 rework — real publisher shape without a corrections key 
       finding_index: [], declaration_log: [], repair_records: [],
     };
     writeManualManifest(libraryDir, realShape);
-    const before = parseRubyYaml(readManifestText(libraryDir));
+    const before = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     ok(!("corrections" in before), "fixture really omits the corrections key");
 
     // The R2-B2 crash was an uncaught TypeError on load — any structured
@@ -1229,7 +1230,7 @@ console.log("G5-T2-R2 rework — real publisher shape without a corrections key 
     const outcome = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
     ok(outcome.kind === "PUBLISHED", `real-shape takeover-A loads and publishes (${JSON.stringify(outcome)})`);
 
-    const after = parseRubyYaml(readManifestText(libraryDir));
+    const after = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     ok(!("corrections" in after), "absent-means-absent: the key stays absent after republication");
     ok(projectLoopManifest(request).kind === "NO_OP", "real-shape replay is NO_OP");
 
@@ -1240,7 +1241,7 @@ console.log("G5-T2-R2 rework — real publisher shape without a corrections key 
     writeManualManifest(dir2, withEmpty);
     const outcome2 = projectLoopManifest({ ...request, libraryDir: dir2, takeoverAcceptedAt: nextTs() });
     ok(outcome2.kind === "PUBLISHED", `explicit-empty shape publishes (${JSON.stringify(outcome2)})`);
-    const after2 = parseRubyYaml(readFileSync(join(dir2, "manifest.md"), "utf8"));
+    const after2 = parseRubyYaml(extractManifestYaml(readFileSync(join(dir2, "manifest.md"), "utf8")));
     ok("corrections" in after2, "explicit key stays explicit (never dropped)");
   } finally {
     try { store.close(); } catch { /* cleanup tolerance */ }
@@ -1288,7 +1289,7 @@ console.log("G5-T2-R3 rework — broken-octal digest forms quote byte-identicall
 
     const takeover = projectLoopManifest({ ...request, takeoverAcceptedAt: nextTs() });
     ok(takeover.kind === "PUBLISHED", `W2-shape takeover-A passes self-digest (${JSON.stringify(takeover)})`);
-    const republished = parseRubyYaml(readManifestText(libraryDir));
+    const republished = parseRubyYaml(extractManifestYaml(readManifestText(libraryDir)));
     const log = republished.declaration_log as Record<string, unknown>[];
     ok(log[0]!.input_digest === brokenOctalDigest, "broken-octal digest round-trips through seal/verify/load");
     ok(("corrections" in republished) === ("corrections" in base), "optional-key shape preserved");
