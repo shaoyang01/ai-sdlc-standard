@@ -72,7 +72,7 @@ library/{requirement_id}/
 | --- | --- | --- |
 | `00-需求资料/` | 必需（唯一入口） | 保存需求摘要与 change record（新需求/补充/变更/返工/反馈驱动变更）、原始需求、截图、飞书导出、测试或线上反馈整理（必要时渲染到 `00-需求资料/反馈/`）。 |
 | `01-技术方案/` | 必需 | 保存面向人工阅读的技术方案，按已裁决深度档位（LIGHT/STANDARD/DEEP）深化，由 solution-design 执行 binding 生成。 |
-| `02-方案审核/` | 必需 | 保存 solution-gate 产物：adversarial_scan 的 Finding Ledger 与 formal_verdict 的 Gate Result + 设计深度裁决（depth + decision_status）；两角色必须由不同 Agent binding 执行。 |
+| `02-方案审核/` | 必需 | 保存 solution-gate 产物（两个隔离 binding 各一个稳定当前文件）：adversarial_scan 的 `{id}_方案审核问题台账.md`（对抗扫描发现台账）与 formal_verdict 的 `{id}_方案审核.md`（Gate Result + 设计深度裁决 depth/decision_status）；两角色必须由不同 Agent binding 执行；历史轮次文件迁 `02-方案审核/evidence/history/` 并登记迁移表，不成为 current。 |
 | `03-任务规划/` | 必需 | 保存 task-planning 的任务计划与实现前一致性审计结论（v2 新增节点）。 |
 | `04-实现记录/` | 实际实现时必需 | 保存实现摘要、涉及模块、验证情况、未完成项和残余风险；每项声明引用 diff、测试输出或 journal 事件证据。 |
 | `05-代码审核/` | 实际实现时必需 | 保存代码审查报告（Review Summary，含 Finding Ledger / closure review）。 |
@@ -112,8 +112,8 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 示例：
 
 ```text
-2026-08-22 | binding-A / sdlc-solution-gate (adversarial_scan) | 对抗扫描 | 02-方案审核 | ..._方案审核.md | Finding Ledger 首轮建立（3 项 finding） | Reviewed Version 1.0.0
-2026-08-22 | binding-B / sdlc-solution-gate (formal_verdict) | 正式裁决 | 02-方案审核 | ..._方案审核.md | PASS | depth=STANDARD, decision_status=DECIDED
+2026-08-22 | binding-A / sdlc-solution-gate (adversarial_scan) | 对抗扫描 | 02-方案审核 | {id}_方案审核问题台账.md | 台账首轮建立（3 项 finding） | Reviewed Version 1.0.0
+2026-08-22 | binding-B / sdlc-solution-gate (formal_verdict) | 正式裁决 | 02-方案审核 | {id}_方案审核.md | PASS（绑定当前台账版本/digest） | depth=STANDARD, decision_status=CONFIRMED
 ```
 
 ## 文件命名
@@ -145,7 +145,7 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 
 ## 版本规则
 
-同一节点只有一个稳定当前文件。版本写入文档内部 Metadata：
+同一节点只有一个稳定当前文件，**唯一例外是 solution-gate**：它承载两个隔离 binding，各有一个稳定当前文件——`{id}_方案审核问题台账.md`（adversarial_scan）与 `{id}_方案审核.md`（formal_verdict，manifest solution-gate 当前指针指向此文件）。台账不创建第二个 manifest 节点（manual-runtime-semantic-contract §3.1）。多轮扫描/复核/裁决/复验**更新同一文件**，禁止创建轮次或状态后缀的新顶层文件。版本写入文档内部 Metadata：
 
 ```markdown
 ## Metadata
@@ -176,8 +176,11 @@ Activity Log 应记录工作流动作，而不是聊天全文。
 ```text
 20260629-ai-sdlc-standard_技术方案_v1.html  # forbidden
 20260629-ai-sdlc-standard_技术方案_v2.html  # forbidden
-20260629-ai-sdlc-standard_方案审核_v1.md  # forbidden
-20260629-ai-sdlc-standard_方案审核_v2.md  # forbidden
+20260629-ai-sdlc-standard_方案审核_v1.md   # forbidden
+20260629-ai-sdlc-standard_方案审核_v2.md   # forbidden
+20260629-ai-sdlc-standard_方案审核_第2轮.md  # forbidden（中文轮次后缀）
+20260629-ai-sdlc-standard_代码审核_复验.md    # forbidden（复验后缀）
+20260629-ai-sdlc-standard_方案审核问题台账.md # LEGAL: adversarial_scan 的 canonical 台账（双 binding 之一）
 ```
 
 这些 filename-based versioning 形式只能出现在明确标注为禁止或历史迁移说明的上下文中。

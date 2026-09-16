@@ -20,6 +20,7 @@ version: 0.2.0
 6. formal_verdict role：只消费本轮 scan 的 Ledger 做裁决并输出组合之一（manual-runtime-semantic-contract §4.3）：`CONFIRMED`+`decisionDepth=requiredDepth`（零回流）/ `ESCALATED`+上调档位（回流 solution-design 增量补强）/ `BLOCKED_UNKNOWN`（回流补事实，不可进入下游）；`scannedDesignVersion == designVersion` 为裁决前置（Ledger 所审方案与所裁方案同一修订）。两角色由不同 Agent binding 承载，禁止同一执行者合并执行。
 7. Do not write or rewrite the specification; do not modify production code.
 8. Treat `library/{requirement_id}/01-技术方案/` as the primary input; write under `library/{requirement_id}/02-方案审核/`。
+8a. **同文件多轮更新（canonical 稳定产物，contract §3.1）**：adversarial_scan 的全部轮次（baseline 与 closure review）**更新同一** `02-方案审核/{id}_方案审核问题台账.md`（原 `{id}_FindingLedger.md`，2026-09-16 更名）；formal_verdict 的全部轮次（含第 2/3 轮裁决）**更新同一** `02-方案审核/{id}_方案审核.md`。再次扫描/复核/裁决：读取已有 canonical 文件 → 更新正文为当前有效内容 → 递增 Metadata Version → 追加修订记录 → 经 publisher 更新 manifest 版本/digest/状态。**禁止**创建 `_{id}_第2轮`、`_对抗扫描`、`_闭环复核`、`_正式裁决`、`_最终版` 等带轮次或状态后缀的新顶层文件（完整禁止清单见 artifact-versioning.md）；关闭 Finding 不产生新审核报告文件——状态迁移经 publisher 生命周期操作记录。manifest 的 solution-gate 当前指针指向 `{id}_方案审核.md`；正式裁决通过路径/版本/digest 绑定当前 `{id}_方案审核问题台账.md`。
 9. Residual clarification 只能追溯到已批准 DocFlow 产物或显式用户确认；触及 Scope/state/data/failure/compatibility/acceptance 时停止并回流 solution-design。
 10. 裁决产出经 `scripts/publish-requirement-manifest.sh` 写入 requirement manifest（entry-update 含 `gate-result`/`decision-depth`/`decision-status`；ESCALATED/FAIL 时同一次发布将方案/Gate/下游标记 stale——§5.4 同一 manifest 修订语义）；不依赖 LOOP runtime 推进。
 

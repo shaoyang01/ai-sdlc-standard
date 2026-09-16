@@ -21,7 +21,8 @@ version: 0.3.0
 8. Normalization must not turn vague advice into blocking without file location + impact; scope-expanding suggestions route back to planning.
 9. Root-cause routing: 方案缺口→solution-design；任务缺口→task-planning；实现缺陷→implementation；审查合同自身缺口→code-review。
 10. Preserve missing file/line/symbol/spec basis as Missing Information.
-11. Use `library/{requirement_id}/05-代码审核/` as the default local output node；审核报告经 `scripts/publish-requirement-manifest.sh entry-update` 写入 requirement manifest，发现经 `finding-register` 登记（状态迁移经 `finding-action`——独立复验责任保留，修复者不得自行登记 RESOLVED）。
+11. Use `library/{requirement_id}/05-代码审核/` as the default local output node；**同文件多轮更新（contract §3.1）**：初审、实现返工后的复验、最终复验**均更新同一** `05-代码审核/{id}_代码审核.md`（读取 → 更新正文为当前有效结论 → 递增 Metadata Version → 追加修订记录 → 经 publisher entry-update 发布）。顶层当前文件始终只有这一个；**禁止**创建 `{id}_代码审核_复验.md`、`_最终复验.md`、`_第2轮.md` 等轮次/状态后缀新文件（完整禁止清单见 artifact-versioning.md）；
+11a. 审核报告经 `scripts/publish-requirement-manifest.sh entry-update` 写入 requirement manifest，发现经 `finding-register` 登记（状态迁移经 `finding-action`——独立复验责任保留，修复者不得自行登记 RESOLVED）。
 
 12. Severity ladder（finding 分级）：CRITICAL=违反已批准事实且不可合入；HIGH=合入前必须修复（direct rework + 本 Skill 复验 RESOLVED，无显式风险接受路径——manual-runtime-semantic-contract §5.2）；MEDIUM=合入前应修或有跟进项；LOW=改进项。
 13. Finding lifecycle（manual-runtime-semantic-contract §5.1 实现类来源）：本节点登记的 finding 状态由本 Skill 处置——CRITICAL/HIGH 为 blocking（HIGH 经 implementation 直接返工后由本 Skill 复验 RESOLVED，经 publisher 写入生命周期记录；**不重走 solution-gate**，Decision-086）；MEDIUM/LOW 为跟进项不阻断。无风险接受仪式：非 scan 来源无 ACCEPTED 路径，"风险接受必须带接受者与证据"的旧规则废止。

@@ -55,6 +55,7 @@ Record = Struct.new(
   :module_name,
   :class_name,
   :method_names,
+  :reverse_evidence_chain,
   :route_paths,
   :api_client_names,
   :topics,
@@ -261,7 +262,42 @@ NON_BLOCKING_CLASSIFICATIONS = Set.new(%w[
   abstract_or_base
   annotation_or_marker
   not_applicable
+  data_type
+  page_fragment
 ]).freeze
+
+# R13-B3 / R1-P1-5: shared/template JSP-HTML fragments are page fragments, NOT
+# standalone business pages (kept in the inventory with an explanation).
+#
+# A directory named `common`/`include` is WEAK evidence only: a fragment named
+# by a pure structural role (header/footer/taglib/tag/inc/fragment) is a page
+# fragment unconditionally, but a file under `common/` must additionally look
+# like a fragment (no business form / route / data-action structure) — otherwise
+# it stays a business entry so a real business page can never be hidden by its
+# directory name (R1-P1-5).
+PAGE_FRAGMENT_ROLE_PATTERN = %r{/(?:header|footer|taglib[s]?|tag|inc|fragment[s]?)(?:/|[^/]*\.(?:jsp|html|ftl|vm)\z)}i
+WEAK_FRAGMENT_DIR_PATTERN = %r{/common(?:/|[^/]*\.(?:jsp|html|ftl|vm)\z)}i
+# Structural markers of a REAL business page (form bound to a business action,
+# a business route reference, or a data-action/data-page hook).
+BUSINESS_PAGE_MARKERS = %r{(?:<form\b[^>]*action=|<[^>]+(?:data-action|data-page|data-module)=|["'`]/(?:\w+/)+\w+["'`]|\bcontroller\b)}i
+
+def content_based_classification(text, path)
+  lowered_path = path.downcase
+  return nil if text.nil? || text.empty?
+
+  return ["data_type", "java enum declaration"] if text.match?(/\bpublic\s+(?:strictfp\s+)?enum\s+[A-Z]/)
+  return ["data_type", "DTO/VO/entity declaration"] if File.basename(path).match?(/(?:DTO|VO|Entity|Bean)\.(?:java|kt)\z/i) ||
+                                                      text.match?(/\b(?:public\s+)?(?:final\s+)?class\s+\w+(?:DTO|VO)\b/)
+  if path.match?(/\.(?:jsp|html|ftl|vm)\z/i)
+    return ["page_fragment", "shared/template web fragment (structural role name)"] if PAGE_FRAGMENT_ROLE_PATTERN.match?(lowered_path)
+    # WEAK signal: a `common/` directory alone is not enough.
+    if WEAK_FRAGMENT_DIR_PATTERN.match?(lowered_path)
+      return ["page_fragment", "shared web fragment (common/ dir, no business-page structure)"] unless text.match?(BUSINESS_PAGE_MARKERS)
+      return ["business_entry", "common/ dir but carries business-page structure (form/route/data-action) — not a fragment"]
+    end
+  end
+  nil
+end
 
 def canonical_header(value)
   value.to_s.downcase.gsub(/[^a-z0-9]+/, "")
@@ -347,6 +383,32 @@ def basename_without_ext(path)
   File.basename(path).sub(/\.[^.]+\z/, "")
 end
 
+# R13-B1 fix: shared matching discipline for doc-vs-record evidence.
+# - word-boundary matching (normalized_token is downcased): plain substring
+#   containment in either direction (the old token_match?) let the keyword
+#   "if" match TaskLifecycleManagerImpl and any symbol containing "noAuth"
+#   match a noAuth fragment);
+# - control-keyword / reserved-word tokens are never strong evidence on
+#   either side;
+# - short tokens (< 4 chars after normalisation) only match as whole words,
+#   never as substrings.
+JAVA_KEYWORDS = %w[
+  if else for while switch case break continue return new super this
+  try catch finally throw throws static final public private protected
+  abstract class interface enum extends implements import package void
+  int long short byte char boolean float double null true false
+  do default instanceof assert synchronized volatile transient native
+  strictfp goto const var let function def const
+].freeze
+
+def control_keyword?(token)
+  JAVA_KEYWORDS.include?(token)
+end
+
+def word_boundary_include?(candidate, token)
+  candidate.match?(/(?<![a-z0-9_])#{Regexp.escape(token)}(?![a-z0-9_])/)
+end
+
 def token_match?(candidate, tokens)
   candidate = normalized_token(candidate)
   return false if candidate.empty?
@@ -355,7 +417,14 @@ def token_match?(candidate, tokens)
     token = normalized_token(token)
     next false if token.empty?
 
-    candidate == token || candidate.include?(token) || token.include?(candidate)
+    # control keywords are never strong evidence in either direction
+    return false if control_keyword?(candidate) || control_keyword?(token)
+
+    next true if candidate == token
+    # short tokens (<4 chars): whole-word match only
+    next word_boundary_include?(candidate, token) if token.length < 4
+
+    candidate.include?(token) || word_boundary_include?(candidate, token)
   end
 end
 
@@ -370,12 +439,37 @@ end
 
 def extract_method_names(text, path)
   names = []
-  names += text.scan(/(?:public|protected|private|static|\s)+[\w<>\[\],\s?]+\s+([a-zA-Z_]\w*)\s*\([^;{}]*\)\s*(?:throws\s+[^{]+)?\{/).flatten
+  # R13-B1 fix: the Java declaration regex captured control-flow keywords
+  # (`if (...) {`) and annotation-parameter variables as method names. Guard:
+  # a captured name must not be a Java keyword and must not be immediately
+  # followed by content suggesting a control-flow statement.
+  java_methods = text.scan(
+    /(?:public|protected|private|static|\s)+[\w<>\[\],\s?]+\s+([a-zA-Z_]\w*)\s*\([^;{}]*\)\s*(?:throws\s+[^{]+)?\{/
+  ).flatten
+  names += java_methods.reject { |n| JAVA_KEYWORDS.include?(n) }
   names += text.scan(/(?:function|def)\s+([a-zA-Z_]\w*)\s*\(/).flatten
   names += text.scan(/(?:const|let|var)\s+([a-zA-Z_]\w*)\s*=\s*(?:async\s*)?\(/).flatten
   names += text.scan(/export\s+(?:async\s+)?function\s+([a-zA-Z_]\w*)\s*\(/).flatten
   names += text.scan(/<select[^>]+id=["']([^"']+)["']/i).flatten if path.end_with?(".xml")
   names.uniq
+end
+
+# R1-P1-4: typed, owner-contextual reference extraction. A bare method name is
+# NEVER evidence on its own — an edge exists only when the referencing file
+# names the target TYPE (field/param/local declaration, `new X(`, `extends
+# X`, or an import of X). This is what makes
+# Controller -> Service -> Manager -> Mapper traversal possible without a
+# compiler: each hop is a declared type reference from an OWNER context.
+def extract_type_references(text)
+  refs = []
+  # field / parameter / local declaration: `Foo bar =` / `Foo bar;` / `Foo bar,`
+  refs += text.scan(/(?:^|[;{}(,\s])([A-Z][A-Za-z0-9_]*)\s+[a-z][A-Za-z0-9_]*\s*(?:[=;,)]|\s*$)/).flatten
+  # instantiation and inheritance
+  refs += text.scan(/\bnew\s+([A-Z][A-Za-z0-9_]*)\s*\(/).flatten
+  refs += text.scan(/\b(?:extends|implements)\s+([A-Z][A-Za-z0-9_]*)/).flatten
+  # import of a concrete type (last path segment)
+  refs += text.scan(/^\s*import\s+[\w.]*\.([A-Z][A-Za-z0-9_]*)\s*;/).flatten
+  refs.uniq
 end
 
 def extract_route_paths(text)
@@ -506,11 +600,22 @@ def row_classification(row)
 end
 
 def match_row_to_record(row, record)
+  # R1-P1-4: method-level evidence is only trustworthy when the row ALSO names
+  # the owning class/entry (owner context); a bare `Method=save` row matches
+  # every class that happens to define save().
+  owner_named_in_row = begin
+    row_values = row.values.map { |v| v.to_s }.join(" ")
+    [record.symbol, record.class_name].compact.any? do |owner|
+      next false if owner.to_s.empty?
+      row_values.match?(/(?<![A-Za-z0-9_])#{Regexp.escape(owner)}(?![A-Za-z0-9_])/)
+    end
+  end
+
   candidates = {
     "path" => [record.path],
     "code_anchor" => record.code_anchors,
-    "method" => record.method_names,
-    "function" => record.function_names,
+    "method" => owner_named_in_row ? record.method_names : [],
+    "function" => owner_named_in_row ? record.function_names : [],
     "route" => record.route_paths,
     "api_client" => record.api_client_names,
     "topic" => record.topics,
@@ -725,19 +830,107 @@ scope_texts = scope_candidate_paths.uniq.select { |path| File.file?(path) }.map 
 end
 
 entry_text_cache = entry_records.to_h { |record| [record.path, code_text_for(record.path)] }
-layer_records.each do |record|
-  reverse_entries = entry_records.select do |entry|
-    entry_text = entry_text_cache[entry.path].to_s
-    text_contains?(entry_text, record.symbol) ||
-      record.method_names.any? { |method| text_contains?(entry_text, method) } ||
-      record.code_anchors.any? { |anchor| text_contains?(entry_text, anchor) && anchor != record.path }
-  end
 
+# R13-B3: content-aware subclassification pass — enum/DTO/VO declarations and
+# shared page fragments are data types / page fragments, not business units,
+# regardless of their directory (e.g. an enum under a manager/ directory).
+(entry_records + layer_records).each do |record|
+  text = entry_text_cache[record.path] || code_text_for(record.path)
+  subclass = content_based_classification(text, record.path)
+  next unless subclass
+
+  record.classification = subclass.first
+  record.classification_reason = "content: #{subclass.last}"
+end
+# R1-P1-4: typed reference graph over the scanned files.
+#   - nodes: core units (Service/Manager/Mapper/... layers) plus entries;
+#   - edges: a declared TYPE reference from the owner file to the target class
+#     (extract_type_references), never a bare string / method-name match;
+#   - ambiguous simple names (same class name in several packages) yield an
+#     UNCERTAIN edge rather than a guessed one.
+core_by_symbol = Hash.new { |h, k| h[k] = [] }
+layer_records.each { |r| core_by_symbol[r.symbol] << r }
+# Ambiguity (R1-P1-4): the SAME simple name scanned as more than one core
+# record. An interface/impl pair (Foo + FooImpl) is ONE logical unit — the
+# normal Spring pattern — and is deliberately NOT ambiguous.
+ambiguous_symbols = core_by_symbol.select { |_sym, rs| rs.length > 1 }.keys.to_set
+
+all_text_cache = {}
+(entry_records + layer_records).each { |r| all_text_cache[r.path] = (entry_text_cache[r.path] || code_text_for(r.path)).to_s }
+
+type_refs = {}
+all_text_cache.each { |path, text| type_refs[path] = extract_type_references(text) }
+
+# R1-P1-4: interface/implementation bridging. Real Spring code references the
+# INTERFACE (`OrderService`) while the scanned core unit is the impl
+# (`OrderServiceImpl`) — or vice versa. Both directions are one logical unit
+# (the same convention DEFAULT_LAYER_PATTERNS already encodes), so a type
+# reference resolves through the `X` <-> `XImpl` alias pair.
+symbol_aliases = lambda do |name|
+  base = name.sub(/Impl\z/, "")
+  [name, "#{base}Impl", base].uniq
+end
+
+# direct typed edges: owner path -> referenced core symbols (excluding self)
+out_edges_for = lambda do |record|
+  own = record.symbol
+  names = type_refs[record.path].to_a - [own]
+  targets = names.flat_map { |n| symbol_aliases.call(n) }.uniq - [own]
+  owners = targets.select { |n| core_by_symbol.key?(n) }
+  owners.flat_map { |n| core_by_symbol[n].map { |r| [n, r] } }
+end
+
+# traversal from each entry through core units (BFS, depth-limited)
+MAX_CHAIN_DEPTH = 6
+reverse_evidence = Hash.new { |h, k| h[k] = [] }   # core path -> [evidence strings]
+entry_records.each do |entry|
+  visited = {}
+  queue = [[entry, 0, nil]]
+  until queue.empty?
+    current, depth, _ = queue.shift
+    break if depth >= MAX_CHAIN_DEPTH
+
+    out_edges_for.call(current).each do |name, target|
+      next if target.path == entry.path
+      next if visited[target.path]
+
+      visited[target.path] = "#{current.symbol}"
+      hop = depth.zero? ? "#{entry.symbol} -> #{name}" : "#{entry.symbol} -> ... -> #{current.symbol} -> #{name}"
+      if ambiguous_symbols.include?(name)
+        reverse_evidence[target.path] << "AMBIGUOUS(#{name} appears in #{core_by_symbol[name].length} classes): #{hop}"
+      else
+        reverse_evidence[target.path] << hop
+      end
+      queue << [target, depth + 1, name]
+    end
+  end
+end
+
+# A core unit reachable ONLY through an ambiguous name gets no trustworthy
+# evidence — unresolved, never "covered".
+resolve_reverse = lambda do |record|
+  ev = reverse_evidence[record.path].uniq
+  clean = ev.reject { |e| e.start_with?("AMBIGUOUS(") }
+  ambiguous = ev.select { |e| e.start_with?("AMBIGUOUS(") }
+  if clean.any?
+    ["covered", clean.first(3)]
+  elsif ambiguous.any?
+    ["unresolved_ambiguous_reference", ambiguous.first(2)]
+  else
+    ["no_entry_reverse_coverage", []]
+  end
+end
+
+layer_records.each do |record|
+  # R13-B2 + R1-P1-4: typed owner-context edges replace the one-hop string
+  # search; method names are no longer standalone evidence.
+  reverse_status, reverse_chain = resolve_reverse.call(record)
+  reverse_entries = reverse_status == "covered" ? [true] : []
   record.reverse_coverage_status =
     if NON_BLOCKING_CLASSIFICATIONS.include?(record.classification)
       "non_blocking_technical_bridge"
     elsif reverse_entries.empty?
-      "no_entry_reverse_coverage"
+      reverse_status == "unresolved_ambiguous_reference" ? "unresolved_ambiguous_reference" : "no_entry_reverse_coverage"
     elsif record.matched_l2.length > 1
       "multi_domain_warning"
     elsif record.matched_docs.empty?
@@ -746,10 +939,31 @@ layer_records.each do |record|
       "covered"
     end
 
+  record.reverse_evidence_chain = reverse_chain
+
   if record.match_reason == "no business-domain match" && !reverse_entries.empty?
-    record.match_reason = "reverse entry chain: #{reverse_entries.map(&:symbol).uniq.join(', ')}"
+    record.match_reason = "reverse entry chain: #{reverse_chain.join(' | ')}"
     record.match_strength = [record.match_strength.to_i, 50].max
   end
+end
+
+# R13-B2: distinguish the failure reasons inside unarchived_services —
+#   missing_documentation  = no doc match at all
+#   unresolved_call_chain  = doc-matched but no reverse entry chain found
+#   uncertain              = no docs AND no reverse chain (cannot be proven)
+# Uncertain/missing/unresolved all stay on the BLOCKED side (never silently
+# promoted to PASS).
+missing_documentation_services = layer_records.select do |record|
+  !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.matched_docs.empty? && record.reverse_coverage_status != "no_entry_reverse_coverage"
+end
+unresolved_chain_services = layer_records.select do |record|
+  !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.matched_docs.any? && record.reverse_coverage_status == "no_entry_reverse_coverage"
+end
+uncertain_services = layer_records.select do |record|
+  !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.matched_docs.empty? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 
 entry_conflicts = entry_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
@@ -757,10 +971,7 @@ service_conflicts = layer_records.select { |record| record.matched_l2.length > 1
 technical_entry_records = entry_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_layer_records = layer_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 unarchived_entries = entry_records.select { |record| record.matched_docs.empty? && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
-unarchived_services = layer_records.select do |record|
-  !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
-    (record.matched_docs.empty? || record.reverse_coverage_status == "no_entry_reverse_coverage")
-end
+unarchived_services = (missing_documentation_services + unresolved_chain_services + uncertain_services).uniq
 
 business_domain_missing = !Dir.exist?(File.join(TARGET_ROOT, business_domain_root)) || l4_docs.empty?
 status =
@@ -884,11 +1095,22 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
 
   Status: #{unarchived_services.empty? ? "CLEAR" : "BLOCKING"}
 
+  ## Reason Breakdown
+
+  | Reason | Count |
+  | --- | --- |
+  | missing documentation | #{missing_documentation_services.length} |
+  | unresolved call chain (doc-matched) | #{unresolved_chain_services.length} |
+  | uncertain (no docs, no chain) | #{uncertain_services.length} |
+  | unresolved (ambiguous same-name reference) | #{layer_records.count { |r| r.reverse_coverage_status == "unresolved_ambiguous_reference" }} |
+
+  > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
+
   ## Blocking / Pending Core Units
 
-  | Kind | Symbol | Path | Classification | Reverse Coverage | Match Reason |
-  | --- | --- | --- | --- | --- | --- |
-  #{unarchived_services.map { |record| "| #{record.kind} | `#{record.symbol}` | `#{record.path}` | #{record.classification} | #{record.reverse_coverage_status} | #{record.match_reason} |" }.join("\n")}
+  | Kind | Symbol | Path | Classification | Reverse Coverage | Evidence Chain (判定依据) | Match Reason |
+  | --- | --- | --- | --- | --- | --- | --- |
+  #{unarchived_services.map { |record| "| #{record.kind} | `#{record.symbol}` | `#{record.path}` | #{record.classification} | #{record.reverse_coverage_status} | #{(record.reverse_evidence_chain || []).join(' <br> ')} | #{record.match_reason} |" }.join("\n")}
 
   ## Non-Blocking Technical Core Units
 
@@ -948,6 +1170,11 @@ reports[strict_outputs["summary_report"]] = <<~MARKDOWN
   - Match strength: table path/code anchor/method/route/topic/job/function/SQL evidence is stronger than plain text contains.
   - Technical bridge handling: technical_bridge, framework_bridge, generated_or_vendor, native_shell, abstract_or_base, annotation_or_marker, and not_applicable remain visible in inventory but do not by themselves block strict mode.
   - Reverse coverage: Service / Manager / Mapper core units are checked against L4 evidence and entry-to-core code references.
+  - Reason breakdown: unarchived services are split into missing documentation /
+    unresolved call chain / uncertain (see table above) — an uncertain item is
+    never silently promoted to PASS.
+  - Next steps: rerun after docs via sdlc-knowledge-sync; route confirmation is
+    an Owner action on the domain map; entry audit = THIS script (strict).
   - ETL coverage: job/function/connector/sink/SQL names participate in evidence matching.
   - Frontend coverage: route/page/component/store/API/popup/native shell distinctions participate in evidence matching and classification.
 
