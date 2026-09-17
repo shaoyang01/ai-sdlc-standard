@@ -3165,7 +3165,17 @@ RUBY
     # silent about a gate that cannot run on this machine.
     AUDIT_WRAPPER="${TARGET_PATH}/.sdlc/scripts/bash/audit-entry-coverage.sh"
     if [[ -f "${AUDIT_WRAPPER}" ]]; then
-      WRAPPER_BAKED_DEFAULT="$(sed -n 's/^[[:space:]]*SDLC_HOME="\${AI_SDLC_STANDARD_HOME:-\(.*\)}"[[:space:]]*$/\1/p' "${AUDIT_WRAPPER}" | head -1)"
+      # R3 suggestion (RC-1): the wrapper may carry the override with OR without
+      # surrounding quotes (`SDLC_HOME="${AI_SDLC_STANDARD_HOME:-/path}"` and
+      # `SDLC_HOME=${AI_SDLC_STANDARD_HOME:-/path}` are both valid shell); a
+      # hand-edited unquoted wrapper used to be reported as having no baked
+      # default. Extraction is done in ruby so the nested shell/YAML quoting
+      # cannot swallow the pattern.
+      WRAPPER_BAKED_DEFAULT="$(ruby -e '
+        line = File.readlines(ARGV[0]).find { |l| l =~ /^\s*SDLC_HOME=/ } || ""
+        m = line.match(/SDLC_HOME=\s*"?\$\{AI_SDLC_STANDARD_HOME:-([^}"]*)\}?"?/)
+        print m ? m[1] : ""
+      ' "${AUDIT_WRAPPER}" 2>/dev/null || true)"
       if [[ -n "${WRAPPER_BAKED_DEFAULT}" && ! -e "${WRAPPER_BAKED_DEFAULT}" ]]; then
         {
           printf '\n## Audit Wrapper Portability (actionable)\n\n'
