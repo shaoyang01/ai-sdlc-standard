@@ -387,6 +387,19 @@ def text_contains?(text, token)
   text.downcase.include?(token.downcase)
 end
 
+# Identifier evidence must match on an IDENTIFIER BOUNDARY, never by substring.
+# Substring matching made `DeliveryBatchServiceImpl` count as evidence for the
+# INDEPENDENT record `BatchServiceImpl` (and `SkuSaleRelationServiceImpl` for
+# `SkuSaleRelationService`): the shorter record could be archived — or turned
+# into a cross-domain conflict — by a document that never mentions it. Paths
+# stay substring-matched (they are long, unique and quoted verbatim by docs).
+def identifier_in_text?(text, token)
+  token = strip_markdown(token)
+  return false if token.empty?
+
+  text.match?(/(?<![A-Za-z0-9_])#{Regexp.escape(token)}(?![A-Za-z0-9_])/i)
+end
+
 def basename_without_ext(path)
   File.basename(path).sub(/\.[^.]+\z/, "")
 end
@@ -689,7 +702,10 @@ def doc_match_for_record(doc_info, record)
 
   text_checks.each do |token, strength, reason|
     next if token.to_s.empty?
-    next unless text_contains?(text, token)
+    # Paths are matched verbatim; every other token is an identifier and must
+    # respect identifier boundaries (see identifier_in_text?).
+    matched = reason == "text path" ? text_contains?(text, token) : identifier_in_text?(text, token)
+    next unless matched
 
     best = [strength, "#{reason}=#{token}", nil] if best.nil? || strength > best.first
   end
@@ -936,13 +952,25 @@ resolve_reverse = lambda do |record|
   end
 end
 
+# Classes that are entries AND layer units (Dubbo-exposed *Service /
+# *RPCServiceImpl): they are accounted for once, as entries — see the
+# self_entry_coverage branch below.
+self_entry_paths = entry_records.map(&:path).to_set
+
 layer_records.each do |record|
   # R13-B2 + R1-P1-4: typed owner-context edges replace the one-hop string
   # search; method names are no longer standalone evidence.
   reverse_status, reverse_chain = resolve_reverse.call(record)
   reverse_entries = reverse_status == "covered" ? [true] : []
   record.reverse_coverage_status =
-    if NON_BLOCKING_CLASSIFICATIONS.include?(record.classification)
+    if self_entry_paths.include?(record.path)
+      # A class can be BOTH an entry (Dubbo-exposed *Service / *RPCServiceImpl via
+      # the entry patterns) and a layer unit (the *Service.java / *ServiceImpl.java
+      # layer patterns). An entry is a reference ROOT: demanding an inbound chain
+      # from another entry kept such classes permanently "unarchived" as core
+      # units. They are accounted for once, as entries.
+      "self_entry_coverage"
+    elsif NON_BLOCKING_CLASSIFICATIONS.include?(record.classification)
       "non_blocking_technical_bridge"
     elsif reverse_entries.empty?
       reverse_status == "unresolved_ambiguous_reference" ? "unresolved_ambiguous_reference" : "no_entry_reverse_coverage"
@@ -970,19 +998,24 @@ end
 # promoted to PASS).
 missing_documentation_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.empty? && record.reverse_coverage_status != "no_entry_reverse_coverage"
 end
 unresolved_chain_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.any? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 uncertain_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.empty? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 
 entry_conflicts = entry_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
-service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
+# Self-entry layer records are already covered by entry_conflicts — counting
+# them again here would double-report the same class.
+service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && record.reverse_coverage_status != "self_entry_coverage" && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_entry_records = entry_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_layer_records = layer_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 unarchived_entries = entry_records.select { |record| record.matched_docs.empty? && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
