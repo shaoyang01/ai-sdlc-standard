@@ -449,6 +449,27 @@ def token_match?(candidate, tokens)
   end
 end
 
+# Same discipline as the text channel (identifier_in_text?): an identifier cell
+# is evidence only when it names the identifier, never when it merely contains
+# it. A `Code Anchor` cell reading `DeliveryOrderServiceImpl` must not archive
+# the independent record `OrderServiceImpl` — the table channel carried the same
+# substring defect the text channel was fixed for, and it is live wherever a
+# document header aliases to a candidate field (e.g. the bilingual
+# `代码锚点（Code Anchor）`).
+def identifier_token_match?(candidate, tokens)
+  candidate = normalized_token(candidate)
+  return false if candidate.empty?
+
+  tokens.any? do |token|
+    token = normalized_token(token)
+    next false if token.empty?
+    next false if control_keyword?(candidate) || control_keyword?(token)
+    next true if candidate == token
+
+    word_boundary_include?(candidate, token)
+  end
+end
+
 def code_text_for(relative_path)
   full_path = File.join(TARGET_ROOT, relative_path)
   return "" unless File.file?(full_path)
@@ -668,7 +689,11 @@ def match_row_to_record(row, record)
     next if value.to_s.empty?
 
     split_values(value).each do |candidate|
-      next unless token_match?(candidate, tokens)
+      # Path cells stay lenient (a cell may carry a line range, e.g.
+      # `X.java:94-186`); every other field is an identifier list and must
+      # respect identifier boundaries.
+      matched = field == "path" ? token_match?(candidate, tokens) : identifier_token_match?(candidate, tokens)
+      next unless matched
 
       strength = strengths[field]
       reason = "table #{field}=#{candidate}"
@@ -1150,8 +1175,9 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
   | missing documentation | #{missing_documentation_services.length} |
   | unresolved call chain (doc-matched) | #{unresolved_chain_services.length} |
   | uncertain (no docs, no chain) | #{uncertain_services.length} |
-  | unresolved (ambiguous same-name reference) | #{layer_records.count { |r| r.reverse_coverage_status == "unresolved_ambiguous_reference" }} |
+  | (orthogonal) unresolved (ambiguous same-name reference) | #{layer_records.count { |r| r.reverse_coverage_status == "unresolved_ambiguous_reference" }} |
 
+  > 前三个桶互斥且求和等于本表上方 Unarchived Core Units 数（#{(missing_documentation_services + unresolved_chain_services + uncertain_services).uniq.length}）；第四行 `unresolved (ambiguous same-name reference)` 是**正交状态计数**（同名类出现在多个包中），可能与本表其它行重叠计数，不参与求和。
   > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
 
   ## Blocking / Pending Core Units

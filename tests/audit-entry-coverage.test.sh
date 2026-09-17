@@ -46,7 +46,7 @@ layers: {}
 EOF
 
 # 四个服务类：DeliveryOrderServiceImpl 是 OrderServiceImpl 的"长标识符超串"
-for cls in OrderServiceImpl DeliveryOrderServiceImpl SoloServiceImpl OtherServiceImpl; do
+for cls in OrderServiceImpl DeliveryOrderServiceImpl SoloServiceImpl OtherServiceImpl TableOnlyServiceImpl; do
   printf 'package com.example.service.impl;\npublic class %s {}\n' "${cls}" \
     > "${R}/src/main/java/com/example/service/impl/${cls}.java"
 done
@@ -63,6 +63,18 @@ cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010101Fixture(测试).md" <<'E
 | RPC | SoloServiceImpl | src/main/java/com/example/service/impl/SoloServiceImpl.java | verified-code |
 EOF
 
+# 表格通道用例：ASCII 表头别名命中 code_anchor —— 单元格里只出现长标识符，
+# 独立记录 OrderServiceImpl 不得被该单元格归档；TableOnlyServiceImpl 仅出现在
+# 该单元格，必须仍被归档（防止"修严了导致表通道失效"的反向回归）。
+cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010102Table(表格通道).md" <<'EOF'
+# Table channel
+
+| Layer | Code Anchor | Evidence |
+| --- | --- | --- |
+| RPC | DeliveryOrderServiceImpl | src/main/java/com/example/service/impl/DeliveryOrderServiceImpl.java |
+| RPC | TableOnlyServiceImpl | src/main/java/com/example/service/impl/TableOnlyServiceImpl.java |
+EOF
+
 ruby "${AUDIT}" --strict "${R}" > "${WORK_ROOT}/run.out" 2>&1
 RC=$?
 ENTRIES="${R}/.sdlc/reports/entry_coverage/entry_inventory.tsv"
@@ -74,6 +86,10 @@ assert_contains "${UNARCH_ENTRIES}" '`OrderServiceImpl`' "OrderServiceImpl stays
 assert_not_contains "${UNARCH_ENTRIES}" '`DeliveryOrderServiceImpl`' "DeliveryOrderServiceImpl is archived by its own citation"
 assert_not_contains "${UNARCH_ENTRIES}" '`SoloServiceImpl`' "SoloServiceImpl is archived by its own citation"
 assert_contains "${UNARCH_ENTRIES}" '`OtherServiceImpl`' "an uncited entry stays unarchived (control: archiving still works)"
+
+CASE_NAME="audit R2-1b: table channel respects identifier boundaries too"
+assert_contains "${UNARCH_ENTRIES}" '`OrderServiceImpl`' "OrderServiceImpl stays unarchived when only named inside a Code Anchor cell"
+assert_not_contains "${UNARCH_ENTRIES}" '`TableOnlyServiceImpl`' "a class cited ONLY by a table cell is still archived (no over-tightening)"
 
 CASE_NAME="audit R2-2: self-entry classes are not reported as unarchived core units"
 assert_not_contains "${UNARCH_SERVICES}" 'DeliveryOrderServiceImpl' "self-entry unit absent from unarchived core units"
