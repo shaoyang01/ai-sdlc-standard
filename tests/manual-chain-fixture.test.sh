@@ -490,6 +490,7 @@ cat > "${WORK_ROOT}/decl-esc.json" <<'G3EOF'
 {
   "declaration_seq": 7,
   "node": "solution-gate",
+  "binding": "formal_verdict",
   "artifact_path": "02-方案审核/20260905-esc_方案审核.md",
   "version": "2.1.0",
   "digest": "PLACEHOLDER",
@@ -598,10 +599,56 @@ RC=$?
 if [[ "${RC}" == "2" ]]; then pass "missing path exits 2"; else fail "missing path: expected exit 2, got ${RC}"; fi
 assert_contains "${WORK_ROOT}/f14-usage.out" "not a directory"
 if grep -q 'validate-canonical-artifacts.rb:' "${WORK_ROOT}/f14-usage.out"; then fail "ruby backtrace leaked on a usage error"; else pass "no ruby backtrace on a usage error"; fi
-# (d) a file argument is a usage error too (it used to pass silently)
+# (d) a file argument is a usage error too. Historical note (R3 suggestion
+# RC-6-1): before the usage guard the behaviour was an Errno::ENOTDIR backtrace
+# out of Dir.children (rc=1) — it never passed silently; the guard turns it into
+# a deliberate exit 2 with a message.
 ruby "${VALIDATOR}" "${LIB}/manifest.md" > "${WORK_ROOT}/f14-file.out" 2>&1
 RC=$?
 if [[ "${RC}" == "2" ]]; then pass "file argument exits 2"; else fail "file argument: expected exit 2, got ${RC}"; fi
+
+# ---------------------------------------------------------------------------
+CASE_NAME="G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2)"
+NB_LIB="${WORK_ROOT}/nb/lib/20260906-nb"
+mkdir -p "${NB_LIB}/02-方案审核"
+bash "${PUBLISHER}" "${NB_LIB}" init --requirement-id 20260906-nb \
+  --requested-depth STANDARD --depth-basis user_requested --decision-scope FULL_REQUIREMENT > /dev/null 2>&1
+assert_exit 0 $?
+printf '# 方案审核问题台账\n\n- F1\n' > "${NB_LIB}/02-方案审核/20260906-nb_方案审核问题台账.md"
+LEDGER_DIGEST="sha256:$(shasum -a 256 "${NB_LIB}/02-方案审核/20260906-nb_方案审核问题台账.md" | awk '{print $1}')"
+# (a) NEW-B1: the ledger may NOT become the solution-gate current pointer via publish
+printf '{"declaration_seq":2,"node":"solution-gate","binding":"adversarial_scan","artifact_path":"02-方案审核/20260906-nb_方案审核问题台账.md","version":"1.0.0","digest":"%s","source_ref":"fixture","gate_result":"PASS","decision_depth":"STANDARD","decision_status":"CONFIRMED","stale_nodes":[]}' "${LEDGER_DIGEST}" > "${WORK_ROOT}/f15-ledger.json"
+bash "${PUBLISHER}" "${NB_LIB}" publish --declaration-file "${WORK_ROOT}/f15-ledger.json" > "${WORK_ROOT}/f15-ledger.out" 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "publish: ledger-as-current rejected (exit 1)"; else fail "publish ledger-as-current: expected exit 1, got ${RC}"; fi
+assert_contains "${WORK_ROOT}/f15-ledger.out" "NON_CANONICAL_PATH"
+if grep -q "20260906-nb_方案审核问题台账.md" "${NB_LIB}/manifest.md"; then fail "refused declaration still reached the manifest"; else pass; fi
+# (b) the formal verdict IS the legal current pointer
+printf '# 方案审核\n' > "${NB_LIB}/02-方案审核/20260906-nb_方案审核.md"
+VERDICT_DIGEST="sha256:$(shasum -a 256 "${NB_LIB}/02-方案审核/20260906-nb_方案审核.md" | awk '{print $1}')"
+printf '{"declaration_seq":2,"node":"solution-gate","binding":"formal_verdict","artifact_path":"02-方案审核/20260906-nb_方案审核.md","version":"1.0.0","digest":"%s","source_ref":"fixture","gate_result":"PASS","decision_depth":"STANDARD","decision_status":"CONFIRMED","stale_nodes":[]}' "${VERDICT_DIGEST}" > "${WORK_ROOT}/f15-verdict.json"
+bash "${PUBLISHER}" "${NB_LIB}" publish --declaration-file "${WORK_ROOT}/f15-verdict.json" > "${WORK_ROOT}/f15-verdict.out" 2>&1
+assert_exit 0 $?
+# (c) publish refuses a wrong requirement ID and a round suffix too
+printf '{"declaration_seq":3,"node":"solution-gate","binding":"formal_verdict","artifact_path":"02-方案审核/OTHER_方案审核.md","version":"1.0.1","digest":"%s","source_ref":"f","stale_nodes":[]}' "${VERDICT_DIGEST}" > "${WORK_ROOT}/f15-wrongid.json"
+bash "${PUBLISHER}" "${NB_LIB}" publish --declaration-file "${WORK_ROOT}/f15-wrongid.json" > "${WORK_ROOT}/f15-wrongid.out" 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "publish: wrong requirement id rejected"; else fail "publish wrong id: expected exit 1, got ${RC}"; fi
+assert_contains "${WORK_ROOT}/f15-wrongid.out" "requirement id must match"
+printf '{"declaration_seq":3,"node":"solution-gate","binding":"formal_verdict","artifact_path":"02-方案审核/20260906-nb_方案审核_第2轮.md","version":"1.0.1","digest":"%s","source_ref":"f","stale_nodes":[]}' "${VERDICT_DIGEST}" > "${WORK_ROOT}/f15-suffix.json"
+bash "${PUBLISHER}" "${NB_LIB}" publish --declaration-file "${WORK_ROOT}/f15-suffix.json" > "${WORK_ROOT}/f15-suffix.out" 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "publish: round suffix rejected"; else fail "publish suffix: expected exit 1, got ${RC}"; fi
+# (d) NEW-B2: the validator must read the fenced manifest and catch a
+#     ledger-as-current pointer. RED if the manifest scan regresses to a
+#     line-adjacency regex (0 rows on real publisher products).
+ruby "${VALIDATOR}" "${NB_LIB}" > "${WORK_ROOT}/f15-valid.out" 2>&1
+assert_exit 0 $?
+ruby -e 'p = ARGV[0]; t = File.read(p); t = t.sub("artifact_path: 02-方案审核/20260906-nb_方案审核.md", "artifact_path: 02-方案审核/20260906-nb_方案审核问题台账.md"); File.write(p, t)' "${NB_LIB}/manifest.md"
+ruby "${VALIDATOR}" "${NB_LIB}" > "${WORK_ROOT}/f15-gatepointer.out" 2>&1
+RC=$?
+if [[ "${RC}" == "1" ]]; then pass "validator catches ledger-as-current in the manifest (exit 1)"; else fail "validator gate-pointer: expected exit 1, got ${RC}"; fi
+assert_contains "${WORK_ROOT}/f15-gatepointer.out" "A9-6[gate-pointer]"
 
 echo ""
 echo "==== manual-chain fixture summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
