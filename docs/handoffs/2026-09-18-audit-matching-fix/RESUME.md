@@ -19,7 +19,7 @@ bash tests/audit-entry-coverage.test.sh              # 应 11 passed / 0 failed
 | 线 | 位置 | 状态 |
 | --- | --- | --- |
 | **A. 审计脚本匹配口径修复** | 产品仓 PR **#176**，分支 `fix/audit-entry-coverage-matching-boundaries`，head **`aa39206`**，base `feature/loop-runtime-v1`（主线 `af5509e`） | **未合并**；CI 4/4 绿（run 35250605409）；`mergeState=CLEAN`；R2 复审 FAIL 已整改，**待 R3 复审** |
-| **B. logistics-master 知识沉淀** | 业务仓 `logistics-master` `master`，5 个提交已推送：`c64e8fd9` / `8428182f` / `c1585b95` / `55d87880` / `a81cf5cc`（提交信息均为 `fix(support): 知识沉淀#117509 ...`） | 入口未归档已清零；核心单元 382→86；冲突 207→169；**已按用户指示暂停** |
+| **B. logistics-master 知识沉淀** | 业务仓 `logistics-master` `master`，提交 `c64e8fd9` / `8428182f` / `c1585b95` / `55d87880` / `a81cf5cc` + `53251a99`（2026-09-18 下午恢复轮，见 §8） | 入口未归档 0；核心单元 382→86→**20**；冲突 207→169→**150**；文档侧可收敛面已尽，残余属审计口径面（§8） |
 
 ## 2. A 线：审计脚本改了什么（PR #176）
 
@@ -99,3 +99,41 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
 - 未写 Control Plane STATE、未写 PKB（本轮为修复轮，非 closure event）。
 - 未改任何业务仓（除 B 线已推送的 5 个提交，且均已 `git push` 到 `origin/master`）。
 - 未做任何 review；未触碰 G5 冻结面、合同冻结语义。
+
+## 8. 2026-09-18 下午更新（公司机会话：B 线恢复 + 发布勘误 + R3 已出）
+
+### A 线
+- 无代码变化；PR #176 仍 OPEN @ `aa39206` **待 R3**。R3 复审 prompt 已于会话内交付
+  Current User（2026-09-18）。要点（若 prompt 文本遗失可据此重建）：RC-1 表格通道闭合
+  验证（词边界 + 双语/ASCII 表头探针）→ 三级判别回退实验（base 7/4 → 6d2f111 9/2 →
+  aa39206 11/0）→ 真实样本 logistics-master 0/86/169（wms-monitor 只读不作样板）→
+  **幻影冲突机制裁决必答**（path/text 宽松通道遗留，实例 DeliveryBatchMapper⊂BatchMapper、
+  PrintSchemeWarehouseService⊃WarehouseService，报告在 logistics-master
+  .sdlc/reports/entry_coverage/cross_domain_conflicts.md）→ X↔XImpl 口径技术建议
+  （(a) 保持现口径 / (b) 显式实现别名，实施方仍荐 (b)，量化占比后给推荐）。
+
+### B 线（§4-③ 沉淀恢复，用户指令「继续推进」）
+- 三组收敛：04/05/06 与 07/08 两 agent + 01/02/03 会话直做。非归属跨域引用改指针式
+  （「最详细引用=归属」，拿不准注记「归属待 Owner 复核」）；约 50 个孪生符号
+  （接口/Manager/Mapper ← 已文档化 Impl）按 implements/注入关系挂接归属 L4
+  「下游单元」表（`| 层 | 符号 | 代码路径 |` 格式，路径全 find 验证）。
+- **origin/master @ `53251a99`**（56 文件 +262/−74）。审计（aa39206 口径）：
+  入口 0 维持、核心单元 86→**20**、冲突 169→**150**。
+- 残留定性：20 未归档 ≈ 文档已含 token 但严格匹配仍计 + 待 Owner 复核归属项
+  （DiplomacyService 四域共享基类、BatchManager 族 0303 主档 vs 0503 延误写路径、
+  UserWarehouseService、WarehouseSkuPurchaseRelationService）；150 冲突主体 =
+  path/text 宽松匹配幻影（**text_contains? 裸子串残留为本 PR 未覆盖的脚本口径面**，
+  R3 第三节已列为裁决必答）。
+
+### 发布勘误（G5 完成评审 Exchange v1 缺消费元数据头）
+- v1 run `20260917T092316Z` handoff.md 缺 G6P 式元数据头（正文无缺失；PKB 归档
+  front matter 齐备不受影响）。经用户授权发布修正 v2 run `20260918T024331Z`
+  （run `a03043d` / 指针 `47ccaa6`，PR #128/#129）；CP STATE publication 重定向
+  PR #87（`e994381`）；PKB 勘误注记 + current.md 第 3 条（`339e455`）。v1 不可变保留。
+
+### 待办（换机后）
+- 用户回贴 R3 复审报告 → PASS 则请合并授权（#176）→ 按 §4-② 数字重登记
+  （确定性 fixture 或健康样本口径）→ 按 §4-① 落地 X↔XImpl 口径 → §4-③ 残余是否续推
+  （20/150 属脚本口径面，文档侧已尽）→ §4-④ 挂账项维持。
+- 环境：node v24（ABI 137）/ ruby 3.3.12+Psych 5.1.2 / 三 shell 套件手动跑 / 本机
+  logistics-master 工作区如被切回 master 记得 pull（origin/master 头 53251a99）。
