@@ -528,8 +528,30 @@ end
 def extract_sql_names(text, path)
   names = []
   names << basename_without_ext(path) if path.match?(/\.(sql|xml)\z/i)
-  names += text.scan(/\b(?:from|join|into|update|table)\s+([a-zA-Z_][\w.]+)/i).flatten
+  # 泛化 token 弱证据过滤（NEXT-ROUND-BRIEF §2-1，R3-#176 §6 根因坐实）：mapper
+  # XML 的 from/join/into/update/table 扫描会提出通用列名与碎片 token（真实样本
+  # 实测 `id`×137、`u_t`×9、`updater`×9、`is_deleted`、`u_u`、`schedule_task_`），
+  # 经 text sql 通道以独立词命中几乎所有文档，制造跨域幻影边（R3 量化：冲突边
+  # 87.5% 由该族驱动）。SQL 名证据 = 非通用列名 + 非下划线碎片 + （含 `_` 且
+  # 长度 ≥5，或长度 ≥8 的实词）；`t_m_sku`、`u_t_order` 一类真实表名全部保留。
+  # 记录自身文件名（basename）不受此过滤——它属于记录本体，不是从文本提出的。
+  scan_results = text.scan(/\b(?:from|join|into|update|table)\s+([a-zA-Z_][\w.]+)/i).flatten
+  names += scan_results.reject { |token| generic_sql_evidence?(token) }
   names.uniq
+end
+
+SQL_GENERIC_COLUMN_NAMES = %w[
+  id updater is_deleted created_by updated_by created_at updated_at
+  create_time update_time del_flag status state type name code level
+  version remark value
+].freeze
+
+def generic_sql_evidence?(token)
+  lowered = token.downcase
+  return true if SQL_GENERIC_COLUMN_NAMES.include?(lowered)
+  return true if lowered.start_with?("_") || lowered.end_with?("_")
+
+  lowered.include?("_") ? lowered.length < 5 : lowered.length < 8
 end
 
 def extract_record_anchors(path, symbol)
@@ -734,6 +756,13 @@ def doc_match_for_record(doc_info, record)
   end
 
   text = doc_info[:text]
+  # 泛化方法名 owner 门（NEXT-ROUND-BRIEF §2-2，与表通道 R1-P1-4 同纪律）：
+  # process/handle/execute 一类泛化方法名只有在该文档同时点名 owner（符号或类
+  # 名）时才是本记录的证据——否则一个 `process` 独立词会命中所有调度类类别的
+  # 每个文档，制造 text function 幻影边（R3-#176 量化 60 边）。
+  owner_named_in_text = [record.symbol, record.class_name].compact.any? do |owner|
+    !owner.to_s.empty? && identifier_in_text?(text, owner)
+  end
   text_checks = [
     [record.path, 70, "text path"],
     [File.basename(record.path), 55, "text basename"],
@@ -747,7 +776,7 @@ def doc_match_for_record(doc_info, record)
     *record.route_paths.map { |route| [route, 64, "text route"] },
     *record.topics.map { |topic| [topic, 62, "text topic"] },
     *record.job_names.map { |job| [job, 62, "text job"] },
-    *record.function_names.map { |function| [function, 58, "text function"] },
+    *(owner_named_in_text ? record.function_names.map { |function| [function, 58, "text function"] } : []),
     *record.sql_names.map { |sql| [sql, 58, "text sql"] }
   ]
 
@@ -1254,6 +1283,7 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
   > 前三个桶互斥且求和等于本表上方 Unarchived Core Units 数（#{(missing_documentation_services + unresolved_chain_services + uncertain_services).uniq.length}）；第四行 `unresolved (ambiguous same-name reference)` 是**正交状态计数**（同名类出现在多个包中），可能与本表其它行重叠计数，不参与求和。
   > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
   > 文档侧口径（显式实现别名）：文档按标识符边界点名唯一孪生 `XImpl` 即视为 `X` 已覆盖，反之亦然；孪生简单名在扫描结果中不唯一（多包同名）或无孪生时别名关闭，逐记录点名。命中别名的记录 `Match Reason` 显示 `table impl_alias=…`（表格名字级单元格）或 `text impl alias=…`（正文），两通道同谓词；表格别名行的分类声明与直接点名同样生效。
+  > 弱证据口径（泛化 token 轮）：mapper XML 的 SQL 名证据过滤通用列名与碎片（`id`/`updater`/`is_deleted`/`u_t`/尾随 `_` 碎片等不作为证据；`t_m_sku`、`u_t_order` 一类真实表名保留）；正文方法名（`process`/`execute`/`handle` 族）仅在该文档同时点名 owner（符号或类名）时作为证据。
 
   ## Blocking / Pending Core Units
 
