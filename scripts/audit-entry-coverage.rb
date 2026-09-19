@@ -653,6 +653,7 @@ def match_row_to_record(row, record)
     end
   end
 
+  impl_alias = IMPL_ALIAS_FOR[record.path]
   candidates = {
     "path" => [record.path],
     "code_anchor" => record.code_anchors,
@@ -665,7 +666,10 @@ def match_row_to_record(row, record)
     "sql" => record.sql_names,
     "connector" => record.code_anchors,
     "sink" => record.code_anchors,
-    "entry_name" => [record.symbol, record.class_name]
+    "entry_name" => [record.symbol, record.class_name],
+    # 显式实现别名：the twin NAME is name-level evidence only (weakest table
+    # signal, below entry_name); anchor families of the twin never apply here.
+    "impl_alias" => impl_alias ? [impl_alias] : []
   }
 
   strengths = {
@@ -680,7 +684,8 @@ def match_row_to_record(row, record)
     "sql" => 82,
     "connector" => 82,
     "sink" => 82,
-    "entry_name" => 78
+    "entry_name" => 78,
+    "impl_alias" => 76
   }
 
   best = nil
@@ -718,6 +723,11 @@ def doc_match_for_record(doc_info, record)
     [File.basename(record.path), 55, "text basename"],
     [record.symbol, 60, "text symbol"],
     [record.class_name, 60, "text class"],
+    # 显式实现别名（weakest text signal, below direct symbol/class naming）:
+    # naming the unique convention twin covers this record — boundary-checked
+    # like every identifier, so `TwoCacheServiceImpl` never aliases
+    # `CacheServiceImpl`.
+    *([IMPL_ALIAS_FOR[record.path]].compact.map { |twin| [twin, 56, "text impl alias"] }),
     *record.route_paths.map { |route| [route, 64, "text route"] },
     *record.topics.map { |topic| [topic, 62, "text topic"] },
     *record.job_names.map { |job| [job, 62, "text job"] },
@@ -836,6 +846,33 @@ DEFAULT_LAYER_PATTERNS.each do |kind, defaults|
     )
   end
 end
+
+# 显式实现别名口径（R3 §7 建议 (b)，Current User 2026-09-19 授权落地）：
+# a document naming the convention twin `XImpl` covers the logical unit `X`
+# (and vice versa) under the SAME identifier-boundary discipline as direct
+# naming. The alias is live only when the twin symbol exists in the scan
+# EXACTLY once — a duplicated `XImpl` simple name across packages (or no twin
+# at all) keeps every record independently named (this audit never fabricates
+# ownership, same principle as the chain-graph ambiguity rule above). Alias
+# evidence is name-level only: the twin's sql/route/method anchors never leak
+# through it (see doc_match_for_record / match_row_to_record).
+scanned_records = entry_records + layer_records
+# Uniqueness counts DISTINCT PATHS per symbol, not records: a self-entry file
+# (Dubbo-exposed *ServiceImpl) is scanned once as an entry and once as a layer
+# unit — two records, ONE logical unit. The alias is 1:1 only: BOTH the record's
+# own symbol and its twin must resolve to exactly one path — a duplicated base
+# simple name (two `SkuService` classes) must not let one `SkuServiceImpl`
+# citation "cover" both interfaces.
+symbol_paths = Hash.new { |h, k| h[k] = Set.new }
+scanned_records.each { |record| symbol_paths[record.symbol] << record.path }
+impl_alias_for_symbol = lambda do |symbol|
+  twin = symbol.end_with?("Impl") ? symbol.sub(/Impl\z/, "") : "#{symbol}Impl"
+  return nil if twin.empty?
+  return nil if symbol_paths[symbol].size != 1 || symbol_paths[twin].size != 1
+
+  twin
+end
+IMPL_ALIAS_FOR = scanned_records.to_h { |record| [record.path, impl_alias_for_symbol.call(record.symbol)] }.freeze
 
 l4_docs = Dir[File.join(TARGET_ROOT, l4_pattern)].select { |path| File.file?(path) }.sort
 doc_texts = l4_docs.to_h do |path|
@@ -1037,10 +1074,26 @@ uncertain_services = layer_records.select do |record|
     record.matched_docs.empty? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 
-entry_conflicts = entry_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
+# 显式实现别名 ⑤：X 与 XImpl 是同一逻辑单元——当孪生两侧都横跨多个 L2 域时，
+# 这是同一条冲突（同一组文档），按接口名报告一次；Impl 侧行会重复同一事实。
+# 仅当接口侧本身也是多域冲突时才去重；Impl 独自多域仍如实报告。
+layer_scan = entry_records + layer_records
+impl_conflict_dedup = lambda do |record|
+  next false unless record.symbol.end_with?("Impl")
+
+  base = record.symbol.sub(/Impl\z/, "")
+  next false if base.empty?
+
+  twins = layer_scan.select { |r| r.symbol == base }
+  twin_paths = twins.map(&:path).uniq
+  next false unless twin_paths.length == 1
+
+  layer_scan.find { |r| r.path == twin_paths.first }.matched_l2.length > 1
+end
+entry_conflicts = entry_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) && !impl_conflict_dedup.call(record) }
 # Self-entry layer records are already covered by entry_conflicts — counting
 # them again here would double-report the same class.
-service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && record.reverse_coverage_status != "self_entry_coverage" && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
+service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && record.reverse_coverage_status != "self_entry_coverage" && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) && !impl_conflict_dedup.call(record) }
 technical_entry_records = entry_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_layer_records = layer_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 unarchived_entries = entry_records.select { |record| record.matched_docs.empty? && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
@@ -1179,6 +1232,7 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
 
   > 前三个桶互斥且求和等于本表上方 Unarchived Core Units 数（#{(missing_documentation_services + unresolved_chain_services + uncertain_services).uniq.length}）；第四行 `unresolved (ambiguous same-name reference)` 是**正交状态计数**（同名类出现在多个包中），可能与本表其它行重叠计数，不参与求和。
   > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
+  > 文档侧口径（显式实现别名）：文档按标识符边界点名唯一孪生 `XImpl` 即视为 `X` 已覆盖，反之亦然；孪生简单名在扫描结果中不唯一（多包同名）或无孪生时别名关闭，逐记录点名。命中别名的记录 `Match Reason` 显示 `impl_alias=…`/`text impl alias=…`。
 
   ## Blocking / Pending Core Units
 
