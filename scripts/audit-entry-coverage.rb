@@ -570,7 +570,14 @@ def extract_record_anchors(path, symbol)
 
   function_names = method_names.select { |name| name.match?(/(?:process|handle|map|flatMap|sink|publish|calculate|execute|run)/i) }
 
-  code_anchors = ([symbol, class_name, File.basename(path), path] + method_names + route_paths + topics + sql_names + api_client_names + job_names + function_names).uniq
+  # 锚点卫生轮（NEXT-ROUND-BRIEF-ANCHOR-HYGIENE AH-1，R2-#181 S3①）：method 与
+  # function 名不进 code_anchor 常开候选——它们已有专属的带 owner 门通道（表通道
+  # method/function 字段要求行内 owner 上下文，:670-676；文本通道 function 要求
+  # owner 点名）。滞留在 code_anchor 里会以 @90 旁路两道门：`Code Anchor` 单元格
+  # 写一个裸 `process` 即命中所有定义该方法的类（R2-#181 探针实证，双仓真实样本
+  # 零发生，属既有面修补）。symbol/class/basename/path/route/topic/job/sql/
+  # api_client 保留在常开候选内不变。
+  code_anchors = ([symbol, class_name, File.basename(path), path] + route_paths + topics + sql_names + api_client_names + job_names).uniq
 
   {
     class_name: class_name,
@@ -756,13 +763,6 @@ def doc_match_for_record(doc_info, record)
   end
 
   text = doc_info[:text]
-  # 泛化方法名 owner 门（NEXT-ROUND-BRIEF §2-2，与表通道 R1-P1-4 同纪律）：
-  # process/handle/execute 一类泛化方法名只有在该文档同时点名 owner（符号或类
-  # 名）时才是本记录的证据——否则一个 `process` 独立词会命中所有调度类类别的
-  # 每个文档，制造 text function 幻影边（R3-#176 量化 60 边）。
-  owner_named_in_text = [record.symbol, record.class_name].compact.any? do |owner|
-    !owner.to_s.empty? && identifier_in_text?(text, owner)
-  end
   text_checks = [
     [record.path, 70, "text path"],
     [File.basename(record.path), 55, "text basename"],
@@ -776,9 +776,12 @@ def doc_match_for_record(doc_info, record)
     *record.route_paths.map { |route| [route, 64, "text route"] },
     *record.topics.map { |topic| [topic, 62, "text topic"] },
     *record.job_names.map { |job| [job, 62, "text job"] },
-    *(owner_named_in_text ? record.function_names.map { |function| [function, 58, "text function"] } : []),
     *record.sql_names.map { |sql| [sql, 58, "text sql"] }
   ]
+  # 锚点卫生轮（AH-2，R2-#181 S3②）：独立的 `text function` 检查已删除。#181 的
+  # owner 门使该检查结构性不可达——门开 ⟺ symbol/class 以同一谓词在同一文本命中，
+  # 其 @60 直证恒遮蔽 @58；双仓真实样本 `text function=` 出现 0 次。方法名证据由
+  # 表通道 method/function 字段（行内 owner 门，@85）完整承载。
 
   text_checks.each do |token, strength, reason|
     next if token.to_s.empty?
@@ -1283,7 +1286,9 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
   > 前三个桶互斥且求和等于本表上方 Unarchived Core Units 数（#{(missing_documentation_services + unresolved_chain_services + uncertain_services).uniq.length}）；第四行 `unresolved (ambiguous same-name reference)` 是**正交状态计数**（同名类出现在多个包中），可能与本表其它行重叠计数，不参与求和。
   > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
   > 文档侧口径（显式实现别名）：文档按标识符边界点名唯一孪生 `XImpl` 即视为 `X` 已覆盖，反之亦然；孪生简单名在扫描结果中不唯一（多包同名）或无孪生时别名关闭，逐记录点名。命中别名的记录 `Match Reason` 显示 `table impl_alias=…`（表格名字级单元格）或 `text impl alias=…`（正文），两通道同谓词；表格别名行的分类声明与直接点名同样生效。
-  > 弱证据口径（泛化 token 轮）：mapper XML 的 SQL 名证据过滤通用列名与碎片（`id`/`updater`/`is_deleted`/`u_t`/尾随 `_` 碎片等不作为证据；`t_m_sku`、`u_t_order` 一类真实表名保留）；正文方法名（`process`/`execute`/`handle` 族）仅在该文档同时点名 owner（符号或类名）时作为证据。
+  > 弱证据口径（泛化 token 轮）：mapper XML 的 SQL 名证据过滤通用列名与碎片（`id`/`updater`/`is_deleted`/`u_t`/尾随 `_` 碎片等不作为证据；`t_m_sku`、`u_t_order` 一类真实表名保留）；方法名（`process`/`execute`/`handle` 族）不作为常开锚点证据，仅经表通道 method/function 字段在该行同时点名 owner 时作证据（@85）。
+  > 锚点卫生口径（锚点卫生轮）：① method/function 名已从 code_anchor 常开候选拆出（`Code Anchor` 单元格写裸方法名不再以 @90 旁路 owner 门）；② 独立的 `text function` 检查已删除（owner 门使其结构性不可达，方法名证据由表通道承载）。
+  > 裁决明示（Current User）：跨通道 Reason 展示维持通道序（表通道证据优先于文本通道展示，`impl_alias` 标签如实披露，不改展示策略）；`ImplImpl`→`Impl` 机械别名**明示接纳**（双方唯一守卫已覆盖，非缺陷）；中文表头映射**维持惰性**（`符号`/`代码路径` 等 canonical 化为空键、名字级单元格为空，logistics 别名覆盖由文本通道稳定承载；扩展映射须单独授权并预告数字口径变化）。
 
   ## Blocking / Pending Core Units
 
