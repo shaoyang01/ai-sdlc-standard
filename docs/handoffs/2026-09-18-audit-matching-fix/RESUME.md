@@ -178,3 +178,36 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   WarehouseSkuPurchaseRelationService。
 - 卫生项：`53251a99` 树内审计报告为提交前陈旧副本（86/169），下次 B 线触碰时
   重生成提交。
+
+## 10. 2026-09-19 更新（续）：#181 泛化 token 轮闭环 + 锚点卫生轮立项
+
+### A 线 #181（弱证据过滤口径）
+- NEXT-ROUND-BRIEF 立项 → 实施 **`0769b8f`**（SQL 三重门 denylist+碎片+长度门、
+  文本通道 function owner 门、口径说明；J-1/J-2/J-3 按 brief 条款未捆绑）→
+  R2 独立复审 **PASS** 零阻塞（被撤 1845 边 100% 程序化归因 0 例未解释；A179-R3
+  探针组新头复现）→ 用户授权合并，merge commit **`84e0a20`**（主线现口径）。
+- 关键数字（同树，wms 信息性非样板）：logistics @ `53251a99` 0/18/153 →
+  **0/18/59**（−94 幻影消肿；未归档面集合级不变，838 记录零翻转）；wms
+  33/79/177 → **141/81/65**（+108 入口为 `text sql`@58 泛化 token 误归档撤除的
+  方向性回落——渠道归因按 R2 §3.4 修正，非初报的 code_anchor@90）。
+- 三级判别 17/13→29/1→30/0、fixture 30/0、全量全绿。教训追加：方向性预告面
+  本身可不全（本轮入口回落未被预告），逐行机制归因才是验收标准。
+
+### S1 登记链（三轮口径）
+- 一次：PR #171 勘误块 + PKB `dbb7cda`（0/20/150，边界口径）
+- 二次：PR #171 二次勘误块 + PKB `06792d5`（0/18/153，别名口径）
+- 三次：PR #171 三次勘误块 + PKB **`4be706d`**（**0/18/59**，弱证据过滤口径，
+  现行；wms 141/81/65 按 R2 修正渠道口径）；前序数字均已标注为历史口径。
+
+### 锚点卫生轮立项（未开工，等授权）
+- 见本目录 **`NEXT-ROUND-BRIEF-ANCHOR-HYGIENE.md`**：AH-1 表通道 code_anchor 的
+  method/function 成分补 owner 门（R2-S3①，双仓零发生的既有面）+ AH-2
+  `text function` 死检查处置（R2-S3②，实施方建议删除）+ J-1/J-2/J-3 维持现状
+  口径说明明示收口。预期 logistics 零漂移。
+
+### B 线残余（未动，待 Current User）
+- 现态：18 未归档（1 missing + 17 unresolved）+ 59 冲突（#181-R2 复核幸存行
+  零伪边，含 5 行真实跨域重复待文档侧指针化）；4 项归属复核仍待用户：
+  DiplomacyService、BatchManager 族、UserWarehouseService、
+  WarehouseSkuPurchaseRelationService。卫生项：`53251a99` 树内报告陈旧副本
+  下次 B 线触碰时重生成。
