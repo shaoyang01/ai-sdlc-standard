@@ -137,3 +137,44 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   （20/150 属脚本口径面，文档侧已尽）→ §4-④ 挂账项维持。
 - 环境：node v24（ABI 137）/ ruby 3.3.12+Psych 5.1.2 / 三 shell 套件手动跑 / 本机
   logistics-master 工作区如被切回 master 记得 pull（origin/master 头 53251a99）。
+
+## 9. 2026-09-19 更新（家用机会话：A 线两轮闭环 + 泛化轮立项）
+
+### A 线 #176（边界口径）
+- R3 复审 PASS（零阻塞）→ 用户授权合并；BEHIND 保护触发 update branch（`ffc41b2`）
+  后合并，merge commit **`93377d1`**。§4-①/② 随之可执行。
+
+### 数字重登记（健康样本口径，wms-monitor 不作样板）
+- PR #171 描述勘误块 + PKB 勘误 `dbb7cda`（audits/2026-09-19-correction-g6-prereq-
+  audit-matching-caliber.md + current.md 第 4 条）：logistics-master @ `53251a99`
+  旧口径 0/134/192 → 边界口径（93377d1）0/20/150，同树双口径实测。
+
+### A 线 #179（别名口径，X↔XImpl (b) + 唯一性守卫）
+- R1 自证 → R2 独立复审 **FAIL**（H1 表通道 impl_alias 合成列结构性不可达死代码
+  + 分类覆盖不对等；H2 非阻塞孪生被去重吞成零行）→ 整改 **`0c9e0fd`**（接线
+  entry_name/code_anchor 76/75 + 别名行携带分类覆盖；dedup 加接口侧资格判定）→
+  R3 收束确认 **PASS** → 用户授权合并，merge commit **`7f3ffd7`**（主线现口径）。
+- 关键数字（同树双口径，两轮独立复审零漂移）：logistics @ `53251a99`
+  0/20/150 → **0/18/153**（−2 去重 + 5 真实跨域新可见 + 6 行翻转）；wms（信息性）
+  33/115/179 → 33/79/177。三级判别 15/12→18/9→27/0、fixture 27/0。
+- 复审 prompt 按 `docs/handoffs/2026-09-09-g5-t1/review-request.md` 模板
+  （全量、只读、深度根因合并式）出具；R2/R3 探针资产留档 `/tmp/a179-probes/`。
+
+### S1 二次登记（合并后）
+- PR #171 描述二次勘误块 + PKB **`06792d5`**（勘误文件二次登记节 + current.md
+  第 5 条）：别名口径（7f3ffd7）**0/18/153**；上一节 0/20/150 标注为边界口径
+  历史登记。
+
+### S2 泛化 token 轮立项（未开工，等授权）
+- 见本目录 **`NEXT-ROUND-BRIEF.md`**：根因已坐实（sql 泛化碎片 1993 边 +
+  function 泛化方法名 60 边）、修复边界与回归矩阵已备；增量裁决三项
+  （J-1 跨通道 Reason 展示策略 / J-2 ImplImpl 机械别名 / J-3 中文表头映射惰性）
+  随授权一并定夺。
+
+### B 线残余（未动，待 Current User）
+- 18 未归档 = 1 missing（DiplomacyService）+ 17 unresolved（text path 点名无链）；
+  153 冲突中 5 行真实跨域重复待文档侧收敛；4 项归属待用户复核：
+  DiplomacyService、BatchManager 族、UserWarehouseService、
+  WarehouseSkuPurchaseRelationService。
+- 卫生项：`53251a99` 树内审计报告为提交前陈旧副本（86/169），下次 B 线触碰时
+  重生成提交。
