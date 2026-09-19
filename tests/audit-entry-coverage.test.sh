@@ -115,6 +115,27 @@ printf 'package com.example.service;\npublic enum EnumTwinService { VALUE_A, VAL
   > "${R}/src/main/java/com/example/service/EnumTwinService.java"
 printf 'package com.example.service;\npublic class EnumTwinServiceImpl implements EnumTwinService {}\n' \
   > "${R}/src/main/java/com/example/service/EnumTwinServiceImpl.java"
+# ---- 泛化 token 弱证据轮（NEXT-ROUND-BRIEF）回归面 ----
+# OrderMapper.xml：真实表名 t_order_item + 通用列名碎片（id/updater）——
+# sql 证据过滤后仅 t_order_item 可作为证据。
+mkdir -p "${R}/src/main/resources/mapper"
+cat > "${R}/src/main/resources/mapper/OrderMapper.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="com.example.mapper.OrderMapper">
+  <select id="selectByOrderNo" resultType="map">
+    select * from t_order_item where id = #{id} and updater = #{updater}
+  </select>
+</mapper>
+EOF
+# CalcManagerImpl：process 泛化方法名——文本通道需 owner 门。
+printf 'package com.example.manager;\npublic class CalcManagerImpl { public void process(String input) {} }\n' \
+  > "${R}/src/main/java/com/example/manager/CalcManagerImpl.java"
+# 反例文档：只含泛化独立词（process / id）——不得归档 OrderMapper 与 CalcManagerImpl。
+cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010104SqlFunction(弱证据).md" <<'EOF'
+# Generic word doc
+
+本段仅含通用词 process 与 id，用于验证泛化 token 弱证据过滤。
+EOF
 printf 'package com.example.service.impl;\npublic class TableOnlyServiceImpl { private AliasPairService aliasPairService; private ReviewService reviewService; }\n' \
   > "${R}/src/main/java/com/example/service/impl/TableOnlyServiceImpl.java"
 
@@ -155,6 +176,7 @@ cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010103Alias(别名通道).md" 
 | Manager | StockManager | src/main/java/com/example/manager/StockManager.java | verified-code |
 
 文本通道点名：WeightServiceImpl / TwoCacheServiceImpl / AliasPairService / ReviewServiceImpl / TwinServiceImpl / EnumTwinService
+正向对照（真实证据）：表 t_order_item 归 OrderMapper；CalcManagerImpl 的 process 方法（owner 同段点名）
 EOF
 
 # ⑤ 实现侧文档（L2 0102，与接口侧异域）：点名 AliasPairServiceImpl 与
@@ -238,6 +260,20 @@ if [[ "${REVIEW_REASON}" == "text impl alias=ReviewServiceImpl" ]]; then
 else
   fail "text-channel alias reason, got: ${REVIEW_REASON}"
 fi
+CASE_NAME="audit GT: generic SQL fragments and ownerless function words are not evidence"
+ORDER_DOCS="$(awk -F'\t' '$2=="OrderMapper"{print $12}' "${R}/.sdlc/reports/entry_coverage/service_inventory.tsv")"
+CALC_DOCS="$(awk -F'\t' '$2=="CalcManagerImpl"{print $12}' "${R}/.sdlc/reports/entry_coverage/service_inventory.tsv")"
+if [[ "${ORDER_DOCS}" == *Alias* && "${ORDER_DOCS}" != *SqlFunction* ]]; then
+  pass "OrderMapper archived only by the real table name doc, not the generic-word doc (${ORDER_DOCS})"
+else
+  fail "OrderMapper matched_docs, got: ${ORDER_DOCS}"
+fi
+if [[ "${CALC_DOCS}" == *Alias* && "${CALC_DOCS}" != *SqlFunction* ]]; then
+  pass "CalcManagerImpl archived only by owner-naming doc, not the ownerless generic-word doc (${CALC_DOCS})"
+else
+  fail "CalcManagerImpl matched_docs, got: ${CALC_DOCS}"
+fi
+assert_contains "${UNARCH_SERVICES}" '`OrderMapper`' "uncited-chain persistence unit stays visible in unarchived core units (control)"
 
 echo ""
 echo "==== audit-entry-coverage regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
