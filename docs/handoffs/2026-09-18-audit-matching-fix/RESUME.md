@@ -211,3 +211,17 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   DiplomacyService、BatchManager 族、UserWarehouseService、
   WarehouseSkuPurchaseRelationService。卫生项：`53251a99` 树内报告陈旧副本
   下次 B 线触碰时重生成。
+
+## 11. 2026-09-19 更新（续二）：#183 锚点卫生轮闭环
+
+- 锚点卫生轮（`NEXT-ROUND-BRIEF-ANCHOR-HYGIENE.md`）实施 **`642d549`**（AH-1
+  method/function 拆出 code_anchor 常开候选、AH-2 删除 `text function` 死检查、
+  J-1/J-2/J-3 口径说明明示收口）→ R2 独立复审 **PASS** 零阻塞（双仓七产物去
+  时间戳逐字节零漂移，A179-R3 探针组新头复现，A181 建议链 S3①② 承接关闭）→
+  用户授权合并，merge commit **`64ad77e`**（主线现口径）。
+- 第四次登记沿 R2-S1 以 PR #183 合并说明评论落地（一行口径注记 + J 项留痕；
+  PR #171/PKB 数字无需更新——零漂移）。
+- 四轮全史：#176 边界（`93377d1`）→ #179 别名（`7f3ffd7`）→ #181 弱证据
+  （`84e0a20`）→ #183 锚点卫生（`64ad77e`）。现行缺口全为真实面：18 未归档
+  （1 missing + 17 unresolved）+ 59 冲突（零伪边，含 5 行真实跨域重复）。
+- B 线残余与 4 项归属复核见 §10，仍待 Current User。
