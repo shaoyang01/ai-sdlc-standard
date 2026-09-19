@@ -249,3 +249,23 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   LmExtScheduleTask 族 ×4、LcWarehouseProdModeStrategy 族 ×3、ProdBatchConfig
   Mapper ×2、CsoWorkSheetRpcServiceImpl、LcCacheService）——推进需链侧证据或
   文档补链，属后续轮待授权。
+
+## 13. 2026-09-19 更新（续四）：17 链面缺口取证 + A 类入口枚举补盲
+
+- 17 个 unresolved 链面缺口代码取证归因：**A 类入口清单缺员**（profile
+  entry_types 为手工枚举清单，`master/rpc/` 40 实现类 vs 枚举 38，缺员
+  `LcProdModeSkuConditionsRPCServiceImpl` @Service 发布实证；`CsoWorkSheetRpcServiceImpl`
+  核验为 @Component 出站 HTTP 客户端——对接客服系统、MQ 消费——不补录）；
+  **B 类后台驱动/出站网关**（引用方全为调度/MQ 监听/处理器，语义上无上游入口）；
+  **C 类孤儿**（`LcCacheService` 全仓无 Java 引用方）。
+- A 类补录落地：logistics-master **`ab5bae1c`** 直推 master（profile 补 1 行 +
+  报告重生成）。审计验证：未归档 17→**13**（LcProdModeSkuConditions 整族 4 条经
+  入口→Service→Manager→Mapper 类型引用链消解）、冲突 48 持平、入口 154（+1）
+  未归档入口 0。过程注记：推送遇公司 GitLab SSH 瞬时故障，重试成功。
+- 登记链第六笔：PR #171 A 类注记 + PKB **`c048ace`**。
+- 剩余 13 条 = B 类 12（ShippingLocateStrategyInit ×2、LmExtScheduleTask ×4、
+  LcWarehouseProdModeStrategy ×3、ProdBatchConfigMapper ×2、
+  CsoWorkSheetRpcServiceImpl）+ C 类 1（LcCacheService）——处置二选一待
+  Current User：(a) profile 增设「调度/MQ 入口」类型并补录（口径变更，入口总数
+  变化需预告）；(b) 维持「入口=Dubbo/HTTP」口径，L4 文档标注「后台自洽链」并
+  授权按语义归档。C 类建议单独定性（无调用方孤儿）。
