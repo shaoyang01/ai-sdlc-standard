@@ -269,3 +269,25 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   Current User：(a) profile 增设「调度/MQ 入口」类型并补录（口径变更，入口总数
   变化需预告）；(b) 维持「入口=Dubbo/HTTP」口径，L4 文档标注「后台自洽链」并
   授权按语义归档。C 类建议单独定性（无调用方孤儿）。
+
+## 14. 2026-09-19 更新（续五）：剩余 13 条处置（用户裁决 (b)）落地
+
+- 17 链面缺口归因（§13）后，Current User 裁决选 **(b)**：维持「入口=Dubbo/HTTP」
+  口径，owner L4 文档标注「后台自洽链」并按语义归档；C 类摘出单独定性。
+- 落地：logistics-master `docs/background-chain-semantic-archive` @ **`6a501e62`**
+  直推 master（6 文件 +49/−4，零脚本改动）——6 个 owner L4 新增「后台自洽链归
+  案」表（Code Anchor + not applicable 状态列，走既有 row_classification 通道）：
+  020102 ×4 / 050301 ×2 / 030301 ×3 / 020202 ×2 / 030101 ×2 / 010201 ×1。
+- 审计验证：未归档核心单元 13→**1**（仅剩 C 类 LcCacheService）、冲突 48→**44**
+  （LmExtScheduleTask 族 0303+0803 跨域随 non_blocking 出冲突面）、新增冲突 0、
+  其余记录零漂移。审计状态保持 BLOCKED（唯一可见阻塞行 = C 类）。
+- C 类 LcCacheService 定性：Cachalot 缓存管道包装（common 模块 cache/cahalot），
+  **全仓零引用**（java/xml/yml/properties 全空），疑似未接线遗留。处置选项待
+  Current User：①同样标注 not applicable（内联内部工具）；②保留可见；③业务侧
+  删除代码（业务代码变更，需单独授权）。
+- 登记链第七笔：PR #171 B 类注记 + PKB **`f3396bd`**。
+- **C 类落地补记（§14 定稿前）**：LcCacheService 经 Current User 授权选 **①**
+  （内部工具语义标注），logistics-master **`fd8e5a45`** 直推 master——070301
+  新增「内部工具归档」行（not applicable），**未归档核心单元 1→0**。lm 现口径
+  修正为 **0/0/44**：未归档面全清（技术面可见），Status 维持 BLOCKED 仅因 44 行
+  真实跨域重复（后续指针化工程，见 §12/§14 遗留项）。
