@@ -286,3 +286,8 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   Current User：①同样标注 not applicable（内联内部工具）；②保留可见；③业务侧
   删除代码（业务代码变更，需单独授权）。
 - 登记链第七笔：PR #171 B 类注记 + PKB **`f3396bd`**。
+- **C 类落地补记（§14 定稿前）**：LcCacheService 经 Current User 授权选 **①**
+  （内部工具语义标注），logistics-master **`fd8e5a45`** 直推 master——070301
+  新增「内部工具归档」行（not applicable），**未归档核心单元 1→0**。lm 现口径
+  修正为 **0/0/44**：未归档面全清（技术面可见），Status 维持 BLOCKED 仅因 44 行
+  真实跨域重复（后续指针化工程，见 §12/§14 遗留项）。
