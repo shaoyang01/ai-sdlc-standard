@@ -109,6 +109,12 @@ printf 'package com.example.service;\npublic interface AliasPairService {}\n' \
   > "${R}/src/main/java/com/example/service/AliasPairService.java"
 printf 'package com.example.service;\npublic class AliasPairServiceImpl implements AliasPairService {}\n' \
   > "${R}/src/main/java/com/example/service/AliasPairServiceImpl.java"
+# H2 回归族（A179-R2-H2）：接口内容实为 enum → 内容细分 data_type（非阻塞分类），
+# 实现正常——两 L2 域各点名一侧时，去重不得把 Impl 行吞成零行（接口侧无报告资格）。
+printf 'package com.example.service;\npublic enum EnumTwinService { VALUE_A, VALUE_B }\n' \
+  > "${R}/src/main/java/com/example/service/EnumTwinService.java"
+printf 'package com.example.service;\npublic class EnumTwinServiceImpl implements EnumTwinService {}\n' \
+  > "${R}/src/main/java/com/example/service/EnumTwinServiceImpl.java"
 printf 'package com.example.service.impl;\npublic class TableOnlyServiceImpl { private AliasPairService aliasPairService; private ReviewService reviewService; }\n' \
   > "${R}/src/main/java/com/example/service/impl/TableOnlyServiceImpl.java"
 
@@ -144,14 +150,15 @@ cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010103Alias(别名通道).md" 
 
 ## Entry Chain
 
-| Layer | Entry / Component | Evidence | Status |
+| Layer | Entry Name | Evidence | Status |
 | --- | --- | --- | --- |
 | Manager | StockManager | src/main/java/com/example/manager/StockManager.java | verified-code |
 
-文本通道点名：WeightServiceImpl / TwoCacheServiceImpl / AliasPairService / ReviewServiceImpl / TwinServiceImpl
+文本通道点名：WeightServiceImpl / TwoCacheServiceImpl / AliasPairService / ReviewServiceImpl / TwinServiceImpl / EnumTwinService
 EOF
 
-# ⑤ 实现侧文档（L2 0102，与接口侧异域）：仅点名 AliasPairServiceImpl。
+# ⑤ 实现侧文档（L2 0102，与接口侧异域）：点名 AliasPairServiceImpl 与
+# EnumTwinServiceImpl（后者的接口侧为非阻塞分类，H2 回归形态）。
 cat > "${R}/.sdlc/business_domain/01Domain/0102L2/010201AliasPair(跨域别名对).md" <<'EOF'
 # AliasPair across domains
 
@@ -160,6 +167,7 @@ cat > "${R}/.sdlc/business_domain/01Domain/0102L2/010201AliasPair(跨域别名�
 | Layer | Entry / Component | Evidence | Status |
 | --- | --- | --- | --- |
 | Service | AliasPairServiceImpl | src/main/java/com/example/service/AliasPairServiceImpl.java | verified-code |
+| Service | EnumTwinServiceImpl | src/main/java/com/example/service/EnumTwinServiceImpl.java | verified-code |
 EOF
 
 ruby "${AUDIT}" --strict "${R}" > "${WORK_ROOT}/run.out" 2>&1
@@ -213,7 +221,23 @@ assert_contains "${UNARCH_ENTRIES}" '`CacheServiceImpl`' "CacheServiceImpl not a
 CASE_NAME="audit R3-⑤: X/XImpl spanning two L2 domains report ONE conflict"
 assert_contains "${R}/.sdlc/reports/entry_coverage/cross_domain_conflicts.md" '`AliasPairService`' "pair conflict reported once, under the interface name"
 assert_not_contains "${R}/.sdlc/reports/entry_coverage/cross_domain_conflicts.md" '`AliasPairServiceImpl`' "no duplicate Impl-side conflict row"
-assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" "| Cross-Domain Conflicts | 1 |" "conflict count is exactly 1 for the aliased twin pair"
+assert_contains "${R}/.sdlc/reports/entry_coverage/entry_coverage_report.md" "| Cross-Domain Conflicts | 2 |" "conflict count = 1 aliased pair + 1 kept Impl row (H2 family)"
+CASE_NAME="audit R2-H2: dedup keeps the Impl row when the interface side is non-blocking"
+assert_contains "${R}/.sdlc/reports/entry_coverage/cross_domain_conflicts.md" '`EnumTwinServiceImpl`' "Impl row kept: enum-classified interface has no conflict-report eligibility"
+assert_not_contains "${R}/.sdlc/reports/entry_coverage/cross_domain_conflicts.md" '`EnumTwinService`' "non-blocking interface itself still yields no conflict row"
+CASE_NAME="audit R2-H1/S3: alias fires on BOTH channels with distinguishable reasons"
+STOCK_REASON="$(awk -F'\t' '$2=="StockManagerImpl"{print $9}' "${R}/.sdlc/reports/entry_coverage/service_inventory.tsv")"
+REVIEW_REASON="$(awk -F'\t' '$2=="ReviewService"{print $9}' "${R}/.sdlc/reports/entry_coverage/service_inventory.tsv")"
+if [[ "${STOCK_REASON}" == "table impl_alias=StockManager" ]]; then
+  pass "table-channel alias is live: reason = ${STOCK_REASON}"
+else
+  fail "table-channel alias reason, got: ${STOCK_REASON}"
+fi
+if [[ "${REVIEW_REASON}" == "text impl alias=ReviewServiceImpl" ]]; then
+  pass "text-channel alias intact: reason = ${REVIEW_REASON}"
+else
+  fail "text-channel alias reason, got: ${REVIEW_REASON}"
+fi
 
 echo ""
 echo "==== audit-entry-coverage regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
