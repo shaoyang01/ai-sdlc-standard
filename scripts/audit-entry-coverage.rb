@@ -387,6 +387,19 @@ def text_contains?(text, token)
   text.downcase.include?(token.downcase)
 end
 
+# Identifier evidence must match on an IDENTIFIER BOUNDARY, never by substring.
+# Substring matching made `DeliveryBatchServiceImpl` count as evidence for the
+# INDEPENDENT record `BatchServiceImpl` (and `SkuSaleRelationServiceImpl` for
+# `SkuSaleRelationService`): the shorter record could be archived — or turned
+# into a cross-domain conflict — by a document that never mentions it. Paths
+# stay substring-matched (they are long, unique and quoted verbatim by docs).
+def identifier_in_text?(text, token)
+  token = strip_markdown(token)
+  return false if token.empty?
+
+  text.match?(/(?<![A-Za-z0-9_])#{Regexp.escape(token)}(?![A-Za-z0-9_])/i)
+end
+
 def basename_without_ext(path)
   File.basename(path).sub(/\.[^.]+\z/, "")
 end
@@ -433,6 +446,27 @@ def token_match?(candidate, tokens)
     next word_boundary_include?(candidate, token) if token.length < 4
 
     candidate.include?(token) || word_boundary_include?(candidate, token)
+  end
+end
+
+# Same discipline as the text channel (identifier_in_text?): an identifier cell
+# is evidence only when it names the identifier, never when it merely contains
+# it. A `Code Anchor` cell reading `DeliveryOrderServiceImpl` must not archive
+# the independent record `OrderServiceImpl` — the table channel carried the same
+# substring defect the text channel was fixed for, and it is live wherever a
+# document header aliases to a candidate field (e.g. the bilingual
+# `代码锚点（Code Anchor）`).
+def identifier_token_match?(candidate, tokens)
+  candidate = normalized_token(candidate)
+  return false if candidate.empty?
+
+  tokens.any? do |token|
+    token = normalized_token(token)
+    next false if token.empty?
+    next false if control_keyword?(candidate) || control_keyword?(token)
+    next true if candidate == token
+
+    word_boundary_include?(candidate, token)
   end
 end
 
@@ -655,7 +689,11 @@ def match_row_to_record(row, record)
     next if value.to_s.empty?
 
     split_values(value).each do |candidate|
-      next unless token_match?(candidate, tokens)
+      # Path cells stay lenient (a cell may carry a line range, e.g.
+      # `X.java:94-186`); every other field is an identifier list and must
+      # respect identifier boundaries.
+      matched = field == "path" ? token_match?(candidate, tokens) : identifier_token_match?(candidate, tokens)
+      next unless matched
 
       strength = strengths[field]
       reason = "table #{field}=#{candidate}"
@@ -689,7 +727,10 @@ def doc_match_for_record(doc_info, record)
 
   text_checks.each do |token, strength, reason|
     next if token.to_s.empty?
-    next unless text_contains?(text, token)
+    # Paths are matched verbatim; every other token is an identifier and must
+    # respect identifier boundaries (see identifier_in_text?).
+    matched = reason == "text path" ? text_contains?(text, token) : identifier_in_text?(text, token)
+    next unless matched
 
     best = [strength, "#{reason}=#{token}", nil] if best.nil? || strength > best.first
   end
@@ -936,13 +977,25 @@ resolve_reverse = lambda do |record|
   end
 end
 
+# Classes that are entries AND layer units (Dubbo-exposed *Service /
+# *RPCServiceImpl): they are accounted for once, as entries — see the
+# self_entry_coverage branch below.
+self_entry_paths = entry_records.map(&:path).to_set
+
 layer_records.each do |record|
   # R13-B2 + R1-P1-4: typed owner-context edges replace the one-hop string
   # search; method names are no longer standalone evidence.
   reverse_status, reverse_chain = resolve_reverse.call(record)
   reverse_entries = reverse_status == "covered" ? [true] : []
   record.reverse_coverage_status =
-    if NON_BLOCKING_CLASSIFICATIONS.include?(record.classification)
+    if self_entry_paths.include?(record.path)
+      # A class can be BOTH an entry (Dubbo-exposed *Service / *RPCServiceImpl via
+      # the entry patterns) and a layer unit (the *Service.java / *ServiceImpl.java
+      # layer patterns). An entry is a reference ROOT: demanding an inbound chain
+      # from another entry kept such classes permanently "unarchived" as core
+      # units. They are accounted for once, as entries.
+      "self_entry_coverage"
+    elsif NON_BLOCKING_CLASSIFICATIONS.include?(record.classification)
       "non_blocking_technical_bridge"
     elsif reverse_entries.empty?
       reverse_status == "unresolved_ambiguous_reference" ? "unresolved_ambiguous_reference" : "no_entry_reverse_coverage"
@@ -970,19 +1023,24 @@ end
 # promoted to PASS).
 missing_documentation_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.empty? && record.reverse_coverage_status != "no_entry_reverse_coverage"
 end
 unresolved_chain_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.any? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 uncertain_services = layer_records.select do |record|
   !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) &&
+    record.reverse_coverage_status != "self_entry_coverage" &&
     record.matched_docs.empty? && record.reverse_coverage_status == "no_entry_reverse_coverage"
 end
 
 entry_conflicts = entry_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
-service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
+# Self-entry layer records are already covered by entry_conflicts — counting
+# them again here would double-report the same class.
+service_conflicts = layer_records.select { |record| record.matched_l2.length > 1 && record.reverse_coverage_status != "self_entry_coverage" && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_entry_records = entry_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 technical_layer_records = layer_records.select { |record| NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
 unarchived_entries = entry_records.select { |record| record.matched_docs.empty? && !NON_BLOCKING_CLASSIFICATIONS.include?(record.classification) }
@@ -1117,8 +1175,9 @@ reports[strict_outputs["unarchived_services"]] = <<~MARKDOWN
   | missing documentation | #{missing_documentation_services.length} |
   | unresolved call chain (doc-matched) | #{unresolved_chain_services.length} |
   | uncertain (no docs, no chain) | #{uncertain_services.length} |
-  | unresolved (ambiguous same-name reference) | #{layer_records.count { |r| r.reverse_coverage_status == "unresolved_ambiguous_reference" }} |
+  | (orthogonal) unresolved (ambiguous same-name reference) | #{layer_records.count { |r| r.reverse_coverage_status == "unresolved_ambiguous_reference" }} |
 
+  > 前三个桶互斥且求和等于本表上方 Unarchived Core Units 数（#{(missing_documentation_services + unresolved_chain_services + uncertain_services).uniq.length}）；第四行 `unresolved (ambiguous same-name reference)` 是**正交状态计数**（同名类出现在多个包中），可能与本表其它行重叠计数，不参与求和。
   > 判定依据：`Evidence Chain` 列显示从入口到该核心单元的类型化引用路径（Controller -> Service -> Manager -> Mapper，逐跳均为声明类型引用）。`unresolved_ambiguous_reference` 表示同名类出现在多个包中，按「不伪造调用关系」保留为未解析，不计入 covered。
 
   ## Blocking / Pending Core Units
