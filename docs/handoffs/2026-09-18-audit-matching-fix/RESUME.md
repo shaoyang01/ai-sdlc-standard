@@ -225,3 +225,27 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   （`84e0a20`）→ #183 锚点卫生（`64ad77e`）。现行缺口全为真实面：18 未归档
   （1 missing + 17 unresolved）+ 59 冲突（零伪边，含 5 行真实跨域重复）。
 - B 线残余与 4 项归属复核见 §10，仍待 Current User。
+
+## 12. 2026-09-19 更新（续三）：B 线 Owner 对账裁定落地
+
+- 归属卷宗（4 项证据 + 默认建议）经 Current User「按推荐」裁定。logistics-master
+  `docs/bline-ownership-rulings` @ **`2ac02018`** 直推 master（9 文件 +18/−17；
+  origin 为公司 GitLab sprucetec，直推沿 B 线惯例，不走 PR）：
+  BatchManager/BatchMapper→0303、DeliveryBatchManager→040204、SKU/仓库外交
+  服务→0203/0401、外交基类 DiplomacyService→080201（新增点名，归档）、
+  LcProdBatchSchedule/TemplateManager→030103/030102、LcTaskNodeClassDeadline
+  City/TemplateManager→**050201**（最详细引用=归属，偏离 Namesake 直觉已披露）、
+  SkuCollectDataRecordService→010104；非 owner 文档指针式去符号（沿 `a81cf5cc`
+  先例）；文档状态保持 Candidate 待 Owner 最终确认。
+- 审计验证：冲突 59→**48**（撤 10 符号行——授权 9 行 + BatchMapper 独立行 +
+  030201:38 第二处裸符号执行补全；新增 0）、未归档 18→**17**（0 missing +
+  17 unresolved；DiplomacyService 经 080201 点名 + 既有链归档）。
+- 登记链第五笔：PR #171 B 线落地注记 + PKB **`d6af8c8`**（勘误文件 B 线注记 +
+  current.md 第 6 条补现态 0/17/48）。
+- 过程披露：`/tmp/a181-base`（A181-R2 留档）曾误列入清理链、实际未执行、资产
+  完好。
+- 现态：lm 现口径 **0/17/48**。17 个 unresolved 全为链面真实缺口
+  （LcProdModeSkuConditions 族 ×4、ShippingLocateStrategyInit 族 ×2、
+  LmExtScheduleTask 族 ×4、LcWarehouseProdModeStrategy 族 ×3、ProdBatchConfig
+  Mapper ×2、CsoWorkSheetRpcServiceImpl、LcCacheService）——推进需链侧证据或
+  文档补链，属后续轮待授权。
