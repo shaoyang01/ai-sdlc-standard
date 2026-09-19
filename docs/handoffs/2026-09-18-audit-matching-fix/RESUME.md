@@ -291,3 +291,38 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   新增「内部工具归档」行（not applicable），**未归档核心单元 1→0**。lm 现口径
   修正为 **0/0/44**：未归档面全清（技术面可见），Status 维持 BLOCKED 仅因 44 行
   真实跨域重复（后续指针化工程，见 §12/§14 遗留项）。
+
+## 15. 2026-09-20 换机收口（家用机会话结束）
+
+### 收口时点状态总账
+- 产品仓：`feature/loop-runtime-v1` @ `337214d` 之后经 #183（`64ad77e`）、#185
+  （`8dca488`）、#186（`1d16cea`）、#187（`f1879c9`）合并，换机前头 = **`f1879c9`**
+  （以上 docs/代码 PR 全部 CI 4/4 后合并），工作区干净、与 origin 同步。
+- logistics-master（origin 为公司 GitLab sprucetec，直推 master 不走 PR）：
+  master @ **`99e20f00`**（2ac02018 B 线裁决 + 99e20f00 报告重生成），家用机
+  checkout 已快进同步、干净。终态 **0/0/44**：入口 0、未归档核心单元 0（清零）、
+  冲突 44（R2 复核零伪边真实跨域重复）。Status BLOCKED 仅因冲突面。
+- 登记链七笔 + 尾笔：PKB `dbb7cda`→`06792d5`→`4be706d`→`d6af8c8`→`c048ace`→
+  `f3396bd`→`e93c2f4`；PR #171 描述勘误块七段完整。
+- Control Plane 未写（本工作线无 lifecycle event，符合纪律）。
+
+### 待办（换机后，按优先级）
+1. **44 行真实跨域重复指针化工程立项**（唯一 BLOCKED 原因）：先由实施方出
+   「冲突-归属对照表」（逐行给 owner/非 owner 判定与指针化动作，沿 §12 裁决
+   惯例「最详细引用=归属」），Current User 裁决后一次业务仓写入。注意其中
+   `LcTaskNodeClassDeadline(City/Template)Manager` 对已按 §12 判归 050201。
+2. **可选清理**：产品仓 origin 6 个已合并未删的 `docs/20260919-*` 远端分支；
+   `git worktree prune`（历史 /tmp 登记）。
+3. **wms-monitor**：家用机 checkout 有 3 个未提交 `.sdlc/business_domain` 文档
+   改动（Owner 自己的本地改动，家用机会话全程未触碰）——**仅存在于家用机
+   工作区、未提交未推送**，离开家用机前请 Owner 自行决定提交分支或弃置。
+4. /tmp 复审资产（A179/A181/A183 探针组、双口径留档）为家用机本地文件，换机
+   后自然不在；复审报告正文已含全部关键证据，无需搬迁。
+
+### 环境提醒（换机必读，同 §5）
+- node v24.x（ABI 137）/ ruby 3.3.12 + Psych 5.1.2；三个 shell 套件不在 CI
+  须手动跑；wms-monitor 只读非样板；真实仓审计一律临时 worktree / CoW 副本 /
+  `--output-dir` 重导向。
+- 公司 GitLab SSH 偶发瞬断（家用机 9-19 两次遇到），重试即可。
+- 复审 prompt 模板：`docs/handoffs/2026-09-09-g5-t1/review-request.md`
+  （全量、只读、根因合并式九段式）。
