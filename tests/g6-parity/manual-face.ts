@@ -6,6 +6,7 @@
 // one entry-update per node completion (with gate fields on solution-gate).
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import type { FactScript } from "./types";
@@ -24,6 +25,8 @@ function publisher(libDir: string, args: readonly string[]): void {
 export interface ManualFaceResult {
   readonly manifestPath: string;
   readonly manifestText: string;
+  /** The seed manifest produced by `init` — the shared starting state for both faces. */
+  readonly seedManifestText: string;
 }
 
 /** Drives the manual face for one fact script. Returns the produced manifest. */
@@ -42,6 +45,8 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     "--title",
     `G6 parity ${requirementId}`,
   ]);
+
+  const seedManifestText = readFileSync(join(libDir, "manifest.md"), "utf8");
 
   let seq = 2;
   for (const finding of script.findings) {
@@ -79,6 +84,7 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
       "--source-ref",
       CANONICAL_PATHS[node.node].replace("{REQ}", requirementId),
     ];
+    if (node.node === "solution-gate") args.push("--binding", "formal_verdict");
     if (node.gateResult !== undefined) args.push("--gate-result", node.gateResult);
     if (node.decisionStatus !== undefined) args.push("--decision-status", node.decisionStatus);
     if (node.decisionDepth !== undefined) args.push("--decision-depth", node.decisionDepth);
@@ -105,6 +111,5 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
   }
 
   const manifestPath = join(libDir, "manifest.md");
-  const { readFileSync } = require("node:fs") as typeof import("node:fs");
-  return { manifestPath, manifestText: readFileSync(manifestPath, "utf8") };
+  return { manifestPath, manifestText: readFileSync(manifestPath, "utf8"), seedManifestText };
 }

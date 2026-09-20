@@ -39,7 +39,7 @@ function chainWithVerdict(
     nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", gateExtra),
     nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
     nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
-    nodeFact("code-review", "code_review_record", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
     nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
   ];
 }
