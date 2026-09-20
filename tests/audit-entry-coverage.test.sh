@@ -137,6 +137,15 @@ cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010104SqlFunction(弱证据).m
 本段仅含通用词 process 与 id，用于验证泛化 token 弱证据过滤。
 EOF
 
+# 表名弱证据轮（2026-09-20）反例文档：异域（0102）文档仅含表名 t_order_item、
+# 不点名任何类——不得据此归属 OrderMapper（base 经 text sql@58 误命中并制造
+# 跨域幻影冲突；真实样本 logistics-master D 组六行同型）。
+cat > "${R}/.sdlc/business_domain/01Domain/0102L2/010202TableOnly(表名弱证据).md" <<'EOF'
+# Table-name-only doc
+
+本档仅登记数据面事实：订单明细表 t_order_item 的下游引用情况，不点名任何实现类。
+EOF
+
 # AH-1 反例文档：Code Anchor 单元格写裸方法名（无 owner）——不得命中任何定义
 # 该方法的类（base 经 code_anchor@90 误命中）。
 cat > "${R}/.sdlc/business_domain/01Domain/0101L2/010105Method(方法锚点).md" <<'EOF'
@@ -301,6 +310,16 @@ else
   fail "owner-context method reason, got: ${CALC_REASON}"
 fi
 assert_contains "${UNARCH_SERVICES}" '`OrderMapper`' "uncited-chain persistence unit stays visible in unarchived core units (control)"
+
+# ---- 表名弱证据轮（2026-09-20）：裸表名不再是文本通道的记录身份证据 ----
+CASE_NAME="audit TS: bare table names in free text are not record identity evidence"
+ORDER_DOCS_TS="$(awk -F'\t' '$2=="OrderMapper"{print $12}' "${R}/.sdlc/reports/entry_coverage/service_inventory.tsv")"
+if [[ "${ORDER_DOCS_TS}" == *Alias* && "${ORDER_DOCS_TS}" != *TableOnly* ]]; then
+  pass "OrderMapper not attributed by the table-name-only doc (${ORDER_DOCS_TS})"
+else
+  fail "OrderMapper matched_docs, got: ${ORDER_DOCS_TS} (bare t_order_item text must not attribute)"
+fi
+assert_not_contains "${R}/.sdlc/reports/entry_coverage/cross_domain_conflicts.md" '`OrderMapper`' "table-name-only doc in a second L2 manufactures no cross-domain conflict"
 
 echo ""
 echo "==== audit-entry-coverage regression summary: ${PASS_COUNT} passed, ${FAIL_COUNT} failed ===="
