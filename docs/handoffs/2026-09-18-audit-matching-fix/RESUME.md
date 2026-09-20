@@ -440,3 +440,43 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
 - 挂账（需单独授权才动代码）：wm 零引用内部工具族是否清理；lc 侧同类挂账见 §17。
 - 登记链第十笔：PKB **`135edbb`**（新勘误文件 2026-09-20-wms-monitor-knowledge-
   archaeology-closure + current.md 第 9 条）。CP 未写（无 lifecycle event）。
+
+## 19. 2026-09-20 换机交接（晚间家用机会话恢复入口 · G6 待授权）
+
+### 本日收官状态总账（公司机，收工快照）
+- **产品仓** `feature/loop-runtime-v1` @ **`e34a4a6`**（PR #189/#190/#191/#192 全部
+  CI 4/4 后合并），工作区干净、与 origin 同步。
+- **三业务仓知识沉淀治理全部收官，均 0/0/0 Status PASS（CLEAR）**：
+  logistics-master @ `46bdc6ed`、logistics-center @ `a89753fb7`、
+  wms-monitor @ `1600abb0d`（各经独立干净 worktree 终验）。写入面核验：
+  三仓治理提交共 75 文件，**全部仅 `.sdlc/` 产物，零代码触碰**（Owner 明确
+  「只针对产物」；代码侧挂账见 §16/§17/§18，均待单独授权）。
+- **PKB** `feature/knowledge-base-v1` @ **`135edbb`**（登记链十笔齐：lm/lc/wm
+  三仓收官各一笔 + front matter 卫生修正一笔；front matter 已全量核验）。
+- **Control Plane 未写**（本日无 lifecycle event）：STATE 仍为
+  `C03_E_G5_D09003_CLOSED_AWAITING_NEXT_AUTHORIZATION`，`open_blockers: []`、
+  `live_authorizations: []`。
+- 挂账（不阻塞）：#189-R2 建议 S-1（表通道 sql 注释措辞）/S-2（表通道裸表名
+  潜伏面，双仓零命中）；三仓零引用内部工具族清理、lc 接口名词序错位（均需单独
+  授权，禁动代码）。
+
+### 晚间恢复后的第一件事：G6 入口授权（Current User 已预告）
+- 规划位置（CP STATE 唯一权威）：`next_transition.target = G6_D09004_ENTRY_
+  AUTHORIZATION`——**G6 = D-090-04 离线对等验收（offline parity acceptance）**；
+  9-17 裁 G5 完成时显式 PAUSED 了 G6 执行，入口需 Current User 单独授权
+  （§18 后用户已口头预告「回家换电脑后推进 G6」，**授权以下达时为准**）。
+- 授权后标准动作：① CP STATE 走分支 + PR 合 main 登记 G6 entry authorization
+  （live_authorizations 落条目、route_state 迁移、`source_refs.product_commit`
+  由 `af5509e` 刷新至现头 `e34a4a6`——事实分支增量全为治理侧，不影响 G5 已关闭
+  事实）；② 启动 D-090-04 离线对等验收实施。run8/C03-E/C05/D091 仍属未授权项。
+- 恢复流程：`git fetch --all --prune` → 读 CP STATE → 读本文件 §16–§19 →
+  等用户授权话后才动 G6。
+
+### 环境提醒（家用机）
+- node v24.x（ABI 137，better-sqlite3 须可载）；ruby 3.3.12 + Psych 5.1.2——
+  注意 manual-chain 套件对系统 ruby 2.6 有 canonical gate 假阳（R2 复审实录），
+  **须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`**。
+- 三业务仓本地检出若落后，按纪律只 pull 不折腾 Owner 未提交文件；审计一律临时
+  worktree + `--output-dir` 重导向。
+- 公司机遗留（本地-only，无需搬迁）：`/private/tmp/a189-review` worktree 登记
+  与 `/tmp/a189-r2/`（#189 R2 外部复审证据）；复审结论已入 PR #189 记录。
