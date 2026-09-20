@@ -407,3 +407,36 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   archaeology-closure + current.md 第 8 条）。CP 未写（无 lifecycle event）。
 - lc 远端阶段分支已清理（docs/sdlc-phase0-entry-profile 删，domain-map 分支当初
   以 branch:master refspec 直推未落分支）。
+
+## 18. 2026-09-20 更新（续二）：wms-monitor 知识沉淀治理同日收官（0/0/0 CLEAR）
+
+- 立项：Current User 授权按推荐方案推进（三册裁决：口径切纯后端、域地图扩 9 域、
+  直推 master）。本机 checkout 有 79 个 Owner 未提交文件（含 Java 在途开发），
+  全程临时 worktree 作业，零触碰（已核实无一件涉及 `.sdlc`）。
+- **阶段 0（`475c2f744`）**：入口口径 recalibration——移除 page(190)/
+  frontend_script(20) 启发式入口类型（159 个未归档入口全部为前端条目；JSP/HTML/JS
+  为 controller 视图资产，覆盖面由 xx99 HTTP 路径节承载）；entry surface =
+  controller 40 + RPC 8 + schedule 9 + MQ 6 + business_processor 8 = **71**；
+  project-governance-profile 订正 frontend-application 错列；域地图由 1 域扩为
+  **9 域全量确认**（照文档树，06 既有确认条目原样保留）+ knowledge-target map
+  sha 重登记。基线 281/159/90/50 → 71/0/90/28。
+- **阶段 1（`8dd347ecd`）**：90 个未归档核心单元收敛——六域（02/04/05/06/08/09）
+  xx99 加「下游单元覆盖」表 63 行（符号+完整路径）；32 个无静态入口链单元按
+  lm/lc 先例语义归档：OrderBatchRelation 动态 bean 查找簇 14（OrderBatchRelation
+  Factory 按 bean 名取方向服务）、通知 API Key 拦截器驱动 4、异常节奏层间驱动 1、
+  Pack 族层间 2、零引用内部工具 11（PsiCqbgService、Wms5DriverReplenishAction
+  Record 族、Wms5ShipAreaStock/Waybill/WaybillOi/Pack Mapper 族等）。
+- **阶段 2（`1600abb0d`）**：28 行冲突指针化（裁决沿推荐：Agent 控制器族→05、
+  exceptionauth 控制器族→09、taskcenter 控制器族→08、物流主数据只读族 Lm*→06、
+  异常池摄入链→09、加工进度快照→04）。本仓冲突主力是新形态：**「HTTP 路径覆盖」
+  表的裸路由 token**（`/task-center/api/v1`、`/create`、`/query-page`、`/agent`
+  等）撞他域 controller 的 route 证据——处置为自家后缀表改全路径（060102 的
+  `/data-analysis/api/v1/config/*`，既消碰撞又保留自家文档内容）、非 owner 依赖列
+  改指针、跨域登记行整行重写。防回归一次：CommonWarehouseOptionController 唯一
+  点名被全路径化误伤，补 06 域归属行后清零。
+- **终态**：71 入口 / 0 / 0 / 0，**Status PASS（CLEAR）**，干净 worktree 独立终验；
+  树内报告随行重生成。**wms-monitor 知识沉淀治理完成——当日三仓（lm/lc/wm）
+  治理全部收官。**
+- 挂账（需单独授权才动代码）：wm 零引用内部工具族是否清理；lc 侧同类挂账见 §17。
+- 登记链第十笔：PKB **`135edbb`**（新勘误文件 2026-09-20-wms-monitor-knowledge-
+  archaeology-closure + current.md 第 9 条）。CP 未写（无 lifecycle event）。
