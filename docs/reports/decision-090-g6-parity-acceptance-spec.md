@@ -1,6 +1,6 @@
 # G6 / D-090-04 离线 parity 验收规格冻结稿（T1 草案，待 Current User 确认后冻结）
 
-> Date: 2026-09-20 · 状态：**草案，待裁决冻结**
+> Date: 2026-09-20 · 状态：**已冻结**（Current User 确认 D-1/D-2/D-3 后合并 PR #194；§4.2/D-1/§6 经 2026-09-20 裁决 B 修订，见文内修订记）
 > 依据：Decision-090 §4/G6（`docs/reports/decision-090-c03e-prerun-governance-plan.md`，FROZEN 基线）；
 > `ai-sdlc/manual-runtime-semantic-contract.md` v1.0.0 §6.2（自证投影协议）；
 > Control Plane STATE `C03_E_G6_D09004_OFFLINE_PARITY_ACCEPTANCE_ACTIVE`（PR #88 合并 `7222d6a`）。
@@ -21,7 +21,7 @@
 | 既有 parity 测试 | `tests/loop-manifest-yaml-parity-matrix.test.ts`（YAML 字节级，224 行）、`tests/loop-manifest-t5-parity.test.ts`（投影轨迹级，770 行，含 `normalize()` 归一化与 takeover-B 判定） | 现役；G6 建其上，不重造 |
 | fixtures | `fixtures/`、`tests/fixtures/` | 现役，T2 扩充 |
 
-**离线语义裁定（本稿核心设计决策 D-1）**：runtime 面以 `scripts/loop-run.ts --capability-source deterministic`（默认档）驱动——这是**生产入口本体**，非 shadow（完成门「无 shadow executor 替代生产入口」得到满足）；`--capability-source real` 属真实 CLI run8 范畴，G6 期间禁用。手动面以结构化完成声明驱动真实 publisher（driveManualChain 模式的泛化）。
+**离线语义裁定（本稿核心设计决策 D-1，2026-09-20 按裁决 B 补充两层驱动）**：runtime 面的**行为层**以生产入口本体驱动（`scripts/loop-run.ts --capability-source deterministic` 等效的 `runProduction` 注入，非 shadow；`real` 档属真实 CLI run8 范畴，G6 期间禁用）；runtime 面的**产物层**以 store 级同事实驱动（T5 模式）证明 digest 级投影等价——原因见 §4.2 发现（两层面 digest 覆盖不同对象，单层驱动无法同时严格证明行为与 digest）。手动面两层的都是结构化完成声明驱动真实 publisher（driveManualChain 模式的泛化）。
 
 ## 3. 矩阵枚举与剪枝（D-2）
 
@@ -55,11 +55,22 @@
 | 8 | earliest reroute | finding 的 `earliestAffectedNodeId` 回流目标一致（实现类直达 implementation 不重走 Gate 等 §7.3 映射） |
 | 9 | 最终 handoff 状态 | 终态 handoff 产物（human_action_required / 完成态）状态一致 |
 
-### 4.2 归一化规则（承 T5 `normalize()` 并冻结）
+### 4.2 两层比较（Current User 2026-09-20 裁决 B，本修订替代原单一归一化规则）
 
-比较前从两侧 manifest **剔除执行面字段**（面特有设计，非语义内容）：head 的 `publish_seq`/`projected_through`/`updated_at`；entry 的 `source_event_ref`/`updated_at`/`execution`；顶层 `manifest_digest`/`projection_provenance`/`declaration_log`/`corrections`/`repair_records`。**剔除集即白名单之外的字段**——T2 实现时以断言形式固定：剔除集之外任何字段差异即 FAIL（防止归一化被用来掩盖真实分歧）。语义内容（entries 节点/状态/产物三元组、findingIndex、repair 之外的全部）逐字段深比较。
+**发现（T2 事实快照）**：手动面声明的 entry digest 是 `sha256(artifact 原始内容)`；runtime 面经真实网关（`ExecutionGateway` 基类）产生的 journal `outputDigest` 是输出 envelope（`loop-capability-output:v1` JSON）的 digest——两面 digest 覆盖不同对象。T5 的 parity 经 store 级同事实驱动（journal 事件携带手动面同一 raw digest）达成，证明的是投影层等价；生产入口全链驱动恰好落入该结构性差异。
 
-行为面比较（维度 7/8/9 非 manifest 静态字段）：harness 捕获两面的**行为轨迹**（准入判定结果、回流动作、退出 envelope/退出码）后按维度比对；runtime 面退出以闭字段集结果为准（loop-run.ts 契约：不输出原始 Agent stdout）。
+**裁定：九维按「什么能证明它」拆两层，各层用各自正确的比较方法。**
+
+**行为层（维度 1/2/6/7/8/9：节点序列、两个 Gate 角色、decisionDepth、next eligibility、earliest reroute、最终 handoff 状态）**
+- 驱动：runtime 面 = `runProduction`（生产入口本体，`--capability-source deterministic` 等效注入）+ 脚本化网关；手动面 = publisher 声明。两面的 manifest 均为此层驱动产物。
+- 比较：manifest 语义字段（entries 的 node/status/gate binding、findingIndex 身份字段、head 结构）+ 行为轨迹（准入判定、回流动作、退出 envelope/退出码；runtime 退出以闭字段集结果为准）。
+- **本层不比 digest**：entry `digest`/`version` 属产物层（见下）；本层剔除集 = T5 白名单 + entry `digest`（envelope 哈希 vs raw 哈希为面特有表示，非语义分歧）。剔除集之外任何字段差异即 FAIL。
+
+**产物层（维度 3/4/5：artifact paths、版本/current/stale、Finding identity）**
+- 驱动：runtime 面 = store 级同事实驱动（T5 模式：journal 事件携带与手动面**同一** raw digest，经 projector 产 manifest）；手动面 = publisher 声明（同一事实脚本）。
+- 比较：承 T5 `normalize()` 冻结白名单（head 的 `publish_seq`/`projected_through`/`updated_at`；entry 的 `source_event_ref`/`updated_at`/`execution`；顶层 `manifest_digest`/`projection_provenance`/`declaration_log`/`corrections`/`repair_records`）后逐字段深比较，**digest/version/artifactPath 逐字节严格可比**（两面同对象）。
+
+**两层合并判定**：场景 PASS = 行为层 6 维全 MATCH 且产物层 3 维全 MATCH。任何一层分歧逐行归因，修复后重跑。
 
 ## 5. Fixture 设计（T2 输入）
 
@@ -74,11 +85,13 @@
 
 ```
 tests/g6-parity/（新目录）
-  harness.ts        —— 场景运行器：fixture → 驱动两面 → 捕获轨迹
+  harness.ts        —— 场景运行器：fixture → 驱动两面两层 → 捕获轨迹 → 合并判定
   manual-face.ts    —— 泛化自 driveManualChain：结构化完成声明 → 真实 publisher
-  runtime-face.ts   —— scripts/loop-run.ts --capability-source deterministic
-                       （子进程或同模块入口；--resume 用于 S-CRASH）
-  comparator.ts     —— 归一化 + 九维比较（含剔除集白名单断言）
+  runtime-face.ts   —— 两个驱动器：full-chain（runProduction + 脚本化网关，
+                       行为层）与 store-level（T5 同事实驱动，产物层；
+                       --resume 用于 S-CRASH）
+  comparator.ts     —— 两层比较：行为层（语义字段+轨迹，digest 入剔除集）+
+                       产物层（T5 白名单归一化 + digest 逐字节）
   report.ts         —— 验收报告生成（§7 格式）
   matrix.ts         —— 52 场景注册表（scenario-id → fixture/期望/剪枝标注）
 ```
