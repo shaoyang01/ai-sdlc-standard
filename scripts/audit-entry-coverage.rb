@@ -775,13 +775,21 @@ def doc_match_for_record(doc_info, record)
     *([IMPL_ALIAS_FOR[record.path]].compact.map { |twin| [twin, 56, "text impl alias"] }),
     *record.route_paths.map { |route| [route, 64, "text route"] },
     *record.topics.map { |topic| [topic, 62, "text topic"] },
-    *record.job_names.map { |job| [job, 62, "text job"] },
-    *record.sql_names.map { |sql| [sql, 58, "text sql"] }
+    *record.job_names.map { |job| [job, 62, "text job"] }
   ]
   # 锚点卫生轮（AH-2，R2-#181 S3②）：独立的 `text function` 检查已删除。#181 的
   # owner 门使该检查结构性不可达——门开 ⟺ symbol/class 以同一谓词在同一文本命中，
   # 其 @60 直证恒遮蔽 @58；双仓真实样本 `text function=` 出现 0 次。方法名证据由
   # 表通道 method/function 字段（行内 owner 门，@85）完整承载。
+  #
+  # 表名弱证据轮（2026-09-20）：独立的 `text sql` 检查同此删除。持久层记录的
+  # sql 证据集含表名（t_m_sku 等），而表名是业务域文档的公共词汇——仅含表名的
+  # 文档即被计为该记录的归属，在 logistics-master @ fd8e5a45 制造 6 行跨域幻影
+  # 冲突（冲突-归属对照表 D 组：SkuCommonNameMapper.xml 被 0102/0103 仅因
+  # t_m_sku 命中、WarehouseMapper.xml 被 0401 仅因 t_m_warehouse 命中等）；
+  # 另有 2 行冲突的非 owner 边同为表名（对照表 #40/41）。加 owner 门则与 AH-2
+  # 同理结构性不可达（门开 ⟺ symbol/class @60 直证已在同文本命中），故直接
+  # 移除；SQL 证据由表通道 sql 字段（行内 owner 门，@82）完整承载。
 
   text_checks.each do |token, strength, reason|
     next if token.to_s.empty?
