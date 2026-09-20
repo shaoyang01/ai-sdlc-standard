@@ -364,3 +364,46 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
   ruby 3.3.12 即此路径）。
 - 下一步候选（待 Current User 立项）：**logistics-center 知识沉淀治理**（本机
   已有 clone；可沿 lm 同款流程：脚手架接线 → 基线审计 → 收敛轮次）。
+
+## 17. 2026-09-20 更新（续）：logistics-center 知识沉淀治理同日收官（0/0/0 CLEAR）
+
+- 立项：Current User 确认 lm 收官理解无误并授权按四阶段方案推进 lc（本机已有 clone，
+  GitLab sprucetec 直推 master 不走 PR）。
+- **阶段 0（`82cc84363`）**：入口枚举四通道代码实证——dubbo XML 发布 7 篇显式枚举
+  （rpc/ 平铺恰 7 impl）、mq_processor wildcard 24（25 个 Processor 文件含接口本身）、
+  schedule_task wildcard 81（顶层 32 + listener 10 + periodic 39；`periodic/test`
+  为 main 源码内测试脚手架，scope 排除）；HTTP/注解 dubbo 双通道零命中。弃
+  bootstrap 工具生成的通用启发式 candidate（`*Impl` 全入口不可用），profile 改为
+  「骨架头 + 手工实证枚举体」（lm 形态）。基线从假态 PENDING 0/210/4 变为真口径
+  **112 入口 / 20 / 158 / 4 BLOCKED**。
+- **阶段 0b（`cc81ae7e0`）**：域地图 Current User 裁决确认（6 域一 L2/域，03/04/05/06
+  留「待详扫分层」+ xx99）；knowledge-target 登记 map 引用 + 订正 frontend-application
+  声明层错列。**candidate→routed 转换未执行**：初始化器 D088-R1-H4 门禁要求三根文档
+  initializer provenance，而 lc 根文档为 2026-04-22 Owner 手稿（Domain Catalog
+  v1.1.0 等 168 行）——工具拒转是保护手稿的正确行为；只登记 map 引用、状态留
+  `candidate_pending_confirmation` 如实留痕，待工具波 + 单独 Owner 授权（不阻塞
+  治理动作：审计读 profile+文档，不读 routed 位）。
+- **阶段 1a（`8ad6db04a`）**：20 个分片 worker 入口补盲（LcOrderDownTask_0..9→01
+  销单、LcMCQTask_0..9→06 通用支撑；后者为注释注册表驱动的通用 MCQ 分派器，
+  订阅面 McqConfig.java:189-198）。未归档入口 20→0。
+- **阶段 1b（`21203c48e`）**：六域 xx99 各加「下游单元覆盖」节 158 行（01:34/
+  02:49/03:18/04:6/05:8/06:43，符号+完整路径）。未归档核心单元 158→23。
+- **阶段 1c（`22ec36d28`）**：23 个无链单元按 lm 先例语义归档——01 取消记录族 4、
+  03 采购调拨族 5（后台自洽链：仅被 `process/**`/`LcOrderWorkerUtils` 非入口类驱动）、
+  06 调度扩展族 4 + 零引用内部工具 10（缓存/ID生成/告警/未发布 RPC/DTO 误名类）。
+  not_applicable 走 row_classification 通道。未归档核心单元 23→0。
+- **阶段 3（`a89753fb7`）**：4 行订单族冲突对照表经裁决（LcCommonService→06 通用
+  支撑、LcOrderRPCService/LcOrderService/LcProdItemPoolManager→01 销单）指针化：
+  060199 补归属节、非 owner 链路行去符号改指针（方法名与业务事实保留）。冲突 4→0。
+  防回归一次：LcProdItemPoolMapper 原仅 02 有点名，先在 010199 主链补归属节点再去符
+  号（直接删会制造新未归档）。
+- **终态**：112 入口 / 0 / 0 / 0，**Status PASS（CLEAR）**，干净 worktree 独立终验；
+  树内报告随行重生成。**logistics-center 知识沉淀治理完成。**
+- 挂账：①LcProcurementOrderAllotManagerImpl 与接口名词序错位（命名债，改代码需
+  单独授权）；②LcCommonRPCServiceImpl 未本地发布疑外部消费（待 Owner 复核）；
+  ③LarkAlarmService/LcCacheService/LcRedissonCacheService/LcCodeGeneratorManager
+  族零引用内部工具已归档，是否清理待 Owner。
+- 登记链第九笔：PKB `625668d`（新勘误文件 2026-09-20-logistics-center-knowledge-
+  archaeology-closure + current.md 第 8 条）。CP 未写（无 lifecycle event）。
+- lc 远端阶段分支已清理（docs/sdlc-phase0-entry-profile 删，domain-map 分支当初
+  以 branch:master refspec 直推未落分支）。
