@@ -326,3 +326,41 @@ grep -E "^\| (Unarchived Entries|Unarchived Core Units|Cross-Domain Conflicts) \
 - 公司 GitLab SSH 偶发瞬断（家用机 9-19 两次遇到），重试即可。
 - 复审 prompt 模板：`docs/handoffs/2026-09-09-g5-t1/review-request.md`
   （全量、只读、根因合并式九段式）。
+
+## 16. 2026-09-20 更新（公司机会话）：审计匹配第五轮（表名弱证据）+ B 线收官——logistics-master 知识沉淀治理完成
+
+- **冲突-归属对照表**（44 行逐边 debug 采样 1475 条边归因）：44 = 38 文档可清 +
+  6 口径面（`text sql=表名`@58 无 owner 门钉死，表名是业务域公共词汇）。方向项
+  裁决：#16 SynchronizeBatchDelayService→0303、#17 SynchronizePmsService→0104、
+  #18 SynchronizeProductService→0101、#44 WarehouseMapper→0402（均按推荐）。
+- **A 线 #189（text-sql 身份门，第五轮）**：删除文本通道 `text sql`@58 检查
+  （1 行）+ 口径说明 + fixture 2 断言。不改 owner 门而直接删除：门开 ⟺
+  symbol/class @60 直证已以同谓词命中，恒遮蔽 @58 → 门版结构性死代码（#183
+  AH-2 同构；探针实证门版 lm `text sql` 边 0、7 报告与删除版逐字节一致）。
+  R1 全量自证 → **R2 外部独立复审 PASS 零阻塞**（边级归因 1475 边独立复现、
+  误杀 0、wms 翻转单记录归因列名碎片）→ 授权合并，merge commit **`22ab1d1`**。
+  判别 base 31/3 → 分支 34/0；lm 同树 0/0/44 → **0/0/36**（表名伪边 8 行出清 =
+  D 组 6 + 表名边 2）；wms 信息性 159/89/52 → 159/90/50（唯一翻转记录 base 唯一
+  边为列名碎片 `warehouse_id`，弱证据出清）。CI 4/4。改动面合同：仅脚本 + 测试
+  + brief（NEXT-ROUND-BRIEF-TEXT-SQL-IDENTITY.md）。
+- **B 线收官（logistics-master `46bdc6ed` 直推 master，34 文件 +249/−292）**：
+  36 行冲突非 owner 文档去符号改指针式（27 文档 111 处替换，沿 `a81cf5cc`/§12
+  先例；080301McqInfra 十行、SynchronizeProduct facade 族与 050302 延误域为
+  大头）。验收：分支口径 36→**0** 零新增、未归档 0/0 零回潮、服务符号集零差
+  （漂移全部 confined 于目标记录 doc 列表收窄）；树内陈旧报告（0/13/48，§9
+  卫生项）随行重生成；**独立干净 worktree 终验 0/0/0、Status PASS（CLEAR）**。
+  **logistics-master 知识沉淀治理完成，Status 首次解除 BLOCKED。**
+- **登记链第八笔**：PKB **`92503c0`**（勘误文件终态收官注记 + current.md 第 7
+  条）+ PR #171 描述终态收官段（八段完整）。
+- **挂账（A189-R2 建议，不阻塞）**：S-1 `scripts/audit-entry-coverage.rb` 表
+  通道 sql 措辞订正（「行内 owner 门」实为 method/function 专属，sql 候选无门，
+  :792 注释失准）；S-2 表通道裸表名潜伏面评估（CE1/CE2 反例为既有面，双仓真实
+  样本零命中，table sql/code_anchor 候选含 sql_names 有意保留）。
+- CP 未写（本工作线无 lifecycle event，沿纪律）。复审资产：`/tmp/a189-r2/`
+  （复审方 R2 证据）+ `/tmp/a189-review`（@5fa05ab）留档本机。
+- **环境提醒（本机新增）**：本机默认 `ruby` 为系统 2.6.10——manual-chain 套件
+  经其 rbconfig 会因 world-writable 目录警告触发 canonical gate 假阳（R2 复审
+  实录），**须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`**（基线 §5 的
+  ruby 3.3.12 即此路径）。
+- 下一步候选（待 Current User 立项）：**logistics-center 知识沉淀治理**（本机
+  已有 clone；可沿 lm 同款流程：脚手架接线 → 基线审计 → 收敛轮次）。
