@@ -18,8 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LoopArtifactStore } from "../../core/loop-artifact-store";
 import { LoopRunStore } from "../../core/loop-run-store";
-import { extractManifestYaml, projectLoopManifest, sealManifest } from "../../core/loop-manifest-projector";
-import { dumpRubyYaml, parseRubyYaml } from "../../core/loop-manifest-yaml";
+import { projectLoopManifest } from "../../core/loop-manifest-projector";
 import { materializeProducerRevision } from "../../runtime";
 import type { LoopCapabilityExecutionEvent } from "../../core/loop-capability-execution";
 import { LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION } from "../../core/loop-capability-execution";
@@ -156,18 +155,16 @@ export function driveRuntimeStoreLevel(
   stores: RuntimeStores,
   script: FactScript,
   libDir: string,
-  seedManifestText: string,
+  manualManifestText: string,
 ): StoreLevelResult {
   mkdirSync(libDir, { recursive: true });
-  // Both faces start from the manual init's seed (requirement-intake holds the
-  // manifest-creation duty per contract; DP4 never rebuilds). The runtime face
-  // re-bases the seed to a runtime cursor: projected_through must be NUMERIC
-  // (0 = nothing projected yet, so the whole journal is the catch-up tail) —
-  // a MANUAL cursor marks a takeover state, which is a different protocol path.
-  const seedDoc = parseRubyYaml(extractManifestYaml(seedManifestText));
-  const { manifest_digest: _staleDigest, ...withoutDigest } = seedDoc;
-  const rebased = sealManifest({ ...withoutDigest, projected_through: 0, publish_seq: 0 });
-  writeFileSync(join(libDir, "manifest.md"), dumpRubyYaml(rebased), "utf8");
+  // The projector never creates a manifest (creation belongs to intake —
+  // core/loop-manifest-projector.ts:1087). The runtime-side shape for EVERY
+  // scenario is therefore TAKEOVER: the manual face's manifest (intake-created,
+  // declaration-driven, projected_through=MANUAL) is placed as the takeover
+  // baseline and the projector re-derives every row from journal + store,
+  // judging consistency (T5 takeover-B pattern).
+  writeFileSync(join(libDir, "manifest.md"), manualManifestText, "utf8");
   const runId = startRun(stores, script.requirementId);
   let sequence = 1;
   // The first capability execution requires a non-null input ref (journal
@@ -221,6 +218,8 @@ export function driveRuntimeStoreLevel(
       stores.runStore.appendCapabilityExecution(scanSucceeded);
       materializeProducerRevision(stores.runStore, script.requirementId, runId, scanSucceeded, () => TS);
 
+      const verdictEligibility =
+        node.gateResult === "FAIL" ? "INELIGIBLE" : node.decisionStatus === "BLOCKED_UNKNOWN" ? "BLOCKED" : "ELIGIBLE";
       const delta = stores.artifactStore.put(
         "solution_review" as Parameters<LoopArtifactStore["put"]>[0],
         `depth=${node.decisionDepth ?? "STANDARD"} decision delta for ${runId}`,
@@ -239,26 +238,39 @@ export function driveRuntimeStoreLevel(
         consumedFindingsRef: ledger.artifactRef,
         consumedFindingsDigest: ledger.digest,
       });
-      const verdictSucceeded = event(runId, {
+      // BLOCKED_UNKNOWN = the verdict cannot be graded: the formal_verdict
+      // execution ends BLOCKED (not succeeded) — a succeeded formal_verdict
+      // requires a conclusive Gate result (store validation).
+      // Verdict terminal shapes (store validation): PASS/PWR succeed with
+      // decision fields; FAIL ends FAILED (a failed Gate is a terminal fact,
+      // not a success carrying a bad result); BLOCKED_UNKNOWN ends BLOCKED
+      // with errorCode and NO decision fields (it still carries the output).
+      const blockedUnknown = node.decisionStatus === "BLOCKED_UNKNOWN";
+      const failedGate = node.gateResult === "FAIL";
+      const terminalStatus = blockedUnknown ? "blocked" : failedGate ? "failed" : "succeeded";
+      const verdictTerminal = event(runId, {
         ...verdictStarted,
-        executionEventId: `${runId}:capability:${sequence}:succeeded`,
+        executionEventId: `${runId}:capability:${sequence}:${terminalStatus}`,
         sequence,
-        status: "succeeded",
+        status: terminalStatus,
         outputArtifactRef: stored.artifactRef,
         outputArtifactVersion: node.version,
         outputDigest: digest,
-        gateResult: node.gateResult ?? "NOT_APPLICABLE",
-        decisionDepth: node.decisionDepth ?? null,
-        decisionStatus: node.decisionStatus ?? null,
-        decisionScopeId: `${runId}:decision:1`,
-        decisionDeltaRef: delta.artifactRef,
-        decisionDeltaDigest: delta.digest,
-        nextStepEligibility: "ELIGIBLE",
+        gateResult: blockedUnknown ? null : (node.gateResult ?? "NOT_APPLICABLE"),
+        decisionDepth: blockedUnknown ? null : (node.decisionDepth ?? null),
+        decisionStatus: blockedUnknown ? null : (node.decisionStatus ?? null),
+        decisionScopeId: blockedUnknown ? null : `${runId}:decision:1`,
+        decisionDeltaRef: blockedUnknown ? null : delta.artifactRef,
+        decisionDeltaDigest: blockedUnknown ? null : delta.digest,
+        nextStepEligibility: blockedUnknown ? "BLOCKED" : (verdictEligibility as "ELIGIBLE" | "INELIGIBLE" | "BLOCKED"),
+        errorCode: blockedUnknown ? "BLOCKED_UNKNOWN" : null,
       });
       sequence += 1;
       stores.runStore.appendCapabilityExecution(verdictStarted);
-      stores.runStore.appendCapabilityExecution(verdictSucceeded);
-      materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictSucceeded, () => TS);
+      stores.runStore.appendCapabilityExecution(verdictTerminal);
+      if (!blockedUnknown) {
+        materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictTerminal, () => TS);
+      }
       previousRef = stored.artifactRef;
       previousDigest = digest;
       continue;

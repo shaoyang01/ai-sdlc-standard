@@ -32,7 +32,7 @@ function chainWithVerdict(
         ? { gateResult: "FAIL", decisionStatus: "CONFIRMED", decisionDepth: depth }
         : verdict === "PASS_WITH_RISK"
           ? { gateResult: "PASS_WITH_RISK", decisionStatus: "CONFIRMED", decisionDepth: depth }
-          : { decisionStatus: "BLOCKED_UNKNOWN", decisionDepth: depth };
+          : { decisionStatus: "BLOCKED_UNKNOWN" };
   return [
     nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
     nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),

@@ -6,6 +6,7 @@
 // artifact layer now and exposes the behavior-layer entry point for M2.
 
 import { parseRubyYaml } from "../../core/loop-manifest-yaml";
+import { extractManifestYaml } from "../../core/loop-manifest-projector";
 import type { DimensionResult, FactScript } from "./types";
 import {
   NINE_DIMENSIONS,
@@ -55,10 +56,10 @@ export function compareArtifactLayer(
   _script: FactScript,
 ): ComparisonResult {
   const manual = normalize(
-    JSON.parse(JSON.stringify(parseRubyYaml(manualManifestText))) as Record<string, unknown>,
+    JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(manualManifestText)))) as Record<string, unknown>,
   );
   const runtime = normalize(
-    JSON.parse(JSON.stringify(parseRubyYaml(runtimeManifestText))) as Record<string, unknown>,
+    JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(runtimeManifestText)))) as Record<string, unknown>,
   );
   const diffs = diffPaths(manual, runtime);
   const dims: DimensionResult[] = NINE_DIMENSIONS.map((dimension) => {

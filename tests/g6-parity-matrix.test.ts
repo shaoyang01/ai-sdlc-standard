@@ -42,7 +42,7 @@ function runScenario(specId: string): { dimensions: ReturnType<typeof compareArt
     const manual = driveManualFace(libManual, script);
     const stores = makeStores(spec.id);
     try {
-      const runtime = driveRuntimeStoreLevel(stores, script, libRuntime, manual.seedManifestText);
+      const runtime = driveRuntimeStoreLevel(stores, script, libRuntime, manual.manifestText);
       return { dimensions: compareArtifactLayer(manual.manifestText, runtime.manifestText, script).dimensions };
     } finally {
       rmSync(stores.root, { recursive: true, force: true });
