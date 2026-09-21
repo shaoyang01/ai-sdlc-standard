@@ -92,3 +92,16 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 - ruby 须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`（系统 2.6.10 触发 canonical gate 假阳）；node v24。
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
+## 2026-09-21 晚 M2 进展（家用机会话）
+
+分支 `feat/g6-t2-m2-scenarios`（未上主线）。**矩阵 16/16 绿**：S-CORE 首轮 12 + **升档波 4**（LIGHT→STANDARD、STANDARD→DEEP × PASS/PWR 终裁）——升档波按 d087 形状落实并双方言协议实证：ESCALATED verdict 携带**新** required_depth（publisher 同发布更新 = 投影器 foldDepth，代码级互证），reflow 由 §5.4 finding 授权（FAIL/ESCALATED verdict 欠链 reflow 事实，store `registerReflowFinding` 可合成，harness 显式注册）。
+
+**多轮波（FAIL→FAIL→PASS）待定案，两个协议约束已实证**：
+1. 单 finding 只授权**一次** restart 跳转——同一 OPEN finding 下的第二次反向跳转被链校验器拒（regate 上下文按 journal 事实推导授权）；
+2. 一个 revision 只容**一条** closure 行——两个 finding 闭合于同一最终 gate revision = duplicate-closures `MANIFEST_CORRUPT_STOP`。
+
+两个候选模型（下一beat 定）：
+(a) 每波 finding + **各异闭合 revision**（F01 绑最终 gate revision、F02 绑解决其轮的 design revision）——需两侧驱动器支持 per-finding 闭合 revision 指定（runtime settle 现硬绑最新 gate revision）；`gateRound` 机械已落地为地基（`fb2ee1a`）；
+(b) 两个 PASS 终止波（FAIL→PASS，变更触发 FAIL→PASS）——各 finding 闭合于各自波的 gate revision 无重复，但第二波的下游失效（design 变更令 task-planning 等 stale）需建模。
+
+剩余家族（S-INIT 8 / S-MANIFEST 2 / S-CRASH 6 / 超限暂停 4 行为层 only）与行为层 full-chain 驱动器按事实快照的计划推进。
