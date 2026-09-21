@@ -215,3 +215,103 @@ export function coreFirstRoundScenarios(): ScenarioSpec[] {
   }
   return specs;
 }
+
+/**
+ * The escalation wave (d087 scenario shape, verified at
+ * tests/loop-d087-six-scenario-matrix.test.ts:398-399): the first-round
+ * verdict is PASS + ESCALATED at the requested depth (the gate passes but
+ * mandates deeper analysis; required_depth rises in the SAME publish on the
+ * manual face — G3-R1-H4 — and via foldDepth on the runtime face), the design
+ * is rebuilt at the escalated depth, and the re-adjudication is
+ * PASS + CONFIRMED at the escalated depth. The reflow carries the same
+ * finding pattern as the FAIL wave: a FAIL/ESCALATED verdict reflowing to
+ * solution-design owes the chain the §5.4 reflow fact (store synthesizes it —
+ * loop-run-store.ts registerReflowFinding; category SOLUTION ⇒ earliest
+ * solution-design), which authorizes the design-v2 restart. Registered after
+ * the first gate round, resolved by the re-adjudicating round.
+ */
+function waveWithUpgrade(
+  requirementId: string,
+  requestedDepth: "LIGHT" | "STANDARD" | "DEEP",
+  escalatedDepth: "STANDARD" | "DEEP",
+  finalVerdict: "PASS" | "PASS_WITH_RISK",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    // ESCALATED carries the NEW required depth (publisher: required_depth =
+    // DDEPTH in the same publish; projector: foldDepth returns it) — the depth
+    // the rework round must run at, not the requested one.
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      attempt: 1,
+      gateResult: "PASS",
+      decisionStatus: "ESCALATED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2 (${escalatedDepth})\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: finalVerdict,
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-F01`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runtimeRunId(requirementId)}:revision:solution-design:1`,
+      evidenceKind: "technical_design",
+      evidenceContent: `# ${requirementId} design\n`,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v2\n`,
+        boundRevisionId: `${runtimeRunId(requirementId)}:revision:solution-gate:1`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+const ESCALATION_LADDER: Readonly<Record<string, "STANDARD" | "DEEP">> = Object.freeze({
+  LIGHT: "STANDARD",
+  STANDARD: "DEEP",
+});
+
+/** S-CORE upgrade-round scenarios: depth × final verdict (6). */
+export function coreUpgradeScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD"] as const) {
+    for (const finalVerdict of ["PASS", "PASS_WITH_RISK"] as const) {
+      const id = `S-CORE-${depth}-${finalVerdict}-upgrade`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-CORE" as const,
+          coords: coords({ depth, verdict: finalVerdict, round: "upgrade" }),
+          prunes: "DEEP has no escalation target (hard ceiling); ESCALATED first verdict + deeper rework + CONFIRMED final (d087 shape)",
+          build: () => {
+            const wave = waveWithUpgrade(`20260920-${id}`, depth, ESCALATION_LADDER[depth], finalVerdict);
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: depth,
+              nodes: wave.nodes,
+              findings: wave.findings,
+            });
+          },
+        }),
+      );
+    }
+  }
+  return specs;
+}

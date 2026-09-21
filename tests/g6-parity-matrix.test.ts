@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
-import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
+import { coreFirstRoundScenarios, coreUpgradeScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
 interface Tally {
@@ -31,7 +31,7 @@ function ok(condition: boolean, message: string, tally: Tally): void {
 }
 
 function runScenario(specId: string): ComparisonResult {
-  const spec = coreFirstRoundScenarios().find((s) => s.id === specId);
+  const spec = allScenarios().find((s) => s.id === specId);
   if (spec === undefined) throw new Error(`unknown scenario ${specId}`);
   const script = spec.build();
 
@@ -53,10 +53,14 @@ function runScenario(specId: string): ComparisonResult {
   }
 }
 
+function allScenarios() {
+  return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios()];
+}
+
 function main(): void {
-  const specs = coreFirstRoundScenarios();
+  const specs = allScenarios();
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M1: ${specs.length} scenarios (S-CORE first-round, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE first-round + upgrade, artifact layer)`);
 
   for (const spec of specs) {
     let comparison;
