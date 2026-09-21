@@ -92,6 +92,11 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 - ruby 须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`（系统 2.6.10 触发 canonical gate 假阳）；node v24。
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
+## 2026-09-22 收工状态（接 2026-09-21 晚进展）
+
+- 分支 `feat/g6-t2-m2-scenarios` @ **`0fffb1c`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **16/16 绿**（12 首轮 + 4 升档）；负向 24/0；tsc 0。**npm test 全量本轮未跑**——M2 改动仅限 `tests/g6-parity/`（生产代码零触碰），R1 自证时跑（期望 ≥1767/0/169，矩阵场景数增加或使断言数上浮，以实跑为准）。
+
 ## 2026-09-21 晚 M2 进展（家用机会话）
 
 分支 `feat/g6-t2-m2-scenarios`（未上主线）。**矩阵 16/16 绿**：S-CORE 首轮 12 + **升档波 4**（LIGHT→STANDARD、STANDARD→DEEP × PASS/PWR 终裁）——升档波按 d087 形状落实并双方言协议实证：ESCALATED verdict 携带**新** required_depth（publisher 同发布更新 = 投影器 foldDepth，代码级互证），reflow 由 §5.4 finding 授权（FAIL/ESCALATED verdict 欠链 reflow 事实，store `registerReflowFinding` 可合成，harness 显式注册）。
