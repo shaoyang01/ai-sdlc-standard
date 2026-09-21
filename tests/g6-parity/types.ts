@@ -81,8 +81,13 @@ export interface FindingFact {
   readonly registerAfter?: string;
   readonly resolveAfter?: string;
   /** 1-based gate round whose scan terminal registers this finding (default 1).
-   *  Multi-round waves register one finding per gate round. */
+   *  Multi-round waves register findings per round as the full re-review
+   *  discovers them. */
   readonly gateRound?: number;
+  /** 1-based gate round whose verdict terminal settles this finding (the
+   *  re-review that confirmed its repair). Findings are a persistent set:
+   *  they close at THEIR confirming round, not at a wave-final PASS. */
+  readonly closedAtRound?: number;
   readonly action?: {
     readonly action: "resolve" | "accept";
     readonly closedBy: string;

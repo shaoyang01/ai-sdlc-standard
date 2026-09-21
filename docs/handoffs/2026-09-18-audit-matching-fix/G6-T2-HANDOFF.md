@@ -102,6 +102,11 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 **已定案（Current User 2026-09-21）：finding 持续累积模型 = 现实手动复审流程**——finding 是全局集合、只有状态（open→closed）、不属于轮次；每轮回退由当前 open finding 集合授权；finding 在**其修复被确认的那一轮**关闭并绑该轮 revision/证据；「部分关闭」= 保持 open（协议无 partial 态）。链形态：R1 FAIL 注册 a/b/c → design v2 → R2 关 a/b、c 留 open、注册 d → design v3 → R3 关 c/d、注册 e → design v4 → R4 关 e、PASS → 下游链。两约束天然满足（每轮有新 finding 落账提供授权事实；各 finding 闭合于各自确认轮、closure revision 各异）。
 
-实现改动（下一beat）：① finding 按轮注册（`gateRound` 已备）；② settle 从「仅 PASS 轮」改为「按 finding 的确认轮」，绑该轮 revision/证据（FAIL 轮无 gate revision → 绑该轮 design revision + verdict blob；**先验证 store 层 resolveFinding 是否接受非 PASS 轮闭合**，若拒则调绑法）；③ 驱动器加 `closedAtRound` 字段。
+实现进展（2026-09-21 晚续）：
+- **store 验证通过**：`resolveFinding` 闭合 revision 只需「存在、不早于 earliest affected node、该节点当前 ACTIVE」——design revision 合法、**非 PASS 轮闭合合法**（verdict 结果不参与校验）。
+- **驱动器已改**：`closedAtRound`（按确认轮结算）+ 脚本声明的 `boundRevisionId` 作闭合 revision（不再硬绑 gate revision）+ scan 终态时序「先结算本轮确认、后注册本轮新发现」（新 finding 的 invalidation 会 stale 其绑定 revision）。实现细节恢复 16/16 绿。
+- **剩余唯一阻塞（已确诊）**：同轮多 finding 的注册。逐条 `appendFinding` 每条触发一次 invalidation——同轮第二条 finding 的锚定 revision 已被第一条置 STALE 而被拒。**生产正解 = scan ledger 批量注册**：`appendCapabilityExecutionWithFindings(event, registration)`——一个 scan 终态事件携带含 N 个 draft 的 registration，finding 共享 ledger 证据 blob、id 由 store 序算（`loopFindingId`）、invalidation 在全部行插入后统一应用一次（loop-run-store.ts:2476-2510）。
+- **下一beat 改包**（多轮波最后一步）：① 驱动器把每轮 finding 装进该轮 scan 的 `loop-capability-findings:v1` ledger，scan 终态改走批量 API；② 手动面对齐：finding 的 evidence 改该轮 ledger 引用（手动 publisher 的 finding-register 用同一 ref）；③ 验证 takeover 对 N finding 的 id/身份映射（双边 findingIndex 深比较见分晓）；④ 回归后注册 `coreMultiRoundScenarios()`。
+- 对齐机制备忘：takeover 投影器把手动声明 finding_id 映射进投影结果（实测双边 findingIndex id 一致），单 finding 已证；N finding 的映射按序还是按身份待验证。
 
 剩余家族（S-INIT 8 / S-MANIFEST 2 / S-CRASH 6 / 超限暂停 4 行为层 only）与行为层 full-chain 驱动器按事实快照的计划推进。

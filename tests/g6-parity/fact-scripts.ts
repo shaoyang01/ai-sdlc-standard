@@ -317,21 +317,29 @@ export function coreUpgradeScenarios(): ScenarioSpec[] {
 }
 
 /**
- * The multi-round rework wave (Re-Gate coordinate): FAIL → rework → FAIL →
- * rework → PASS, with ONE finding staying OPEN across both FAIL rounds — the
- * same OPEN blocking finding authorizes both restarts (a revision admits
- * exactly one closure row, so two findings closing on the single final gate
- * revision would be a duplicate-closures corruption) — and is closed once by
- * the final re-adjudicating PASS round (bound to the gate revision it
- * authors). Convergence still requires a PASS verdict (same wall as the
- * single wave).
+ * The multi-round rework wave (settled model — Current User's real manual
+ * review flow): findings are a PERSISTENT SET with statuses, not wave-owned.
+ * Each round is a full re-review: it closes what its re-examination confirms,
+ * leaves unfixed findings OPEN (the protocol has no partial state — "partially
+ * closed" simply stays open), and registers newly discovered findings. The
+ * backward restart each round needs is authorized by the OPEN set (every
+ * round lands new findings on the journal). A finding closes at ITS
+ * confirming round, binding the revision that fixed it (that round's design
+ * revision — the store enforces existence, currency and earliest-node
+ * ordering; verdict outcome does not participate) with that round's verdict
+ * blob as evidence. The wave ends at a full PASS with an empty OPEN set.
+ *
+ * Canonical shape (the Current User's example, FAIL→FAIL→FAIL→PASS):
+ *   R1 scan registers a,b,c → FAIL  |  design v2
+ *   R2 scan registers d; verdict closes a,b (bind design v2) → FAIL  |  design v3
+ *   R3 scan registers e; verdict closes c,d (bind design v3) → FAIL  |  design v4
+ *   R4 verdict closes e (bind design v4) → PASS  |  downstream chain
  */
 function waveWithMultiRound(
   requirementId: string,
   depth: "LIGHT" | "STANDARD" | "DEEP",
 ): { nodes: NodeFact[]; findings: FindingFact[] } {
   const runId = runtimeRunId(requirementId);
-  const gateRev = `${runId}:revision:solution-gate:1`;
   const design = (v: number): NodeFact =>
     nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
   const failGate = (v: number): NodeFact =>
@@ -342,6 +350,41 @@ function waveWithMultiRound(
       decisionDepth: depth,
       staleNodes: ["solution-design"],
     });
+  const passGate = (v: number): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    });
+  const finding = (
+    key: string,
+    registeredRound: number,
+    examinedDesign: number,
+    closedAtRound: number,
+  ): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${examinedDesign}`,
+      evidenceKind: "technical_design",
+      evidenceContent: `# ${requirementId} design v${examinedDesign}\n`,
+      gateRound: registeredRound,
+      closedAtRound,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        // The confirming round's verdict blob is the closure evidence; the
+        // revision that fixed it (that round's design) is the binding.
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${closedAtRound}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${closedAtRound}`,
+      }),
+    });
   const nodes: NodeFact[] = [
     nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
     design(1),
@@ -349,41 +392,25 @@ function waveWithMultiRound(
     design(2),
     failGate(2),
     design(3),
-    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v3\n`, "3.0.0", {
-      attempt: 3,
-      gateResult: "PASS",
-      decisionStatus: "CONFIRMED",
-      decisionDepth: depth,
-    }),
+    failGate(3),
+    design(4),
+    passGate(4),
     nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
     nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
     nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
     nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
   ];
-  const findingFor = (n: number): FindingFact =>
-    Object.freeze({
-      findingId: `${requirementId}-F0${n}`,
-      discoveredAt: "solution-gate",
-      category: "SOLUTION",
-      earliest: "solution-design",
-      sourceRevisionId: `${runId}:revision:solution-design:${n}`,
-      evidenceKind: "technical_design",
-      evidenceContent: `# ${requirementId} design v${n}\n`,
-      gateRound: n,
-      registerAfter: "solution-gate",
-      resolveAfter: "solution-gate",
-      action: Object.freeze({
-        action: "resolve" as const,
-        closedBy: "solution-gate",
-        evidenceKind: "solution_review",
-        evidenceContent: `# ${requirementId} gate v3\n`,
-        boundRevisionId: gateRev,
-      }),
-    });
-  return { nodes, findings: [findingFor(1)] };
+  const findings: FindingFact[] = [
+    finding("Fa", 1, 1, 2),
+    finding("Fb", 1, 1, 2),
+    finding("Fc", 1, 1, 3),
+    finding("Fd", 2, 2, 3),
+    finding("Fe", 3, 3, 4),
+  ];
+  return { nodes, findings };
 }
 
-/** S-CORE multi-round Re-Gate scenarios: FAIL→FAIL→PASS × depth (3). */
+/** S-CORE multi-round Re-Gate scenarios: the settled persistent-set model × depth (3). */
 export function coreMultiRoundScenarios(): ScenarioSpec[] {
   const specs: ScenarioSpec[] = [];
   for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
@@ -393,7 +420,7 @@ export function coreMultiRoundScenarios(): ScenarioSpec[] {
         id,
         family: "S-CORE" as const,
         coords: coords({ depth, verdict: "FAIL", round: "re-gate" }),
-        prunes: "FAIL→FAIL→PASS: two rework waves, one gate-round finding per round, both closed by the final PASS round",
+        prunes: "persistent-set model: 3 findings R1, d R2, e R3; a/b close R2 (design v2), c/d close R3 (design v3), e closes R4 (design v4); PASS with empty OPEN set",
         build: () => {
           const wave = waveWithMultiRound(`20260920-${id}`, depth);
           return Object.freeze({

@@ -227,7 +227,6 @@ export function driveRuntimeStoreLevel(
   const settledFindingIds = new Set<string>();
   let gateRoundCounter = 0;
   const registerGateFindings = (ledger: { artifactRef: string; digest: string }, scanTerminalCreatedAt: string): void => {
-    gateRoundCounter += 1;
     for (const finding of script.findings) {
       if (finding.registerAfter !== "solution-gate" || findingSequences.has(finding.findingId)) continue;
       // Multi-round waves register one finding per gate round; a finding whose
@@ -260,17 +259,30 @@ export function driveRuntimeStoreLevel(
       );
     }
   };
-  const settleFindingActions = (node: NodeFact, output: PointOutput, ruling: { scopeId: string } | null): void => {
+  const settleFindingActions = (
+    node: NodeFact,
+    output: PointOutput,
+    ruling: { scopeId: string } | null,
+    gateRound: number,
+    onlyRoundSettled = false,
+  ): void => {
     const gatePassing =
       node.node === "solution-gate" && (node.gateResult === "PASS" || node.gateResult === "PASS_WITH_RISK");
     for (const finding of script.findings) {
-      if (
-        finding.resolveAfter !== node.node ||
-        finding.action === undefined ||
-        !findingSequences.has(finding.findingId) ||
-        settledFindingIds.has(finding.findingId) ||
-        (node.node === "solution-gate" && !gatePassing)
-      ) {
+      if (finding.resolveAfter !== node.node || finding.action === undefined) continue;
+      if (!findingSequences.has(finding.findingId) || settledFindingIds.has(finding.findingId)) continue;
+      // Findings close at THEIR confirming round (persistent-set model): a
+      // finding with closedAtRound settles at that round's verdict terminal
+      // (pass or FAIL — the closure validation is revision/evidence-based,
+      // verdict outcome does not participate); without it, the M1 shape:
+      // settle at the first passing gate round.
+      if (finding.closedAtRound !== undefined) {
+        if (finding.closedAtRound !== gateRound) continue;
+      } else if (onlyRoundSettled) {
+        // The scan-terminal pass closes ONLY this round's confirmed findings;
+        // M1-shape findings (no closedAtRound) settle at the verdict terminal.
+        continue;
+      } else if (node.node === "solution-gate" && !gatePassing) {
         continue;
       }
       const findingId = loopFindingId(runId, findingSequences.get(finding.findingId)!);
@@ -283,16 +295,18 @@ export function driveRuntimeStoreLevel(
           decisionScopeId: ruling.scopeId,
         });
       } else {
-        const gateRevision = stores.runStore
-          .listArtifactRevisions(runId)
-          .filter((item) => item.nodeId === "solution-gate")
-          .sort((a, b) => b.sequence - a.sequence)[0];
-        if (gateRevision === undefined) {
-          throw new Error(`no gate revision to bind the closure of ${finding.findingId}`);
+        // The closure revision is the script-declared bound revision (the
+        // revision that fixed it — the confirming round's design, or the
+        // re-adjudicating gate revision in the M1 single-wave shape). The
+        // store enforces existence/currency/ordering.
+        const boundId = finding.action.boundRevisionId;
+        const revisions = stores.runStore.listArtifactRevisions(runId);
+        if (!revisions.some((item) => item.revisionId === boundId)) {
+          throw new Error(`bound closure revision ${boundId} of ${finding.findingId} does not exist in the run`);
         }
         stores.runStore.resolveFinding(runId, findingId, {
           resolvedByNodeId: finding.discoveredAt as NodeCapabilityId,
-          resolvedByRevisionId: gateRevision.revisionId,
+          resolvedByRevisionId: boundId,
           resolutionEvidenceRef: output.ref,
           resolutionEvidenceDigest: output.digest,
         });
@@ -353,6 +367,18 @@ export function driveRuntimeStoreLevel(
         version: node.version,
         digest,
       });
+      gateRoundCounter += 1;
+      // The re-review first CLOSES what it confirms (binding the revision that
+      // fixed them — still current at this point), THEN registers what it
+      // newly discovered: the new finding's invalidation would otherwise stale
+      // that very revision before the closures bind it.
+      settleFindingActions(
+        node,
+        { ref: stored.artifactRef, version: node.version, digest },
+        null,
+        gateRoundCounter,
+        true,
+      );
       // Gate-round findings register at the SCAN terminal (membership receipt
       // + before the verdict can author a gate revision).
       registerGateFindings({ artifactRef: ledger.artifactRef, digest: ledger.digest }, scanSucceeded.createdAt);
@@ -432,6 +458,7 @@ export function driveRuntimeStoreLevel(
         node,
         { ref: stored.artifactRef, version: node.version, digest },
         verdictTerminal.decisionScopeId === null ? null : { scopeId: verdictTerminal.decisionScopeId },
+        gateRoundCounter,
       );
       continue;
     }
@@ -467,7 +494,7 @@ export function driveRuntimeStoreLevel(
     stores.runStore.appendCapabilityExecution(succeeded);
     materializeProducerRevision(stores.runStore, script.requirementId, runId, succeeded, () => succeeded.createdAt);
     lastOutput.set(pointKey(node.node, "primary"), { ref: stored.artifactRef, version: node.version, digest });
-    settleFindingActions(node, { ref: stored.artifactRef, version: node.version, digest }, null);
+    settleFindingActions(node, { ref: stored.artifactRef, version: node.version, digest }, null, 0);
   }
 
   const outcome = projectLoopManifest({

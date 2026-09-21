@@ -54,7 +54,7 @@ function runScenario(specId: string): ComparisonResult {
 }
 
 function allScenarios() {
-  // coreMultiRoundScenarios() registered once the two-wave closure model is settled (see handoff)
+  // coreMultiRoundScenarios() registered once the ledger-batch registration lands (see handoff)
   return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios()];
 }
 
