@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
-import { coreFirstRoundScenarios, coreUpgradeScenarios } from "./g6-parity/fact-scripts";
+import { coreFirstRoundScenarios, coreUpgradeScenarios, coreMultiRoundScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
 interface Tally {
@@ -54,6 +54,7 @@ function runScenario(specId: string): ComparisonResult {
 }
 
 function allScenarios() {
+  // coreMultiRoundScenarios() registered once the two-wave closure model is settled (see handoff)
   return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios()];
 }
 

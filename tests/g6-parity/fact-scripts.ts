@@ -315,3 +315,96 @@ export function coreUpgradeScenarios(): ScenarioSpec[] {
   }
   return specs;
 }
+
+/**
+ * The multi-round rework wave (Re-Gate coordinate): FAIL → rework → FAIL →
+ * rework → PASS, with ONE finding staying OPEN across both FAIL rounds — the
+ * same OPEN blocking finding authorizes both restarts (a revision admits
+ * exactly one closure row, so two findings closing on the single final gate
+ * revision would be a duplicate-closures corruption) — and is closed once by
+ * the final re-adjudicating PASS round (bound to the gate revision it
+ * authors). Convergence still requires a PASS verdict (same wall as the
+ * single wave).
+ */
+function waveWithMultiRound(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const gateRev = `${runId}:revision:solution-gate:1`;
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
+  const failGate = (v: number): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      staleNodes: ["solution-design"],
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    failGate(1),
+    design(2),
+    failGate(2),
+    design(3),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v3\n`, "3.0.0", {
+      attempt: 3,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findingFor = (n: number): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-F0${n}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${n}`,
+      evidenceKind: "technical_design",
+      evidenceContent: `# ${requirementId} design v${n}\n`,
+      gateRound: n,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v3\n`,
+        boundRevisionId: gateRev,
+      }),
+    });
+  return { nodes, findings: [findingFor(1)] };
+}
+
+/** S-CORE multi-round Re-Gate scenarios: FAIL→FAIL→PASS × depth (3). */
+export function coreMultiRoundScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-FAIL-multiround`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "FAIL", round: "re-gate" }),
+        prunes: "FAIL→FAIL→PASS: two rework waves, one gate-round finding per round, both closed by the final PASS round",
+        build: () => {
+          const wave = waveWithMultiRound(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}

@@ -80,6 +80,9 @@ export interface FindingFact {
    */
   readonly registerAfter?: string;
   readonly resolveAfter?: string;
+  /** 1-based gate round whose scan terminal registers this finding (default 1).
+   *  Multi-round waves register one finding per gate round. */
+  readonly gateRound?: number;
   readonly action?: {
     readonly action: "resolve" | "accept";
     readonly closedBy: string;

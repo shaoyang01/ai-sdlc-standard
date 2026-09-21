@@ -225,9 +225,14 @@ export function driveRuntimeStoreLevel(
   // decision scope with the ruling's Gate Result blob as evidence).
   const findingSequences = new Map<string, number>();
   const settledFindingIds = new Set<string>();
+  let gateRoundCounter = 0;
   const registerGateFindings = (ledger: { artifactRef: string; digest: string }, scanTerminalCreatedAt: string): void => {
+    gateRoundCounter += 1;
     for (const finding of script.findings) {
       if (finding.registerAfter !== "solution-gate" || findingSequences.has(finding.findingId)) continue;
+      // Multi-round waves register one finding per gate round; a finding whose
+      // gateRound has not been reached yet waits for its round's scan terminal.
+      if ((finding.gateRound ?? 1) > gateRoundCounter) continue;
       const findingSequence = findingSequences.size + 1;
       findingSequences.set(finding.findingId, findingSequence);
       // A scan-sourced finding's evidence IS the consumed Finding Ledger (the
