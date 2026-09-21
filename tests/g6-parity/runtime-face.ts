@@ -20,10 +20,12 @@ import { LoopArtifactStore } from "../../core/loop-artifact-store";
 import { LoopRunStore } from "../../core/loop-run-store";
 import { projectLoopManifest } from "../../core/loop-manifest-projector";
 import { materializeProducerRevision } from "../../runtime";
+import { createLoopFinding, loopFindingId, type LoopFindingCategory } from "../../core/loop-finding-lifecycle";
 import type { LoopCapabilityExecutionEvent } from "../../core/loop-capability-execution";
 import { LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION } from "../../core/loop-capability-execution";
-import type { NodeCapabilityId } from "../../loop/types";
-import type { FactScript } from "./types";
+import { LOOP_CAPABILITY_EXECUTION_POINTS, type NodeCapabilityId } from "../../loop/types";
+import type { FactScript, NodeFact } from "./types";
+import { runtimeRunId } from "./types";
 import { sha256 } from "./manual-face";
 
 const TS = "2026-09-20T00:00:00.000Z";
@@ -108,7 +110,7 @@ function event(
 
 /** Creates the run identity + run_started event. */
 function startRun(stores: RuntimeStores, requirementId: string): string {
-  const runId = `g6-${requirementId}`;
+  const runId = runtimeRunId(requirementId);
   stores.runStore.createRun({
     runId,
     requirementId,
@@ -146,6 +148,17 @@ export interface StoreLevelResult {
   readonly manifestText: string;
 }
 
+/** One execution point's last succeeded output (canonical-advance + restart inputs). */
+interface PointOutput {
+  readonly ref: string;
+  readonly version: string;
+  readonly digest: string;
+}
+
+function pointKey(capability: string, executionRole: string): string {
+  return `${capability}:${executionRole}`;
+}
+
 /**
  * Artifact-layer driver: replays the fact script as journal events carrying
  * the SAME raw-content digests the manual face declares (T5 discipline), then
@@ -174,10 +187,92 @@ export function driveRuntimeStoreLevel(
     "requirement_summary" as Parameters<LoopArtifactStore["put"]>[0],
     `# ${script.requirementId} requirement input\n`,
   );
-  let previousRef: string | null = requirementInput.artifactRef;
-  let previousDigest: string | null = requirementInput.digest;
+  // The canonical input rule (chain validator): a canonical advance consumes
+  // the predecessor's effective output; a generation restart (the rework
+  // wave's backward jump) consumes the REUSED upstream output — the last
+  // succeeded output of the point immediately before the restart target.
+  // Tracking per execution point (not per script node) is what makes the
+  // rework wave's design-v2 input the intake output rather than the failed
+  // gate round's artifact.
+  const lastOutput = new Map<string, PointOutput>();
+  const upstreamInputFor = (pointIndex: number): PointOutput => {
+    if (pointIndex <= 0) {
+      return { ref: requirementInput.artifactRef, version: "1.0.0", digest: requirementInput.digest };
+    }
+    const point = LOOP_CAPABILITY_EXECUTION_POINTS[pointIndex - 1]!;
+    const output = lastOutput.get(pointKey(point.capability, point.executionRole));
+    if (output === undefined) {
+      throw new Error(`no succeeded output for upstream point ${point.capability}:${point.executionRole}`);
+    }
+    return output;
+  };
+
+  // Gate-round finding lifecycle (d087 pattern): a gate finding registers at
+  // the FAILING verdict — its registration invalidates the examined design
+  // current, which is what authorizes the rework restart — and resolves at
+  // the re-adjudicating PASS verdict, binding that round's revision and
+  // verdict artifact as the closure evidence. `output` is the completing
+  // node's own artifact (the closure evidence for a gate finding).
+  const findingSequences = new Map<string, number>();
+  const resolvedFindingIds = new Set<string>();
+  const settleFindings = (node: NodeFact, output: PointOutput): void => {
+    const gatePassing =
+      node.node === "solution-gate" && (node.gateResult === "PASS" || node.gateResult === "PASS_WITH_RISK");
+    const gateFailing = node.node === "solution-gate" && node.gateResult === "FAIL";
+    for (const finding of script.findings) {
+      if (
+        finding.registerAfter === node.node &&
+        !findingSequences.has(finding.findingId) &&
+        (node.node !== "solution-gate" || gateFailing)
+      ) {
+        const findingSequence = findingSequences.size + 1;
+        findingSequences.set(finding.findingId, findingSequence);
+        stores.runStore.appendFinding(
+          createLoopFinding({
+            runId,
+            requirementId: script.requirementId,
+            sequence: findingSequence,
+            sourceCapability: finding.discoveredAt as NodeCapabilityId,
+            sourceRevisionId: finding.sourceRevisionId,
+            causeKind: "IMPROVEMENT",
+            introducedByRevisionId: null,
+            severity: "MEDIUM",
+            category: finding.category as LoopFindingCategory,
+            evidenceRef: `loop-artifact:v1:${finding.evidenceKind}:sha256:${sha256(finding.evidenceContent)}`,
+            evidenceDigest: sha256(finding.evidenceContent),
+            earliestAffectedNodeId: finding.earliest as NodeCapabilityId,
+            createdAt: TS,
+          }),
+        );
+        continue;
+      }
+      if (
+        finding.resolveAfter === node.node &&
+        finding.action !== undefined &&
+        findingSequences.has(finding.findingId) &&
+        !resolvedFindingIds.has(finding.findingId) &&
+        (node.node !== "solution-gate" || gatePassing)
+      ) {
+        const gateRevision = stores.runStore
+          .listArtifactRevisions(runId)
+          .filter((item) => item.nodeId === "solution-gate")
+          .sort((a, b) => b.sequence - a.sequence)[0];
+        if (gateRevision === undefined) {
+          throw new Error(`no gate revision to bind the closure of ${finding.findingId}`);
+        }
+        stores.runStore.resolveFinding(runId, loopFindingId(runId, findingSequences.get(finding.findingId)!), {
+          resolvedByNodeId: finding.discoveredAt as NodeCapabilityId,
+          resolvedByRevisionId: gateRevision.revisionId,
+          resolutionEvidenceRef: output.ref,
+          resolutionEvidenceDigest: output.digest,
+        });
+        resolvedFindingIds.add(finding.findingId);
+      }
+    }
+  };
 
   for (const node of script.nodes) {
+    const attempt = node.attempt ?? 1;
     const stored = stores.artifactStore.put(
       node.artifactKind as Parameters<LoopArtifactStore["put"]>[0],
       node.content,
@@ -191,14 +286,19 @@ export function driveRuntimeStoreLevel(
         "capability_findings" as Parameters<LoopArtifactStore["put"]>[0],
         `[] ledger for ${script.requirementId}`,
       );
+      const scanPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+        (point) => point.capability === "solution-gate" && point.executionRole === "adversarial_scan",
+      );
+      const scanInput = upstreamInputFor(scanPointIndex);
       const scanStarted = event(runId, {
         sequence: sequence++,
         status: "started",
         capability: "solution-gate" as NodeCapabilityId,
         executionRole: "adversarial_scan",
-        inputArtifactRef: previousRef,
-        inputArtifactVersion: previousRef ? "1.0.0" : null,
-        inputDigest: previousDigest,
+        attempt,
+        inputArtifactRef: scanInput.ref,
+        inputArtifactVersion: scanInput.version,
+        inputDigest: scanInput.digest,
       });
       const scanSucceeded = event(runId, {
         ...scanStarted,
@@ -217,9 +317,26 @@ export function driveRuntimeStoreLevel(
       stores.runStore.appendCapabilityExecution(scanStarted);
       stores.runStore.appendCapabilityExecution(scanSucceeded);
       materializeProducerRevision(stores.runStore, script.requirementId, runId, scanSucceeded, () => TS);
+      lastOutput.set(pointKey("solution-gate", "adversarial_scan"), {
+        ref: stored.artifactRef,
+        version: node.version,
+        digest,
+      });
 
-      const verdictEligibility =
-        node.gateResult === "FAIL" ? "INELIGIBLE" : node.decisionStatus === "BLOCKED_UNKNOWN" ? "BLOCKED" : "ELIGIBLE";
+      // Verdict terminal shape (canonical production model): the formal_verdict
+      // ALWAYS ends succeeded — it renders the decision (a verdict never ends
+      // blocked, and a FAIL adjudication is a rendered decision, not a failed
+      // execution; WP6: "a SUCCEEDED verdict must materialize its decision
+      // triple even when the adjudication is FAIL"). The decision triple rides
+      // on the event verbatim (frozen contract §4.3 v5 table): CONFIRMED with
+      // a non-null depth; BLOCKED_UNKNOWN with an explicit null depth. A
+      // non-passing verdict authors NO node revision (materializeProducerRevision
+      // WP6 rule: the artifact-revision contract admits only conclusive passing
+      // Gates) — the gate row then keeps the scan-round shape and the chain is
+      // sealed (nextStepEligibility=BLOCKED; the chain validator admits no
+      // canonical successor after a non-ELIGIBLE verdict).
+      const failedGate = node.gateResult === "FAIL";
+      const verdictEligibility = failedGate ? "BLOCKED" : "ELIGIBLE";
       const delta = stores.artifactStore.put(
         "solution_review" as Parameters<LoopArtifactStore["put"]>[0],
         `depth=${node.decisionDepth ?? "STANDARD"} decision delta for ${runId}`,
@@ -229,6 +346,7 @@ export function driveRuntimeStoreLevel(
         status: "started",
         capability: "solution-gate" as NodeCapabilityId,
         executionRole: "formal_verdict",
+        attempt,
         inputArtifactRef: stored.artifactRef,
         inputArtifactVersion: node.version,
         inputDigest: digest,
@@ -239,50 +357,58 @@ export function driveRuntimeStoreLevel(
         consumedFindingsDigest: ledger.digest,
       });
       // BLOCKED_UNKNOWN = the verdict cannot be graded: the formal_verdict
-      // execution ends BLOCKED (not succeeded) — a succeeded formal_verdict
-      // requires a conclusive Gate result (store validation).
-      // Verdict terminal shapes (store validation): PASS/PWR succeed with
-      // decision fields; FAIL ends FAILED (a failed Gate is a terminal fact,
-      // not a success carrying a bad result); BLOCKED_UNKNOWN ends BLOCKED
-      // with errorCode and NO decision fields (it still carries the output).
-      const blockedUnknown = node.decisionStatus === "BLOCKED_UNKNOWN";
-      const failedGate = node.gateResult === "FAIL";
-      const terminalStatus = blockedUnknown ? "blocked" : failedGate ? "failed" : "succeeded";
+      // still SUCCEEDS (it renders the "cannot grade" decision) with
+      // decisionStatus=BLOCKED_UNKNOWN and an explicit null decisionDepth —
+      // a missing depth is a different fact and fails (frozen contract §4.3).
+      // The gate adjudication for an ungradable verdict is FAIL (G5-T2
+      // projector: "UNKNOWN verdict folds a null decision_depth with the FAIL
+      // adjudication"). Verdict terminal shapes (store validation): succeeded
+      // = full decision set (status + depth-or-explicit-null + scope + delta);
+      // a failed/blocked verdict terminal is illegal — it renders a decision.
       const verdictTerminal = event(runId, {
         ...verdictStarted,
-        executionEventId: `${runId}:capability:${sequence}:${terminalStatus}`,
+        executionEventId: `${runId}:capability:${sequence}:succeeded`,
         sequence,
-        status: terminalStatus,
+        status: "succeeded",
         outputArtifactRef: stored.artifactRef,
         outputArtifactVersion: node.version,
         outputDigest: digest,
-        gateResult: blockedUnknown ? null : (node.gateResult ?? "NOT_APPLICABLE"),
-        decisionDepth: blockedUnknown ? null : (node.decisionDepth ?? null),
-        decisionStatus: blockedUnknown ? null : (node.decisionStatus ?? null),
-        decisionScopeId: blockedUnknown ? null : `${runId}:decision:1`,
-        decisionDeltaRef: blockedUnknown ? null : delta.artifactRef,
-        decisionDeltaDigest: blockedUnknown ? null : delta.digest,
-        nextStepEligibility: blockedUnknown ? "BLOCKED" : (verdictEligibility as "ELIGIBLE" | "INELIGIBLE" | "BLOCKED"),
-        errorCode: blockedUnknown ? "BLOCKED_UNKNOWN" : null,
+        gateResult: node.gateResult ?? "NOT_APPLICABLE",
+        decisionDepth: node.decisionDepth ?? null,
+        decisionStatus: node.decisionStatus ?? null,
+        decisionScopeId: `${runId}:decision:1`,
+        decisionDeltaRef: delta.artifactRef,
+        decisionDeltaDigest: delta.digest,
+        nextStepEligibility: verdictEligibility as "ELIGIBLE" | "INELIGIBLE" | "BLOCKED",
+        errorCode: null,
       });
       sequence += 1;
       stores.runStore.appendCapabilityExecution(verdictStarted);
       stores.runStore.appendCapabilityExecution(verdictTerminal);
-      if (!blockedUnknown) {
-        materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictTerminal, () => TS);
-      }
-      previousRef = stored.artifactRef;
-      previousDigest = digest;
+      materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictTerminal, () => TS);
+      lastOutput.set(pointKey("solution-gate", "formal_verdict"), {
+        ref: stored.artifactRef,
+        version: node.version,
+        digest,
+      });
+      // The failing round registers the gate finding (authorizing the rework
+      // restart); the re-adjudicating PASS round resolves it.
+      settleFindings(node, { ref: stored.artifactRef, version: node.version, digest });
       continue;
     }
 
+    const nodePointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
+      (point) => point.capability === node.node && point.executionRole === "primary",
+    );
+    const nodeInput = upstreamInputFor(nodePointIndex);
     const started = event(runId, {
       sequence: sequence++,
       status: "started",
       capability: node.node as NodeCapabilityId,
-      inputArtifactRef: previousRef,
-      inputArtifactVersion: previousRef ? "1.0.0" : null,
-      inputDigest: previousDigest,
+      attempt,
+      inputArtifactRef: nodeInput.ref,
+      inputArtifactVersion: nodeInput.version,
+      inputDigest: nodeInput.digest,
     });
     const succeeded = event(runId, {
       ...started,
@@ -301,8 +427,8 @@ export function driveRuntimeStoreLevel(
     stores.runStore.appendCapabilityExecution(started);
     stores.runStore.appendCapabilityExecution(succeeded);
     materializeProducerRevision(stores.runStore, script.requirementId, runId, succeeded, () => TS);
-    previousRef = stored.artifactRef;
-    previousDigest = digest;
+    lastOutput.set(pointKey(node.node, "primary"), { ref: stored.artifactRef, version: node.version, digest });
+    settleFindings(node, { ref: stored.artifactRef, version: node.version, digest });
   }
 
   const outcome = projectLoopManifest({

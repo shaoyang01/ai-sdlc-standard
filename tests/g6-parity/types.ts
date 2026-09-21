@@ -17,6 +17,14 @@ export const CANONICAL_PATHS: Readonly<Record<string, string>> = Object.freeze({
   "knowledge-sync": "06-知识同步/{REQ}_知识同步结果.md",
 });
 
+/**
+ * The runtime face's run id for a requirement (both faces must agree on it:
+ * the manual face's finding bindings reference runtime revision ids).
+ */
+export function runtimeRunId(requirementId: string): string {
+  return `g6-${requirementId}`;
+}
+
 export const SEVEN_NODES: readonly string[] = Object.freeze([
   "requirement-intake",
   "solution-design",
@@ -50,6 +58,16 @@ export interface FindingFact {
   readonly sourceRevisionId: string;
   readonly evidenceKind: string;
   readonly evidenceContent: string;
+  /**
+   * Wave wiring (d087 pattern): a gate-round finding registers at the
+   * FAILING verdict (the gateway registers the round's findings with the
+   * verdict) and resolves at the re-adjudicating PASS verdict (the itemized
+   * closure binds the re-adjudicating round's revision + verdict artifact).
+   * Both name the solution-gate node; the driver keys the register off a
+   * non-passing verdict and the resolve off a passing one.
+   */
+  readonly registerAfter?: string;
+  readonly resolveAfter?: string;
   readonly action?: {
     readonly action: "resolve" | "accept";
     readonly closedBy: string;
