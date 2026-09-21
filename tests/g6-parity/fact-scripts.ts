@@ -20,29 +20,81 @@ function nodeFact(
   return Object.freeze({ node, artifactKind, content, version, ...extra });
 }
 
-/** The plain seven-node chain with a scripted gate verdict (passing verdicts). */
+/**
+ * The plain seven-node chain with a scripted gate verdict (passing verdicts).
+ * PASS is the plain chain; PWR carries the frozen spec's defining fact — a
+ * scan-sourced finding risk-accepted under the PWR ruling (§3: "PASS_WITH_RISK,
+ * scan 来源 finding 接受"; G6T2-R1-H5).
+ */
 function chainWithVerdict(
   requirementId: string,
   depth: "LIGHT" | "STANDARD" | "DEEP",
   verdict: "PASS" | "FAIL" | "PASS_WITH_RISK" | "BLOCKED_UNKNOWN",
-): NodeFact[] {
+): { nodes: NodeFact[]; findings: FindingFact[] } {
   const gateExtra: Partial<NodeFact> =
     verdict === "PASS"
       ? { gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: depth }
-      : verdict === "FAIL"
-        ? { gateResult: "FAIL", decisionStatus: "CONFIRMED", decisionDepth: depth }
-        : verdict === "PASS_WITH_RISK"
-          ? { gateResult: "PASS_WITH_RISK", decisionStatus: "CONFIRMED", decisionDepth: depth }
+      : verdict === "PASS_WITH_RISK"
+        ? { gateResult: "PASS_WITH_RISK", decisionStatus: "CONFIRMED", decisionDepth: depth }
+        : verdict === "FAIL"
+          ? { gateResult: "FAIL", decisionStatus: "CONFIRMED", decisionDepth: depth }
           : { gateResult: "FAIL", decisionStatus: "BLOCKED_UNKNOWN" };
-  return [
+  const gateContent = `# ${requirementId} gate\n`;
+  const gateNode =
+    verdict === "PASS_WITH_RISK"
+      ? nodeFact("solution-gate", "solution_review", gateContent, "1.0.0", {
+          ...gateExtra,
+          // The scan round's Finding Ledger: one member, the finding the PWR
+          // ruling risk-accepts (the store cross-checks the membership count).
+          ledgerContent: `${JSON.stringify({
+            schema: "loop-capability-findings:v1",
+            findings: [{ finding_id: `${requirementId}-scan-1` }],
+          })}\n`,
+          // The scan finding invalidates the examined design current — the
+          // manual face mirrors that truth on the gate entry-update (T5
+          // ACCEPTED pattern: a current design row would be a real B2 drift).
+          staleNodes: ["solution-design"],
+        })
+      : nodeFact("solution-gate", "solution_review", gateContent, "1.0.0", gateExtra);
+  const nodes: NodeFact[] = [
     nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
     nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
-    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", gateExtra),
+    gateNode,
     nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
     nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
     nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
     nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
   ];
+  if (verdict !== "PASS_WITH_RISK") {
+    return { nodes, findings: [] };
+  }
+  const runId = runtimeRunId(requirementId);
+  // The scan-source finding: discovered at the solution-gate, its evidence IS
+  // the consumed Finding Ledger (the only origin the risk-acceptance path
+  // admits), anchored to the examined design revision, accepted by the PWR
+  // ruling (closed_by=formal_verdict; the bound id is the verdict artifact
+  // version, per the publisher's accept rule).
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-F01`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:1`,
+      evidenceKind: "capability_findings",
+      evidenceContent: gateNode.ledgerContent!,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "accept" as const,
+        closedBy: "formal_verdict",
+        evidenceKind: "solution_review",
+        evidenceContent: gateContent,
+        boundRevisionId: "1.0.0",
+      }),
+    }),
+  ];
+  return { nodes, findings };
 }
 
 /**
@@ -136,11 +188,12 @@ export function buildFirstRoundScript(
       findings: wave.findings,
     });
   }
+  const chain = chainWithVerdict(requirementId, depth, verdict);
   return Object.freeze({
     requirementId,
     requestedDepth: depth,
-    nodes: chainWithVerdict(requirementId, depth, verdict),
-    findings: [],
+    nodes: chain.nodes,
+    findings: chain.findings,
   });
 }
 

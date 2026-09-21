@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
-import { compareArtifactLayer } from "./g6-parity/comparator";
+import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
 import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
@@ -30,7 +30,7 @@ function ok(condition: boolean, message: string, tally: Tally): void {
   }
 }
 
-function runScenario(specId: string): { dimensions: ReturnType<typeof compareArtifactLayer>["dimensions"] } {
+function runScenario(specId: string): ComparisonResult {
   const spec = coreFirstRoundScenarios().find((s) => s.id === specId);
   if (spec === undefined) throw new Error(`unknown scenario ${specId}`);
   const script = spec.build();
@@ -43,8 +43,9 @@ function runScenario(specId: string): { dimensions: ReturnType<typeof compareArt
     const stores = makeStores(spec.id);
     try {
       const runtime = driveRuntimeStoreLevel(stores, script, libRuntime, manual.manifestText);
-      return { dimensions: compareArtifactLayer(manual.manifestText, runtime.manifestText, script).dimensions };
+      return compareArtifactLayer(manual.manifestText, runtime.manifestText, script);
     } finally {
+      stores.runStore.close();
       rmSync(stores.root, { recursive: true, force: true });
     }
   } finally {
@@ -58,14 +59,21 @@ function main(): void {
   console.log(`G6 parity matrix M1: ${specs.length} scenarios (S-CORE first-round, artifact layer)`);
 
   for (const spec of specs) {
-    let dimensions;
+    let comparison;
     try {
-      dimensions = runScenario(spec.id).dimensions;
+      comparison = runScenario(spec.id);
     } catch (error) {
       ok(false, `${spec.id}: harness error ${(error as Error).message}`, tally);
       continue;
     }
-    const diverged = dimensions.filter((d) => d.verdict === "DIVERGE");
+    // The artifact-layer verdict is the normalized full-document equality
+    // (frozen spec §4.2); the dimension rows are diagnostic attribution and
+    // must never filter the verdict (G6T2-R1-H4).
+    if (!comparison.equal) {
+      ok(false, `${spec.id}: normalized manifests diverge — ${comparison.diffs.slice(0, 5).join(" | ")}`, tally);
+      continue;
+    }
+    const diverged = comparison.dimensions.filter((d) => d.verdict === "DIVERGE");
     if (diverged.length === 0) {
       ok(true, `${spec.id}: artifact-layer normalized manifests deep-equal`, tally);
     } else {
@@ -73,10 +81,19 @@ function main(): void {
     }
   }
 
+  const judged = NINE_DIMENSIONS.length - BEHAVIOR_LAYER_DIMENSION_COUNT;
   console.log("");
   console.log(`==== g6 parity M1 summary: ${tally.passed} passed, ${tally.failed} failed ====`);
-  console.log(`(artifact layer only: ${NINE_DIMENSIONS.length - 6} of ${NINE_DIMENSIONS.length} dimensions judged here; behavior layer + remaining 40 scenarios = M2)`);
+  console.log(`(artifact layer only: ${judged} of ${NINE_DIMENSIONS.length} dimensions judged here; behavior layer + remaining 40 scenarios = M2)`);
   if (tally.failed > 0) process.exit(1);
 }
+
+/**
+ * The six behavior-layer dimensions (frozen spec §4.2: node-sequence,
+ * gate-roles, decision-depth, next-eligibility, earliest-reroute,
+ * final-handoff) — reported NOT_JUDGED at the artifact layer, judged by the
+ * full-chain pair in M2.
+ */
+const BEHAVIOR_LAYER_DIMENSION_COUNT = 6;
 
 main();

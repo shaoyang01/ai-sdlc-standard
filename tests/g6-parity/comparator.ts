@@ -41,8 +41,31 @@ function diffPaths(a: unknown, b: unknown, path = ""): string[] {
 }
 
 export interface ComparisonResult {
-  readonly dimensions: DimensionResult[];
+  /**
+   * The artifact-layer verdict: the two normalized documents are field-for-
+   * field equal. This — NOT the per-dimension rows — is the pass/fail
+   * criterion (frozen spec §4.2: after the whitelist normalization, any
+   * difference outside the drop set FAILS). The dimension rows below are
+   * diagnostic attribution only and must never filter the verdict.
+   */
+  readonly equal: boolean;
+  /** Every normalized diff path (capped for reporting), empty when equal. */
+  readonly diffs: readonly string[];
+  readonly dimensions: readonly DimensionResult[];
 }
+
+/**
+ * The artifact layer judges exactly dims 3/4/5 (frozen spec §4.2: artifact
+ * paths, version/current/stale, Finding identity). The remaining six are
+ * behavior-layer dimensions judged by the full-chain pair in M2 — they are
+ * reported NOT_JUDGED here, never as MATCH (an unjudged dimension reported
+ * as MATCH is a false green).
+ */
+const ARTIFACT_LAYER_DIMENSIONS: ReadonlySet<string> = new Set([
+  "artifact-paths",
+  "version-state",
+  "finding-identity",
+]);
 
 /**
  * Artifact-layer comparison (dims 3/4/5 + the manifest-shared part of 1/2/5):
@@ -63,6 +86,13 @@ export function compareArtifactLayer(
   );
   const diffs = diffPaths(manual, runtime);
   const dims: DimensionResult[] = NINE_DIMENSIONS.map((dimension) => {
+    if (!ARTIFACT_LAYER_DIMENSIONS.has(dimension)) {
+      return Object.freeze({
+        dimension,
+        verdict: "NOT_JUDGED" as const,
+        detail: "behavior layer (M2): judged by the full-chain pair, not the artifact layer",
+      });
+    }
     const relevant = diffs.filter((d) => diffBelongsToDimension(d, dimension));
     return Object.freeze({
       dimension,
@@ -70,7 +100,7 @@ export function compareArtifactLayer(
       detail: relevant.length === 0 ? "normalized manifests deep-equal" : relevant.slice(0, 5).join("; "),
     });
   });
-  return { dimensions: dims };
+  return Object.freeze({ equal: diffs.length === 0, diffs, dimensions: dims });
 }
 
 /** Maps a diff path to the dimension it belongs to (artifact-layer mapping). */

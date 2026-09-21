@@ -47,6 +47,18 @@ export interface NodeFact {
   readonly decisionDepth?: "LIGHT" | "STANDARD" | "DEEP";
   /** rework wave: attempt > 1 marks a repeat completion of the same node. */
   readonly attempt?: number;
+  /**
+   * solution-gate only: the scan round's Finding Ledger content (the
+   * canonical loop-capability-findings:v1 envelope). A PWR scenario's
+   * scan-source finding binds to this ledger as its evidence.
+   */
+  readonly ledgerContent?: string;
+  /**
+   * Nodes the manual face must mark stale on THIS node's entry-update,
+   * mirroring the finding-invalidation truth the runtime store applies when
+   * a gate-round finding registers (its earliest-affected scope goes STALE).
+   */
+  readonly staleNodes?: readonly string[];
 }
 
 /** One finding fact (register + optional lifecycle action). */
@@ -107,7 +119,12 @@ export interface ScenarioSpec {
 /** One dimension verdict in the comparison result. */
 export interface DimensionResult {
   readonly dimension: string;
-  readonly verdict: "MATCH" | "DIVERGE";
+  /**
+   * MATCH/DIVERGE for dimensions this layer judges; NOT_JUDGED for
+   * behavior-layer dimensions (an unjudged dimension is never MATCH —
+   * G6T2-R1-H4).
+   */
+  readonly verdict: "MATCH" | "DIVERGE" | "NOT_JUDGED";
   readonly detail: string;
 }
 

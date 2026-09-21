@@ -88,6 +88,12 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     if (node.gateResult !== undefined) args.push("--gate-result", node.gateResult);
     if (node.decisionStatus !== undefined) args.push("--decision-status", node.decisionStatus);
     if (node.decisionDepth !== undefined) args.push("--decision-depth", node.decisionDepth);
+    // Mirror the finding-invalidation truth the runtime store applies when a
+    // gate-round finding registers (its earliest-affected scope goes STALE) —
+    // a current row there would be a genuine B2 divergence (T5 ACCEPTED).
+    if (node.staleNodes !== undefined && node.staleNodes.length > 0) {
+      args.push("--stale-nodes", node.staleNodes.join(","));
+    }
     publisher(libDir, args);
   }
 

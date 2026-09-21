@@ -29,6 +29,14 @@ import { runtimeRunId } from "./types";
 import { sha256 } from "./manual-face";
 
 const TS = "2026-09-20T00:00:00.000Z";
+/**
+ * Distinct per-event timestamps (T5 pattern). A shared clock makes the
+ * invalidation-edge recovery undecidable — the projector recovers a finding's
+ * registering event by createdAt matching and refuses on multi-candidate
+ * collisions (RC1-1) — and the finding's own createdAt IS the scan terminal's
+ * (the membership receipt).
+ */
+const stamp = (n: number): string => new Date(Date.parse(TS) + n * 1000).toISOString();
 
 export interface RuntimeStores {
   readonly root: string;
@@ -65,7 +73,7 @@ function event(
     nodeId: over.nodeId ?? capability,
     attempt: over.attempt ?? 1,
     status: over.status as LoopCapabilityExecutionEvent["status"],
-    createdAt: TS,
+    createdAt: stamp(sequence),
     bindingId:
       over.bindingId ??
       `binding-${over.executorAgent ?? "codex"}-${capability}-${over.executionRole ?? "primary"}`,
@@ -207,52 +215,69 @@ export function driveRuntimeStoreLevel(
     return output;
   };
 
-  // Gate-round finding lifecycle (d087 pattern): a gate finding registers at
-  // the FAILING verdict — its registration invalidates the examined design
-  // current, which is what authorizes the rework restart — and resolves at
-  // the re-adjudicating PASS verdict, binding that round's revision and
-  // verdict artifact as the closure evidence. `output` is the completing
-  // node's own artifact (the closure evidence for a gate finding).
+  // Gate-round finding lifecycle (d087 / T5-ACCEPTED patterns). REGISTRATION
+  // happens at the SCAN terminal — the gateway-era membership receipt (the
+  // finding's createdAt IS the scan terminal's) and BEFORE any verdict: a
+  // finding registered after a PWR verdict would invalidate the very gate
+  // revision that verdict authored. SETTLEMENT happens at the verdict:
+  // resolve (rework wave: binds the re-adjudicating PASS revision) or accept
+  // (PWR: the ruling risk-accepts the scan-source finding under its own
+  // decision scope with the ruling's Gate Result blob as evidence).
   const findingSequences = new Map<string, number>();
-  const resolvedFindingIds = new Set<string>();
-  const settleFindings = (node: NodeFact, output: PointOutput): void => {
+  const settledFindingIds = new Set<string>();
+  const registerGateFindings = (ledger: { artifactRef: string; digest: string }, scanTerminalCreatedAt: string): void => {
+    for (const finding of script.findings) {
+      if (finding.registerAfter !== "solution-gate" || findingSequences.has(finding.findingId)) continue;
+      const findingSequence = findingSequences.size + 1;
+      findingSequences.set(finding.findingId, findingSequence);
+      // A scan-sourced finding's evidence IS the consumed Finding Ledger (the
+      // only origin the risk-acceptance path admits); a rework-wave gate
+      // finding anchors to the examined design artifact instead.
+      const scanSourced = finding.evidenceKind === "capability_findings";
+      stores.runStore.appendFinding(
+        createLoopFinding({
+          runId,
+          requirementId: script.requirementId,
+          sequence: findingSequence,
+          sourceCapability: finding.discoveredAt as NodeCapabilityId,
+          sourceRevisionId: finding.sourceRevisionId,
+          causeKind: "IMPROVEMENT",
+          introducedByRevisionId: null,
+          severity: "MEDIUM",
+          category: finding.category as LoopFindingCategory,
+          evidenceRef: scanSourced ? ledger.artifactRef : `loop-artifact:v1:${finding.evidenceKind}:sha256:${sha256(finding.evidenceContent)}`,
+          evidenceDigest: scanSourced ? ledger.digest : sha256(finding.evidenceContent),
+          earliestAffectedNodeId: finding.earliest as NodeCapabilityId,
+          // The membership receipt: the finding's createdAt IS the producing
+          // scan terminal's own (a later borrower is refused).
+          createdAt: scanTerminalCreatedAt,
+        }),
+      );
+    }
+  };
+  const settleFindingActions = (node: NodeFact, output: PointOutput, ruling: { scopeId: string } | null): void => {
     const gatePassing =
       node.node === "solution-gate" && (node.gateResult === "PASS" || node.gateResult === "PASS_WITH_RISK");
-    const gateFailing = node.node === "solution-gate" && node.gateResult === "FAIL";
     for (const finding of script.findings) {
       if (
-        finding.registerAfter === node.node &&
-        !findingSequences.has(finding.findingId) &&
-        (node.node !== "solution-gate" || gateFailing)
+        finding.resolveAfter !== node.node ||
+        finding.action === undefined ||
+        !findingSequences.has(finding.findingId) ||
+        settledFindingIds.has(finding.findingId) ||
+        (node.node === "solution-gate" && !gatePassing)
       ) {
-        const findingSequence = findingSequences.size + 1;
-        findingSequences.set(finding.findingId, findingSequence);
-        stores.runStore.appendFinding(
-          createLoopFinding({
-            runId,
-            requirementId: script.requirementId,
-            sequence: findingSequence,
-            sourceCapability: finding.discoveredAt as NodeCapabilityId,
-            sourceRevisionId: finding.sourceRevisionId,
-            causeKind: "IMPROVEMENT",
-            introducedByRevisionId: null,
-            severity: "MEDIUM",
-            category: finding.category as LoopFindingCategory,
-            evidenceRef: `loop-artifact:v1:${finding.evidenceKind}:sha256:${sha256(finding.evidenceContent)}`,
-            evidenceDigest: sha256(finding.evidenceContent),
-            earliestAffectedNodeId: finding.earliest as NodeCapabilityId,
-            createdAt: TS,
-          }),
-        );
         continue;
       }
-      if (
-        finding.resolveAfter === node.node &&
-        finding.action !== undefined &&
-        findingSequences.has(finding.findingId) &&
-        !resolvedFindingIds.has(finding.findingId) &&
-        (node.node !== "solution-gate" || gatePassing)
-      ) {
+      const findingId = loopFindingId(runId, findingSequences.get(finding.findingId)!);
+      if (finding.action.action === "accept") {
+        if (ruling === null) throw new Error(`no PWR ruling to accept the risk of ${finding.findingId}`);
+        stores.runStore.acceptFindingRisk(runId, findingId, {
+          riskAcceptedBy: "formal_verdict",
+          riskAcceptanceEvidenceRef: output.ref,
+          riskAcceptanceEvidenceDigest: output.digest,
+          decisionScopeId: ruling.scopeId,
+        });
+      } else {
         const gateRevision = stores.runStore
           .listArtifactRevisions(runId)
           .filter((item) => item.nodeId === "solution-gate")
@@ -260,14 +285,14 @@ export function driveRuntimeStoreLevel(
         if (gateRevision === undefined) {
           throw new Error(`no gate revision to bind the closure of ${finding.findingId}`);
         }
-        stores.runStore.resolveFinding(runId, loopFindingId(runId, findingSequences.get(finding.findingId)!), {
+        stores.runStore.resolveFinding(runId, findingId, {
           resolvedByNodeId: finding.discoveredAt as NodeCapabilityId,
           resolvedByRevisionId: gateRevision.revisionId,
           resolutionEvidenceRef: output.ref,
           resolutionEvidenceDigest: output.digest,
         });
-        resolvedFindingIds.add(finding.findingId);
       }
+      settledFindingIds.add(finding.findingId);
     }
   };
 
@@ -284,7 +309,8 @@ export function driveRuntimeStoreLevel(
       // formal_verdict (hermes, carries the verdict fields) — T5 pattern.
       const ledger = stores.artifactStore.put(
         "capability_findings" as Parameters<LoopArtifactStore["put"]>[0],
-        `[] ledger for ${script.requirementId}`,
+        node.ledgerContent ??
+          `${JSON.stringify({ schema: "loop-capability-findings:v1", findings: [] })}\n`,
       );
       const scanPointIndex = LOOP_CAPABILITY_EXECUTION_POINTS.findIndex(
         (point) => point.capability === "solution-gate" && point.executionRole === "adversarial_scan",
@@ -316,12 +342,15 @@ export function driveRuntimeStoreLevel(
       sequence += 1;
       stores.runStore.appendCapabilityExecution(scanStarted);
       stores.runStore.appendCapabilityExecution(scanSucceeded);
-      materializeProducerRevision(stores.runStore, script.requirementId, runId, scanSucceeded, () => TS);
+      materializeProducerRevision(stores.runStore, script.requirementId, runId, scanSucceeded, () => scanSucceeded.createdAt);
       lastOutput.set(pointKey("solution-gate", "adversarial_scan"), {
         ref: stored.artifactRef,
         version: node.version,
         digest,
       });
+      // Gate-round findings register at the SCAN terminal (membership receipt
+      // + before the verdict can author a gate revision).
+      registerGateFindings({ artifactRef: ledger.artifactRef, digest: ledger.digest }, scanSucceeded.createdAt);
 
       // Verdict terminal shape (canonical production model): the formal_verdict
       // ALWAYS ends succeeded — it renders the decision (a verdict never ends
@@ -385,15 +414,20 @@ export function driveRuntimeStoreLevel(
       sequence += 1;
       stores.runStore.appendCapabilityExecution(verdictStarted);
       stores.runStore.appendCapabilityExecution(verdictTerminal);
-      materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictTerminal, () => TS);
+      materializeProducerRevision(stores.runStore, script.requirementId, runId, verdictTerminal, () => verdictTerminal.createdAt);
       lastOutput.set(pointKey("solution-gate", "formal_verdict"), {
         ref: stored.artifactRef,
         version: node.version,
         digest,
       });
-      // The failing round registers the gate finding (authorizing the rework
-      // restart); the re-adjudicating PASS round resolves it.
-      settleFindings(node, { ref: stored.artifactRef, version: node.version, digest });
+      // The failing round's finding stays OPEN (it authorizes the rework
+      // restart); the re-adjudicating PASS round resolves it; a PWR ruling
+      // risk-accepts the scan-source finding.
+      settleFindingActions(
+        node,
+        { ref: stored.artifactRef, version: node.version, digest },
+        verdictTerminal.decisionScopeId === null ? null : { scopeId: verdictTerminal.decisionScopeId },
+      );
       continue;
     }
 
@@ -426,9 +460,9 @@ export function driveRuntimeStoreLevel(
     sequence += 1;
     stores.runStore.appendCapabilityExecution(started);
     stores.runStore.appendCapabilityExecution(succeeded);
-    materializeProducerRevision(stores.runStore, script.requirementId, runId, succeeded, () => TS);
+    materializeProducerRevision(stores.runStore, script.requirementId, runId, succeeded, () => succeeded.createdAt);
     lastOutput.set(pointKey(node.node, "primary"), { ref: stored.artifactRef, version: node.version, digest });
-    settleFindings(node, { ref: stored.artifactRef, version: node.version, digest });
+    settleFindingActions(node, { ref: stored.artifactRef, version: node.version, digest }, null);
   }
 
   const outcome = projectLoopManifest({
