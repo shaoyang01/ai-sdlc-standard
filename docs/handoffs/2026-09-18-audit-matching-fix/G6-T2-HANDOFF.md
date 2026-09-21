@@ -1,7 +1,19 @@
 # G6-T2 交接（2026-09-21 公司机会话更新，接 2026-09-20 晚家用机收工态）
 
-> 状态：**M1 12/12 + R1 复审两项阻塞（H4/H5）已修复**，待 R2 复核。分支 `feat/g6-t2-parity-harness` @ `c1affc7`（已推送，PR #195，base `feature/loop-runtime-v1`）。
-> Control Plane 不变：G6/D-090-04 ACTIVE（CP PR #88 合并 `7222d6a`），product_commit 仍指 `e34a4a6`（G6 工作未上主线）。
+> 状态：**M1 12/12，R1 两项阻塞（H4/H5）经 R2 独立复核 PASS 闭环**；PR #195（base `feature/loop-runtime-v1`）CI 四 job 全绿、CLEAN，合并授权已获 Current User 2026-09-21 确认。分支 `feat/g6-t2-parity-harness` @ `4ee3c90`（R2 后无新提交）。
+> Control Plane 不变：G6/D-090-04 ACTIVE（CP PR #88 合并 `7222d6a`），product_commit 仍指 `e34a4a6`（G6 工作未上主线，均在 feature 分支）。
+
+## 2026-09-21 R2 独立复核：PASS（M1 构成 M2 可靠基线）
+
+R1 判定 FAIL（两项阻塞），修复后经同一复审方 R2 全量只读复核 **PASS**：H4/H5 逐项 CLOSED、三项 CLOSED 根因无回归。复审方独立推演：H4 22 项变异（含对负向测试做「破坏 comparator 看测试失败」的空转探测——恢复旧逻辑后 24 项负向恰 4 项失败）；H5 三档各 14 断言 + 4 例 publisher 准入实测 + 4 道 fail-closed 负向（错误 scope / ledger 充当证据 / 非 scan 来源 / 成员数漂移全部 ILLEGAL_TRANSITION）；另 12 项自由裁量新反例（未映射顶层键、entries 类型混淆、ACCEPTED 行闭捆漂移、resolve 闭捆上游/STALE revision、共享时钟变体）全部正确拒判。回归复跑与自述逐字吻合（全量 1767/0/169 等）。
+
+**M2 开工前必须承接的四条约束（R2 钉下）**：
+1. 产物层只判 3 维（artifact-paths / version-state / finding-identity），其余 6 维行为层判——产物层永不宣称行为层 MATCH；
+2. 比较器判据须保持全文档相等（`diffs.length === 0`），任何维度映射不得进入判定路径，未映射差异必须使场景失败；
+3. finding 模式复用范围：PWR 接受 = scan 来源 finding + 该轮 PWR/CONFIRMED 裁决自身 scope + 裁决 Gate Result blob 证据；返工 wave = 被审 design 锚定 + 重裁 revision 闭捆；注册时机固定 scan 终态后、verdict 前（membership receipt）；逐事件时间戳（RC1-1 可判定性）；
+4. runner 诚实性：产物层通过必须明示部分覆盖（"artifact layer only: 3 of 9"），不得表述为九维全绿。
+
+R2 两条不阻塞建议：ruby@3.3 PATH 依赖文档化（README Validation 区，合并后单独落）；M2 报告可单列「未归因 diff」。
 
 ## 2026-09-21 R1 独立复审：FAIL → H4/H5 修复（三项既定根因均 CLOSED）
 
