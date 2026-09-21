@@ -66,6 +66,8 @@ ruby scripts/validate-capability-metadata-chain.rb  # repository capability/stat
 git diff --check                                    # whitespace validation
 ```
 
+**Ruby 3.3 required** — the shell suites (`tests/*.test.sh`) and the manifest publisher (`scripts/publish-requirement-manifest.sh`, embedded Ruby) depend on Ruby ≥ 3.3 (Psych 5.1.2); a system Ruby 2.6 triggers canonical-gate false positives. On macOS + homebrew, prefix the PATH (`export PATH="/opt/homebrew/opt/ruby@3.3/bin:$PATH"`). `npm test` (`scripts/run-tests-parallel.mjs`) spawns subprocesses that inherit the caller's PATH — without the prefix, publisher-dependent test files are misreported as FAILED (environment artifact, not a code regression).
+
 `validate-skill-contracts.rb` 是 portable Standard Package validator；metadata-chain validator 是本仓库治理校验。All commands pass. README 仍不是 canonical current project status；当前状态继续见 [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md)。
 
 ## Operational Redlines
