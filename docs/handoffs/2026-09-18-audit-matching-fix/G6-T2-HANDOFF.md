@@ -100,8 +100,8 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 1. 单 finding 只授权**一次** restart 跳转——同一 OPEN finding 下的第二次反向跳转被链校验器拒（regate 上下文按 journal 事实推导授权）；
 2. 一个 revision 只容**一条** closure 行——两个 finding 闭合于同一最终 gate revision = duplicate-closures `MANIFEST_CORRUPT_STOP`。
 
-两个候选模型（下一beat 定）：
-(a) 每波 finding + **各异闭合 revision**（F01 绑最终 gate revision、F02 绑解决其轮的 design revision）——需两侧驱动器支持 per-finding 闭合 revision 指定（runtime settle 现硬绑最新 gate revision）；`gateRound` 机械已落地为地基（`fb2ee1a`）；
-(b) 两个 PASS 终止波（FAIL→PASS，变更触发 FAIL→PASS）——各 finding 闭合于各自波的 gate revision 无重复，但第二波的下游失效（design 变更令 task-planning 等 stale）需建模。
+**已定案（Current User 2026-09-21）：finding 持续累积模型 = 现实手动复审流程**——finding 是全局集合、只有状态（open→closed）、不属于轮次；每轮回退由当前 open finding 集合授权；finding 在**其修复被确认的那一轮**关闭并绑该轮 revision/证据；「部分关闭」= 保持 open（协议无 partial 态）。链形态：R1 FAIL 注册 a/b/c → design v2 → R2 关 a/b、c 留 open、注册 d → design v3 → R3 关 c/d、注册 e → design v4 → R4 关 e、PASS → 下游链。两约束天然满足（每轮有新 finding 落账提供授权事实；各 finding 闭合于各自确认轮、closure revision 各异）。
+
+实现改动（下一beat）：① finding 按轮注册（`gateRound` 已备）；② settle 从「仅 PASS 轮」改为「按 finding 的确认轮」，绑该轮 revision/证据（FAIL 轮无 gate revision → 绑该轮 design revision + verdict blob；**先验证 store 层 resolveFinding 是否接受非 PASS 轮闭合**，若拒则调绑法）；③ 驱动器加 `closedAtRound` 字段。
 
 剩余家族（S-INIT 8 / S-MANIFEST 2 / S-CRASH 6 / 超限暂停 4 行为层 only）与行为层 full-chain 驱动器按事实快照的计划推进。
