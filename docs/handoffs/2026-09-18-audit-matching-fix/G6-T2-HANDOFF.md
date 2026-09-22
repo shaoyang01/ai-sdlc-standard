@@ -92,10 +92,14 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 - ruby 须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`（系统 2.6.10 触发 canonical gate 假阳）；node v24。
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
-## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二波）
+## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
-- 分支 `feat/g6-t2-m2-scenarios` @ **`53f5d23`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
-- 矩阵 **19/19 绿**（12 首轮 + 4 升档 + 3 多轮）；负向 24/0；tsc 0；**npm test 全量 1767 passed / 0 failed（169 文件）已跑**。
+- 分支 `feat/g6-t2-m2-scenarios` @ **`31cb43f`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **27/27 绿**：12 首轮 + 4 升档 + 3 多轮（A）+ 3 review 本地返工（B）+ 3 review 发现方案问题→re-gate（C）+ 1 gate 发现需求级回流（D）+ 1 review 发现需求级回流（E）；负向 24/0；tsc 0；npm test 全量 1767/0（169 文件）已跑。
+- **流程模型（Current User 2026-09-22 详细描述定案）**：方案对抗审核发现方案问题→改方案→re-gate（多轮）；方案通过后经任务拆分/实现/审核，审核发现**代码**问题且不涉方案→直接回流实现修改后重新审核（不触发 re-gate）；**仅当**发现方案问题或需求补充→回流需求归一或方案生成→这才触发 re-gate。**re-gate 轮次按阶段独立计数**（方案审核、代码审核各一套，不共享轮次值）。
+- **全部形态由 wms-monitor 生产实证定型**：A=gate finding 闭捆 design 修订（config F01-F06）；B=review finding earliest=implementation、闭捆 implementation 修订、证据=re-review 产物（lifecycle 22 个 + config F08-F11）；C=review finding earliest=solution-design、闭捆 design 修订、证据=**design 产物**（lifecycle CR-F12）；D=gate finding earliest=requirement-intake、闭捆 intake 修订（config F07）；E=需求补充路径（同 C 机制换 REQUIREMENT 类）。同类证据：A 用该轮 gate 产物。
+- 驱动器机制：per-stage 双轮次计数器；任意节点完成可注册 finding（该节点完成带 finding 时 eligibility=BLOCKED，回退由 OPEN finding 授权）；闭合证据=脚本声明产物（与手动面同源，修正了升级家族预先存在的「结算轮 vs 声明证据」不一致）。
+- 用户裁决（沿用）：① Re-Gate 非 finding 路径（requirement-change 授权）仍待办；② M2 单 PR 收口；③ 超限暂停 4 = FAIL×LIGHT/STANDARD/DEEP + BU×STANDARD（行为层 only）。
 - **多轮波收官（本波核心）**：落地形态 = **每轮一个 finding**（非用户示例的 R1 同轮 a/b/c）——两条引擎硬约束逼迫：① takeover 配对按 evidence 唯一匹配，同轮 finding 共享 scan-ledger blob 不可区分（歧义拒判；手动面也无法把同一 blob 引用 N 次而不歧义——真实手动约定是各异 ledger#F0n，反而完全不配对）；② 投影 provenance 要求闭捆 revision ref 唯一，两个 finding 绑同一轮 revision = duplicate-closures MANIFEST_CORRUPT_STOP。持续累积模型完整保留（finding 跨轮累积、每轮回退由 open 集合授权、各自确认轮绑该轮 design revision 闭合）。
 - **批量 API 结论（取代原下一beat 计划）**：`appendCapabilityExecutionWithFindings` 的「终态+注册熔合」与「先结算后注册」时序互斥——finding 迁移禁止活跃执行期（终态前结算被拒），批量 invalidation 会使闭捆 revision 在结算前变 STALE（终态后结算被拒）。N=1 时逐条路径本就正确且与生产一致，批量 API 无增益。
 - 多轮波实测（STANDARD-FAIL-multiround）：4 轮 verdict（FAIL×3 BLOCKED → PASS ELIGIBLE）；3 finding RESOLVED 各绑 design v2/v3/v4；gate revision 恰 1（PASS，semver 4.0.0）；design v1-v3 STALE、v4 ACTIVE；两面 findingIndex 三行深比较一致（配对 1:1）。
