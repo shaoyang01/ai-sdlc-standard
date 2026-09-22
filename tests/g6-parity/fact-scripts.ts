@@ -639,3 +639,191 @@ export function coreReviewRegateScenarios(): ScenarioSpec[] {
   }
   return specs;
 }
+
+/**
+ * D — a gate-discovered REQUIREMENT-level finding reflowing to requirement
+ * normalization (production sample: wms-monitor 20260916-config-page-usability
+ * F07 — discovered at the solution-gate, earliest=requirement-intake, closed
+ * by the gate binding requirement-summary@1.5.0). The requirement-class
+ * invalidation stales the whole examined scope, so the reflow lands on
+ * requirement-intake and the ENTIRE chain re-runs from intake; the confirming
+ * re-gate round (gate stage round 2) closes the finding binding that round's
+ * intake revision.
+ */
+function waveWithGateRequirementReflow(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerV1 = `${JSON.stringify({
+    schema: "loop-capability-findings:v1",
+    findings: [{ finding_id: `${requirementId}-G01` }],
+  })}\n`;
+  const intakeV2 = `# ${requirementId} intake v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake v1\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      ledgerContent: ledgerV1,
+      // The requirement-class invalidation stales the whole examined scope.
+      staleNodes: ["requirement-intake", "solution-design"],
+    }),
+    // Reflow to requirement normalization; the whole chain re-runs.
+    nodeFact("requirement-intake", "requirement_summary", intakeV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-G01`,
+      discoveredAt: "solution-gate",
+      category: "REQUIREMENT",
+      earliest: "requirement-intake",
+      // Anchored to the examined requirement revision (the production shape:
+      // source_revision = requirement-summary@…).
+      sourceRevisionId: `${runId}:revision:requirement-intake:1`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerV1,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      // Gate stage round 2 — the re-gate that confirms the requirement fix.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v2\n`,
+        // A requirement-class finding binds the INTAKE revision that fixed
+        // it (production: closure_bound_revision_id = requirement-summary@…).
+        boundRevisionId: `${runId}:revision:requirement-intake:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/**
+ * E — a review-discovered REQUIREMENT-level finding (a requirement addition
+ * found during the process) reflowing to requirement normalization: the whole
+ * chain re-runs from intake and the re-gate re-adjudicates the rebuilt
+ * design. Closes at the re-review (review stage round 2) binding the new
+ * intake revision. The Current User's flow ruling: only a design/requirement-
+ * level problem reflows to normalization/design — that is when re-gate fires.
+ */
+function waveWithReviewRequirementReflow(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const intakeV2 = `# ${requirementId} intake v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake v1\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v1\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      staleNodes: ["requirement-intake", "solution-design", "solution-gate", "task-planning", "implementation"],
+    }),
+    // Reflow to requirement normalization; the whole chain re-runs and the
+    // re-gate re-adjudicates.
+    nodeFact("requirement-intake", "requirement_summary", intakeV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "REQUIREMENT",
+      earliest: "requirement-intake",
+      sourceRevisionId: `${runId}:revision:requirement-intake:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review after the full re-run.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        // The updated requirement summary is the closure evidence and the
+        // binding is the new intake revision.
+        evidenceKind: "requirement_summary",
+        evidenceContent: intakeV2,
+        boundRevisionId: `${runId}:revision:requirement-intake:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** D — gate-discovered requirement-level reflow (DEEP, production sample config-page-usability F07). */
+export function coreGateRequirementReflowScenarios(): ScenarioSpec[] {
+  const id = "S-CORE-DEEP-FAIL-requirement-reflow";
+  return [
+    Object.freeze({
+      id,
+      family: "S-CORE" as const,
+      coords: coords({ depth: "DEEP", verdict: "FAIL", round: "re-gate" }),
+      prunes: "requirement-level reflow: REQUIREMENT finding at the gate anchors the examined intake revision, stales the whole scope, reflows to requirement-intake; the whole chain re-runs and the confirming re-gate (gate stage round 2) closes it binding the new intake revision; production sample wms-monitor 20260916-config-page-usability F07",
+      build: () => {
+        const wave = waveWithGateRequirementReflow(`20260920-${id}`, "DEEP");
+        return Object.freeze({
+          requirementId: `20260920-${id}`,
+          requestedDepth: "DEEP" as const,
+          nodes: wave.nodes,
+          findings: wave.findings,
+        });
+      },
+    }),
+  ];
+}
+
+/** E — review-discovered requirement-level reflow (DEEP; the requirement-addition path). */
+export function coreReviewRequirementReflowScenarios(): ScenarioSpec[] {
+  const id = "S-CORE-DEEP-PASS-requirement-reflow";
+  return [
+    Object.freeze({
+      id,
+      family: "S-CORE" as const,
+      coords: coords({ depth: "DEEP", verdict: "PASS", round: "re-gate" }),
+      prunes: "requirement-addition reflow: a requirement-level finding at the review stage reflows to requirement-intake, the whole chain re-runs (re-gate included), the re-review (review stage round 2) closes it binding the new intake revision",
+      build: () => {
+        const wave = waveWithReviewRequirementReflow(`20260920-${id}`, "DEEP");
+        return Object.freeze({
+          requirementId: `20260920-${id}`,
+          requestedDepth: "DEEP" as const,
+          nodes: wave.nodes,
+          findings: wave.findings,
+        });
+      },
+    }),
+  ];
+}
