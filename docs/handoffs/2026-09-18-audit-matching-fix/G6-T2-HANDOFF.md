@@ -94,8 +94,9 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
-- 分支 `feat/g6-t2-m2-scenarios` @ **`31cb43f`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
-- 矩阵 **27/27 绿**：12 首轮 + 4 升档 + 3 多轮（A）+ 3 review 本地返工（B）+ 3 review 发现方案问题→re-gate（C）+ 1 gate 发现需求级回流（D）+ 1 review 发现需求级回流（E）；负向 24/0；tsc 0；npm test 全量 1767/0（169 文件）已跑。
+- 分支 `feat/g6-t2-m2-scenarios` @ **`4a30d88`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **31/31 绿**：12 首轮 + 4 升档 + 3 多轮（A）+ 3 review 本地返工（B）+ 3 review 发现方案问题→re-gate（C）+ 1 gate 发现需求级回流（D）+ 1 review 发现需求级回流（E）+ **2 feedback 驱动 re-gate（F，零 finding 的非 finding 路径：WP-1 FEEDBACK_DRIVEN_CHANGE 开新代际、从 intake 整链重建、授权经 store regate 上下文 feedback 分支）+ 2 升档×FAIL（G）**；负向 24/0；tsc 0；npm test 全量 1767/0（169 文件）已跑。
+- 已知环境抖动（非本次 diff 引起）：`tests/loop-delivery-checkpoint-store.test.ts` 在并行满载下间歇性 1 文件失败（跨进程并发写场景），隔离 268/0；连续两次复跑 0 失败。
 - **流程模型（Current User 2026-09-22 详细描述定案）**：方案对抗审核发现方案问题→改方案→re-gate（多轮）；方案通过后经任务拆分/实现/审核，审核发现**代码**问题且不涉方案→直接回流实现修改后重新审核（不触发 re-gate）；**仅当**发现方案问题或需求补充→回流需求归一或方案生成→这才触发 re-gate。**re-gate 轮次按阶段独立计数**（方案审核、代码审核各一套，不共享轮次值）。
 - **全部形态由 wms-monitor 生产实证定型**：A=gate finding 闭捆 design 修订（config F01-F06）；B=review finding earliest=implementation、闭捆 implementation 修订、证据=re-review 产物（lifecycle 22 个 + config F08-F11）；C=review finding earliest=solution-design、闭捆 design 修订、证据=**design 产物**（lifecycle CR-F12）；D=gate finding earliest=requirement-intake、闭捆 intake 修订（config F07）；E=需求补充路径（同 C 机制换 REQUIREMENT 类）。同类证据：A 用该轮 gate 产物。
 - 驱动器机制：per-stage 双轮次计数器；任意节点完成可注册 finding（该节点完成带 finding 时 eligibility=BLOCKED，回退由 OPEN finding 授权）；闭合证据=脚本声明产物（与手动面同源，修正了升级家族预先存在的「结算轮 vs 声明证据」不一致）。
