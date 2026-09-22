@@ -1148,3 +1148,128 @@ export function coreManifestStateScenarios(): ScenarioSpec[] {
   }
   return specs;
 }
+
+/**
+ * S-CRASH waves (6): the review-local rework chain (a PASS gate, one
+ * implementation-class review finding, the rework, the re-review) observed
+ * at three crash points × two resume variants. The runtime face's journal
+ * runs ahead of its manifest at the crash point; the resume projection must
+ * bring the manifest to the journal head (a catch-up, or a fresh takeover
+ * after the lost write), and the manual face's same-input publisher replay
+ * must stay byte-idempotent.
+ */
+function waveWithCrashResume(
+  requirementId: string,
+  crashPoint: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const reviewV2 = `# ${requirementId} review v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: "STANDARD",
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", { staleNodes: ["implementation", "code-review"] }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", reviewV2, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "IMPLEMENTATION",
+      earliest: "implementation",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "review_summary",
+        evidenceContent: reviewV2,
+        boundRevisionId: `${runId}:revision:implementation:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** A clean seven-node PASS chain (the post-gate-verdict crash wave). */
+function plainPassChain(requirementId: string): NodeFact[] {
+  return [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: "STANDARD",
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+}
+
+/** S-CRASH scenarios (6): three crash points × {single resume, double resume}. */
+export function coreCrashResumeScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const crashPoints: readonly {
+    point: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write";
+    checkpoint: string;
+    manifestState: "new" | "reconcile" | "corrupt";
+    lostWrite: boolean;
+  }[] = [
+    { point: "post-gate-verdict", checkpoint: "solution-gate", manifestState: "new", lostWrite: false },
+    { point: "post-finding-migration", checkpoint: "code-review", manifestState: "reconcile", lostWrite: false },
+    { point: "pre-manifest-write", checkpoint: "code-review", manifestState: "reconcile", lostWrite: true },
+  ];
+  for (const crash of crashPoints) {
+    for (const resumeTwice of [false, true]) {
+      const id = `S-CRASH-STANDARD-${crash.point}${resumeTwice ? "-double-resume" : "-resume"}`;
+      const withFinding = crash.point !== "post-gate-verdict";
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-CRASH" as const,
+          coords: coords({
+            depth: "STANDARD",
+            verdict: "PASS",
+            round: "first",
+            crashResume: "crash-resume",
+            manifestState: crash.manifestState,
+          }),
+          prunes: withFinding
+            ? `crash point ${crash.point} (checkpoint after ${crash.checkpoint}); runtime resume = ${crash.lostWrite ? "the catch-up re-derived after the lost manifest write (rollback to the taken-over state)" : "the catch-up"}; ${resumeTwice ? "double resume must be a byte-identical NO_OP" : "single resume"}; manual face asserts the publisher's same-input replay is byte-idempotent`
+            : `crash point post-gate-verdict (checkpoint after the gate verdict): the journal tail (planning/implementation/review/knowledge) is unprojected; a clean PASS chain carries no finding — a finding registered only later in the journal could not pair against a manual manifest already carrying it; ${resumeTwice ? "double resume must be a byte-identical NO_OP" : "single resume"}; manual face asserts the publisher's same-input replay is byte-idempotent`,
+          build: () => {
+            const wave = withFinding
+              ? waveWithCrashResume(`20260920-${id}`, crash.point)
+              : { nodes: plainPassChain(`20260920-${id}`), findings: [] };
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: wave.nodes,
+              findings: wave.findings,
+              midTakeoverAfter: crash.checkpoint,
+              ...(crash.lostWrite ? { loseManifestWrite: true } : {}),
+              ...(resumeTwice ? { resumeTwice: true } : {}),
+              assertPublisherReplayIdempotent: true,
+            });
+          },
+        }),
+      );
+    }
+  }
+  return specs;
+}

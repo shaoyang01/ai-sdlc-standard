@@ -120,6 +120,31 @@ export interface FactScript {
    */
   readonly midTakeoverAfter?: string;
   /**
+   * S-CRASH: the crash point (frozen spec §3). post-gate-verdict — the
+   * journal tail after the gate verdict is unprojected;
+   * post-finding-migration — the finding lifecycle delta is unprojected;
+   * pre-manifest-write — the projection ran but its manifest write was lost
+   * (the driver restores the baseline before the resume).
+   */
+  readonly crashPoint?: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write";
+  /**
+   * S-CRASH: simulate the lost manifest write of the pre-manifest-write
+   * crash point — the checkpoint projection's write is rolled back before
+   * the resume, which must re-derive the identical document.
+   */
+  readonly loseManifestWrite?: boolean;
+  /**
+   * S-CRASH: after the resume, project once more and require a NO_OP,
+   * byte-identical result (crash-then-double-resume idempotence).
+   */
+  readonly resumeTwice?: boolean;
+  /**
+   * S-CRASH manual-face assertion: re-run the last entry-update with
+   * identical input — the publisher's NO-OP REPLAY must leave the manifest
+   * byte-identical (same-input replay idempotence).
+   */
+  readonly assertPublisherReplayIdempotent?: boolean;
+  /**
    * S-MANIFEST corrupt: tamper the takeover baseline's self-digest before
    * projecting — the level-1 corruption discrimination must fail closed
    * (MANIFEST_CORRUPT_STOP on the runtime face; the manual publisher's

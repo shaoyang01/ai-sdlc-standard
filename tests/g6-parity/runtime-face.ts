@@ -244,6 +244,7 @@ export function driveRuntimeStoreLevel(
   // decision scope with the ruling's Gate Result blob as evidence).
   const findingSequences = new Map<string, number>();
   const settledFindingIds = new Set<string>();
+  let rollbackBaseline: string | undefined;
   // Re-gate rounds are counted PER STAGE, never shared across the flow: the
   // solution-gate stage and the code-review stage each keep their own rework
   // round counter (both stages can trigger a re-gate, but their round numbers
@@ -428,6 +429,15 @@ export function driveRuntimeStoreLevel(
       throw new Error(`mid-takeover checkpoint ${midTakeover} has no intermediate manual snapshot`);
     }
     projectNow(baselineText);
+    if (script.loseManifestWrite === true) {
+      // S-CRASH pre-manifest-write: the takeover has PUBLISHED (provenance +
+      // cursor). The crash point is the catch-up's LOST WRITE — so the state
+      // to roll back to is the taken-over document, captured after the
+      // checkpoint projection. Rolling back to the manual baseline instead
+      // would turn the resume into a fresh takeover reconciling the FULL
+      // journal against the intermediate manifest (a guaranteed drift).
+      rollbackBaseline = readFileSync(join(libDir, "manifest.md"), "utf8");
+    }
   };
 
   for (const node of script.nodes) {
@@ -619,6 +629,8 @@ export function driveRuntimeStoreLevel(
     checkpointProjection(node, intermediateManifestText);
   }
 
+  // The crash resume: one projection bringing the manifest to the journal
+  // head (the catch-up after the live takeover).
   const outcome = projectLoopManifest({
     store: stores.runStore,
     runId,
@@ -629,5 +641,42 @@ export function driveRuntimeStoreLevel(
     throw new Error(`projector STOP ${outcome.code}: ${outcome.reason}`);
   }
   const manifestPath = join(libDir, "manifest.md");
-  return { manifestPath, manifestText: readFileSync(manifestPath, "utf8") };
+  let manifestText = readFileSync(manifestPath, "utf8");
+  if (rollbackBaseline !== undefined) {
+    // The catch-up's write was lost: restore the taken-over state and let the
+    // resume re-derive the document — it MUST be byte-identical to the
+    // computation whose write was lost (a crash must not change the result).
+    const lostWriteText = manifestText;
+    writeFileSync(manifestPath, rollbackBaseline, "utf8");
+    const resume = projectLoopManifest({
+      store: stores.runStore,
+      runId,
+      requirementId: script.requirementId,
+      libraryDir: libDir,
+    });
+    if (resume.kind === "STOP") {
+      throw new Error(`projector STOP ${resume.code}: ${resume.reason}`);
+    }
+    manifestText = readFileSync(manifestPath, "utf8");
+    if (manifestText !== lostWriteText) {
+      throw new Error("crash resume after the lost write is not byte-identical to the lost computation");
+    }
+  }
+  if (script.resumeTwice === true) {
+    // S-CRASH double-resume idempotence: the second resume must be a NO_OP
+    // leaving the document byte-identical.
+    const again = projectLoopManifest({
+      store: stores.runStore,
+      runId,
+      requirementId: script.requirementId,
+      libraryDir: libDir,
+    });
+    if (again.kind !== "NO_OP") {
+      throw new Error(`double resume expected NO_OP, got ${again.kind}`);
+    }
+    if (readFileSync(manifestPath, "utf8") !== manifestText) {
+      throw new Error("double resume is not byte-identical");
+    }
+  }
+  return { manifestPath, manifestText };
 }

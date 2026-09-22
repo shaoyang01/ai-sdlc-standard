@@ -57,6 +57,7 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
   let seq = 2;
   const manifestPath = join(libDir, "manifest.md");
   let intermediateManifestText: string | undefined;
+  let lastEntryUpdateArgs: string[] = [];
   for (const finding of script.findings) {
     publisher(libDir, [
       "finding-register",
@@ -103,12 +104,23 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
       args.push("--stale-nodes", node.staleNodes.join(","));
     }
     publisher(libDir, args);
+    lastEntryUpdateArgs = args;
     if (
       script.midTakeoverAfter !== undefined &&
       node.node === script.midTakeoverAfter &&
       intermediateManifestText === undefined
     ) {
       intermediateManifestText = readFileSync(manifestPath, "utf8");
+    }
+  }
+
+  // S-CRASH manual-face assertion: the publisher's same-input replay is a
+  // NO-OP that leaves the manifest byte-identical.
+  if (script.assertPublisherReplayIdempotent === true && lastEntryUpdateArgs.length > 0) {
+    const beforeReplay = readFileSync(manifestPath, "utf8");
+    publisher(libDir, lastEntryUpdateArgs);
+    if (readFileSync(manifestPath, "utf8") !== beforeReplay) {
+      throw new Error("publisher same-input replay is not byte-idempotent");
     }
   }
 
