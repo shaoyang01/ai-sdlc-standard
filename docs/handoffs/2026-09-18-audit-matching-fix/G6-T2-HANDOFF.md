@@ -94,7 +94,8 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
-- 分支 `feat/g6-t2-m2-scenarios` @ **`b805b2f`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 分支 `feat/g6-t2-m2-scenarios` @ **`9e083c7`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **39/39 绿**：33（见下）+ **S-CRASH 6**（三崩溃点 × 单次/双次恢复：post-gate-verdict 尾段未投影→catch-up；post-finding-migration 闭合+尾段混合追平；pre-manifest-write 丢失写后回滚到 takeover 已发布态、resume 重推出文档必须与丢失写前逐字节一致；双次恢复必须 NO_OP 逐字节稳定；手动侧 publisher 同输入重放逐字节幂等已断言）。范围说明：覆盖投影器 store 级崩溃/恢复语义；真实 CLI `--resume` 路径属行为层 full-chain 驱动器。
 - 矩阵 **33/33 绿**：31（见下）+ **S-MANIFEST 2**（reconcile：中途 takeover + V9 混合追平——journal 尾段与 finding 闭合一次原子落盘，重放 NO_OP 逐字节稳定；corrupt：篡改 self-digest 后投影器 MANIFEST_CORRUPT_STOP fail-closed，单级判别）；负向 **28/0**（新增 catch-up 机制豁免范围用例：目录段/digest/finding 证据变更仍必失败，basename 豁免仅限 catch-up 机制）。
 - **G6 新发现（Current User 裁决选项 A）**：catch-up 路径会把 cursor 后有事件的节点行整体替换为 runtime 推导行，与手动 publisher 规范存在两处**设计内**表示差异——D-7（artifact basename 是 face mapping 豁免：runtime 推导英文名 vs publisher 硬 gate 强制中文规范名，投影器 pathSemanticKey 故意不含 basename）与 D-17（finding 闭合时行 authority 翻转 runtime、行 id 变 store 分配 id）。comparator 增设 catch-up 机制模式镜像这两条豁免（路径按「目录段::capability」语义键、finding 身份按 discovered_at::evidence_ref）；takeover 机制 32 场景保持逐字节字面比较，R1-H4 负向回归不受影响。验收报告需在 finding-identity 维度显式说明 D-17 id 翻转。
 - 矩阵 **31/31 绿**：12 首轮 + 4 升档 + 3 多轮（A）+ 3 review 本地返工（B）+ 3 review 发现方案问题→re-gate（C）+ 1 gate 发现需求级回流（D）+ 1 review 发现需求级回流（E）+ **2 feedback 驱动 re-gate（F，零 finding 的非 finding 路径：WP-1 FEEDBACK_DRIVEN_CHANGE 开新代际、从 intake 整链重建、授权经 store regate 上下文 feedback 分支）+ 2 升档×FAIL（G）**；负向 24/0；tsc 0；npm test 全量 1767/0（169 文件）已跑。
