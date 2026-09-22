@@ -92,10 +92,14 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 - ruby 须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`（系统 2.6.10 触发 canonical gate 假阳）；node v24。
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
-## 2026-09-22 收工状态（接 2026-09-21 晚进展）
+## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二波）
 
-- 分支 `feat/g6-t2-m2-scenarios` @ **`0fffb1c`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
-- 矩阵 **16/16 绿**（12 首轮 + 4 升档）；负向 24/0；tsc 0。**npm test 全量本轮未跑**——M2 改动仅限 `tests/g6-parity/`（生产代码零触碰），R1 自证时跑（期望 ≥1767/0/169，矩阵场景数增加或使断言数上浮，以实跑为准）。
+- 分支 `feat/g6-t2-m2-scenarios` @ **`53f5d23`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **19/19 绿**（12 首轮 + 4 升档 + 3 多轮）；负向 24/0；tsc 0；**npm test 全量 1767 passed / 0 failed（169 文件）已跑**。
+- **多轮波收官（本波核心）**：落地形态 = **每轮一个 finding**（非用户示例的 R1 同轮 a/b/c）——两条引擎硬约束逼迫：① takeover 配对按 evidence 唯一匹配，同轮 finding 共享 scan-ledger blob 不可区分（歧义拒判；手动面也无法把同一 blob 引用 N 次而不歧义——真实手动约定是各异 ledger#F0n，反而完全不配对）；② 投影 provenance 要求闭捆 revision ref 唯一，两个 finding 绑同一轮 revision = duplicate-closures MANIFEST_CORRUPT_STOP。持续累积模型完整保留（finding 跨轮累积、每轮回退由 open 集合授权、各自确认轮绑该轮 design revision 闭合）。
+- **批量 API 结论（取代原下一beat 计划）**：`appendCapabilityExecutionWithFindings` 的「终态+注册熔合」与「先结算后注册」时序互斥——finding 迁移禁止活跃执行期（终态前结算被拒），批量 invalidation 会使闭捆 revision 在结算前变 STALE（终态后结算被拒）。N=1 时逐条路径本就正确且与生产一致，批量 API 无增益。
+- 多轮波实测（STANDARD-FAIL-multiround）：4 轮 verdict（FAIL×3 BLOCKED → PASS ELIGIBLE）；3 finding RESOLVED 各绑 design v2/v3/v4；gate revision 恰 1（PASS，semver 4.0.0）；design v1-v3 STALE、v4 ACTIVE；两面 findingIndex 三行深比较一致（配对 1:1）。
+- **用户裁决（2026-09-22）**：① S-CORE 剩余编组——Re-Gate 家族单独编 2-4 场景（方案变更触发重裁，candidate 机制 = requirement-change 记录的 feedbackChange 授权路径）+ FAIL×升档 1-2，剪枝项（BU×Re-Gate、升档×BU）在验收报告列示不建场景；② M2 单 PR 收口（与 M1 一致）；③ 超限暂停 4 = FAIL×LIGHT/STANDARD/DEEP + BU×STANDARD（行为层 only，runner 单列不计产物层通过数）。
 
 ## 2026-09-21 晚 M2 进展（家用机会话）
 
