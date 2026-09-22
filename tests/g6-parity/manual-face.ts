@@ -27,6 +27,12 @@ export interface ManualFaceResult {
   readonly manifestText: string;
   /** The seed manifest produced by `init` — the shared starting state for both faces. */
   readonly seedManifestText: string;
+  /**
+   * S-MANIFEST reconcile: the manifest snapshot taken right after the
+   * midTakeoverAfter node's entry-update — the takeover baseline for the
+   * runtime face's intermediate projection.
+   */
+  readonly intermediateManifestText?: string;
 }
 
 /** Drives the manual face for one fact script. Returns the produced manifest. */
@@ -49,6 +55,8 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
   const seedManifestText = readFileSync(join(libDir, "manifest.md"), "utf8");
 
   let seq = 2;
+  const manifestPath = join(libDir, "manifest.md");
+  let intermediateManifestText: string | undefined;
   for (const finding of script.findings) {
     publisher(libDir, [
       "finding-register",
@@ -95,6 +103,13 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
       args.push("--stale-nodes", node.staleNodes.join(","));
     }
     publisher(libDir, args);
+    if (
+      script.midTakeoverAfter !== undefined &&
+      node.node === script.midTakeoverAfter &&
+      intermediateManifestText === undefined
+    ) {
+      intermediateManifestText = readFileSync(manifestPath, "utf8");
+    }
   }
 
   for (const finding of script.findings) {
@@ -116,6 +131,10 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     ]);
   }
 
-  const manifestPath = join(libDir, "manifest.md");
-  return { manifestPath, manifestText: readFileSync(manifestPath, "utf8"), seedManifestText };
+  return {
+    manifestPath,
+    manifestText: readFileSync(manifestPath, "utf8"),
+    seedManifestText,
+    ...(intermediateManifestText === undefined ? {} : { intermediateManifestText }),
+  };
 }

@@ -178,6 +178,7 @@ export function driveRuntimeStoreLevel(
   script: FactScript,
   libDir: string,
   manualManifestText: string,
+  intermediateManifestText?: string,
 ): StoreLevelResult {
   mkdirSync(libDir, { recursive: true });
   // The projector never creates a manifest (creation belongs to intake —
@@ -186,7 +187,24 @@ export function driveRuntimeStoreLevel(
   // declaration-driven, projected_through=MANUAL) is placed as the takeover
   // baseline and the projector re-derives every row from journal + store,
   // judging consistency (T5 takeover-B pattern).
-  writeFileSync(join(libDir, "manifest.md"), manualManifestText, "utf8");
+  //
+  // S-MANIFEST reconcile: with a mid-takeover checkpoint the baseline is the
+  // INTERMEDIATE manual manifest — the takeover projection runs there (the
+  // journal prefix vs the manual prefix) and the remaining nodes are caught
+  // up by the FINAL projection on the same library dir (V9: the journal tail
+  // and a finding delta land in one publish).
+  const midTakeover = script.midTakeoverAfter;
+  if (midTakeover === undefined) {
+    writeFileSync(join(libDir, "manifest.md"), manualManifestText, "utf8");
+  }
+  // S-MANIFEST corrupt: a tampered baseline's self-digest must fail closed.
+  if (script.tamperTakeoverBaseline === true) {
+    const tampered = manualManifestText.replace(
+      /(manifest_digest:\s*sha256:)([0-9a-f]{64})/,
+      (_match, prefix: string, digest: string) => `${prefix}${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`,
+    );
+    writeFileSync(join(libDir, "manifest.md"), tampered, "utf8");
+  }
   const runId = startRun(stores, script.requirementId);
   let sequence = 1;
   // The first capability execution requires a non-null input ref (journal
@@ -388,6 +406,30 @@ export function driveRuntimeStoreLevel(
     }
   };
 
+  const projectNow = (baselineText?: string): void => {
+    if (baselineText !== undefined) {
+      writeFileSync(join(libDir, "manifest.md"), baselineText, "utf8");
+    }
+    const mid = projectLoopManifest({
+      store: stores.runStore,
+      runId,
+      requirementId: script.requirementId,
+      libraryDir: libDir,
+    });
+    if (mid.kind === "STOP") {
+      throw new Error(`projector STOP ${mid.code}: ${mid.reason}`);
+    }
+  };
+  let midTakeoverDone = false;
+  const checkpointProjection = (node: NodeFact, baselineText: string | undefined): void => {
+    if (midTakeover === undefined || node.node !== midTakeover || midTakeoverDone) return;
+    midTakeoverDone = true;
+    if (baselineText === undefined) {
+      throw new Error(`mid-takeover checkpoint ${midTakeover} has no intermediate manual snapshot`);
+    }
+    projectNow(baselineText);
+  };
+
   for (const node of script.nodes) {
     const attempt = node.attempt ?? 1;
     const stored = stores.artifactStore.put(
@@ -527,6 +569,7 @@ export function driveRuntimeStoreLevel(
         gateRoundCounter,
       );
       recordFeedbackChange(node, verdictTerminal.createdAt);
+      checkpointProjection(node, intermediateManifestText);
       continue;
     }
 
@@ -573,6 +616,7 @@ export function driveRuntimeStoreLevel(
     settleFindingActions(node, null, node.node === "code-review" ? reviewRoundCounter : 0);
     registerNodeFindings(node, null, succeeded.createdAt);
     recordFeedbackChange(node, succeeded.createdAt);
+    checkpointProjection(node, intermediateManifestText);
   }
 
   const outcome = projectLoopManifest({

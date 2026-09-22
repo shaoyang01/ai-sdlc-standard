@@ -111,6 +111,21 @@ export interface FactScript {
   readonly requestedDepth: "LIGHT" | "STANDARD" | "DEEP";
   readonly nodes: readonly NodeFact[];
   readonly findings: readonly FindingFact[];
+  /**
+   * S-MANIFEST reconcile: the node after whose completion BOTH faces take an
+   * intermediate snapshot — the runtime runs its takeover projection there
+   * (the journal prefix vs the manual prefix) and the remaining nodes are
+   * caught up by the final projection (V9: the journal tail and a finding
+   * delta land in ONE publish).
+   */
+  readonly midTakeoverAfter?: string;
+  /**
+   * S-MANIFEST corrupt: tamper the takeover baseline's self-digest before
+   * projecting — the level-1 corruption discrimination must fail closed
+   * (MANIFEST_CORRUPT_STOP on the runtime face; the manual publisher's
+   * self-consistency check refuses on the same manifest).
+   */
+  readonly tamperTakeoverBaseline?: boolean;
 }
 
 /** Matrix coordinates (frozen spec §3). */
@@ -129,6 +144,13 @@ export interface ScenarioSpec {
   readonly coords: ScenarioCoords;
   /** Pruning/degeneracy annotation (frozen spec §3), if this scenario replaces a pruned combo. */
   readonly prunes?: string;
+  /**
+   * When set, the scenario asserts a fail-closed terminal instead of a
+   * manifest comparison: the runtime projection must STOP with this code
+   * (S-MANIFEST corrupt: MANIFEST_CORRUPT_STOP — single-level discrimination,
+   * no cross-face comparison per the frozen spec).
+   */
+  readonly expectStop?: string;
   build(): FactScript;
 }
 

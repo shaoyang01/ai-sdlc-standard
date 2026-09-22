@@ -14,14 +14,46 @@ import {
   NORMALIZE_DROP_HEAD,
 } from "./types";
 
+/**
+ * Comparison options. The takeover regime (both faces carry the same object)
+ * is compared byte-exact. The catch-up regime (S-MANIFEST reconcile) carries
+ * the projector's two DESIGNED face exemptions, which the projector's own
+ * reconciliation applies and this comparator must therefore mirror:
+ *   - D-7 / RC4-1(a): artifact basenames are the face mapping exemption —
+ *     the real manual manifests carry Chinese basenames while runtime
+ *     revisions derive their own; the semantic key is (directory segment,
+ *     capability). Only the BASENAME is exempted: a different directory
+ *     segment is still a divergence.
+ *   - D-17: when a finding closure lands, the row's authority flips to the
+ *     runtime face and the row id becomes the store-assigned id; the
+ *     evidence (reference + digest + discovering node) is the identity.
+ */
+export interface CompareOptions {
+  readonly catchUpRegime?: boolean;
+}
+
 /** T5-frozen normalization: drop face-only progress/execution fields. */
-export function normalize(doc: Record<string, unknown>): Record<string, unknown> {
+export function normalize(doc: Record<string, unknown>, options?: CompareOptions): Record<string, unknown> {
   const clone = JSON.parse(JSON.stringify(doc)) as Record<string, unknown>;
   for (const key of NORMALIZE_DROP_HEAD) delete clone[key];
   const entries = clone.entries as Record<string, unknown>[] | undefined;
   if (Array.isArray(entries)) {
     for (const entry of entries) {
       for (const key of NORMALIZE_DROP_ENTRY) delete entry[key];
+      if (options?.catchUpRegime === true && typeof entry.artifact_path === "string") {
+        // D-7: compare the semantic key (directory segment :: capability),
+        // never the basename.
+        const semantic = String(entry.artifact_path).replace(/\//g, "/");
+        const dir = semantic.slice(0, semantic.lastIndexOf("/"));
+        entry.artifact_path = `${dir}::${String(entry.node)}`;
+      }
+    }
+  }
+  if (options?.catchUpRegime === true && Array.isArray(clone.finding_index)) {
+    for (const row of clone.finding_index as Record<string, unknown>[]) {
+      // D-17: the row id flips to the runtime id on closure; the evidence
+      // reference + discovering node is the stable cross-face identity.
+      row.finding_id = `${String(row.discovered_at)}::${String(row.evidence_ref)}`;
     }
   }
   return clone;
@@ -77,12 +109,15 @@ export function compareArtifactLayer(
   manualManifestText: string,
   runtimeManifestText: string,
   _script: FactScript,
+  options?: CompareOptions,
 ): ComparisonResult {
   const manual = normalize(
     JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(manualManifestText)))) as Record<string, unknown>,
+    options,
   );
   const runtime = normalize(
     JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(runtimeManifestText)))) as Record<string, unknown>,
+    options,
   );
   const diffs = diffPaths(manual, runtime);
   const dims: DimensionResult[] = NINE_DIMENSIONS.map((dimension) => {

@@ -175,6 +175,59 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
   }
 }
 
+// ── 4. catch-up regime (S-MANIFEST reconcile): the designed exemptions are SCOPED ──
+{
+  const runtimeDoc = parse(runtimeText);
+  const manualDoc = parse(manualText);
+  const regime = { catchUpRegime: true };
+  // (a) A basename-only difference is the D-7 exemption: still equal.
+  {
+    const doc = JSON.parse(JSON.stringify(runtimeDoc)) as Record<string, unknown>;
+    const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
+    impl["artifact_path"] = "04-实现记录/forged-basename.md";
+    const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
+    ok(result.equal, "catch-up regime: basename-only path difference is the D-7 exemption (still equal)");
+  }
+  // (b) A DIRECTORY-segment difference is NOT exempted: must fail.
+  {
+    const doc = JSON.parse(JSON.stringify(runtimeDoc)) as Record<string, unknown>;
+    const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
+    impl["artifact_path"] = "99-forged-dir/forged-basename.md";
+    const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
+    ok(!result.equal && result.diffs.some((d) => /artifact_path/.test(d)),
+      "catch-up regime: directory-segment path difference still FAILS (exemption is basename-only)");
+  }
+  // (c) A digest difference is NOT exempted: must fail.
+  {
+    const doc = JSON.parse(JSON.stringify(runtimeDoc)) as Record<string, unknown>;
+    const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
+    impl["digest"] = "b".repeat(64);
+    const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
+    ok(!result.equal && result.diffs.some((d) => /digest/.test(d)),
+      "catch-up regime: digest difference still FAILS");
+  }
+  // (d) A finding-id difference is the D-17 exemption; a finding EVIDENCE
+  //     difference is not: must fail.
+  {
+    const doc = JSON.parse(JSON.stringify(runtimeDoc)) as Record<string, unknown>;
+    const rows = doc.finding_index as Record<string, unknown>[];
+    if (rows.length > 0) {
+      rows[0]!["evidence_ref"] = "forged-evidence-ref";
+      const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
+      ok(!result.equal, "catch-up regime: finding evidence difference still FAILS (only the id is exempted)");
+    }
+  }
+  // (e) The takeover regime does NOT carry the exemptions: the same basename
+  //     difference must fail there.
+  {
+    const doc = JSON.parse(JSON.stringify(runtimeDoc)) as Record<string, unknown>;
+    const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
+    impl["artifact_path"] = "04-实现记录/forged-basename.md";
+    const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
+    ok(!result.equal, "takeover regime: the same basename difference FAILS (exemptions are catch-up-only)");
+  }
+}
+
 console.log(`\n==== g6 comparator negative summary: ${passed} passed, ${failed} failed ====`);
 console.log(`(drop-set exemptions pinned; ${NINE_DIMENSIONS.length - 6} artifact-layer dimensions judge, 6 behavior-layer NOT_JUDGED)`);
 if (failed > 0) process.exit(1);

@@ -1020,3 +1020,131 @@ export function coreEscalationFailScenarios(): ScenarioSpec[] {
   }
   return specs;
 }
+
+/**
+ * S-MANIFEST-1 — reconcile (V9 semantics): the runtime takes over at an
+ * INTERMEDIATE manifest (the finding still OPEN), then the journal tail (the
+ * reworked implementation + the re-review) and the finding's closure land in
+ * ONE catch-up publish. Both faces snapshot at the same node.
+ */
+function waveWithReconcile(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const reviewV2 = `# ${requirementId} review v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    // The mid-takeover checkpoint: the finding is OPEN here. Its invalidation
+    // stales the implementation AND the just-materialized code-review current
+    // (the scope covers the discovering node itself) — the manual face mirrors
+    // both, otherwise the intermediate takeover drifts.
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      staleNodes: ["implementation", "code-review"],
+    }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", reviewV2, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "IMPLEMENTATION",
+      earliest: "implementation",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "review_summary",
+        evidenceContent: reviewV2,
+        boundRevisionId: `${runId}:revision:implementation:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** S-MANIFEST-2 — corrupt: the takeover baseline's self-digest is tampered; the level-1 corruption discrimination must fail closed on both faces. */
+function waveWithCorrupt(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  return { nodes, findings: [] };
+}
+
+/** S-MANIFEST scenarios (2): reconcile (V9 mixed catch-up) + corrupt (fail-closed level-1 discrimination). */
+export function coreManifestStateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  {
+    const id = "S-MANIFEST-STANDARD-reconcile";
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-MANIFEST" as const,
+        coords: coords({ depth: "STANDARD", verdict: "PASS", round: "first", manifestState: "reconcile" }),
+        prunes: "reconcile: the runtime takes over at the INTERMEDIATE manual manifest (the review finding still OPEN); the journal tail (implementation v2 + re-review) and the finding closure land in ONE catch-up publish (V9 mixed); both faces snapshot at the code-review round",
+        build: () => {
+          const wave = waveWithReconcile(`20260920-${id}`, "STANDARD");
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: "STANDARD" as const,
+            nodes: wave.nodes,
+            findings: wave.findings,
+            midTakeoverAfter: "code-review",
+          });
+        },
+      }),
+    );
+  }
+  {
+    const id = "S-MANIFEST-STANDARD-corrupt";
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-MANIFEST" as const,
+        coords: coords({ depth: "STANDARD", verdict: "PASS", round: "first", manifestState: "corrupt" }),
+        prunes: "corrupt: the takeover baseline's self-digest is tampered (first hex digit flipped); the projector must STOP with MANIFEST_CORRUPT_STOP — level-1 discrimination, single-level per the frozen spec (no cross-face comparison); the manual publisher's self-consistency check refuses on the same manifest",
+        expectStop: "MANIFEST_CORRUPT_STOP",
+        build: () => {
+          const wave = waveWithCorrupt(`20260920-${id}`, "STANDARD");
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: "STANDARD" as const,
+            nodes: wave.nodes,
+            findings: wave.findings,
+            tamperTakeoverBaseline: true,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}

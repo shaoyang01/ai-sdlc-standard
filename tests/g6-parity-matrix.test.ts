@@ -22,6 +22,7 @@ import {
   coreReviewRequirementReflowScenarios,
   coreFeedbackRegateScenarios,
   coreEscalationFailScenarios,
+  coreManifestStateScenarios,
 } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
@@ -52,8 +53,18 @@ function runScenario(specId: string): ComparisonResult {
     const manual = driveManualFace(libManual, script);
     const stores = makeStores(spec.id);
     try {
-      const runtime = driveRuntimeStoreLevel(stores, script, libRuntime, manual.manifestText);
-      return compareArtifactLayer(manual.manifestText, runtime.manifestText, script);
+      const runtime = driveRuntimeStoreLevel(
+        stores,
+        script,
+        libRuntime,
+        manual.manifestText,
+        manual.intermediateManifestText,
+      );
+      // The catch-up regime carries the projector's designed face exemptions
+      // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
+      return compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
+        catchUpRegime: script.midTakeoverAfter !== undefined,
+      });
     } finally {
       stores.runStore.close();
       rmSync(stores.root, { recursive: true, force: true });
@@ -79,6 +90,7 @@ function allScenarios() {
     ...coreReviewRequirementReflowScenarios(),
     ...coreFeedbackRegateScenarios(),
     ...coreEscalationFailScenarios(),
+    ...coreManifestStateScenarios(),
   ];
 }
 
@@ -92,6 +104,12 @@ function main(): void {
     try {
       comparison = runScenario(spec.id);
     } catch (error) {
+      // A fail-closed scenario asserts a STOP code instead of a comparison.
+      const expected = spec.expectStop;
+      if (expected !== undefined && (error as Error).message.includes(expected)) {
+        ok(true, `${spec.id}: fail-closed ${expected} as required`, tally);
+        continue;
+      }
       ok(false, `${spec.id}: harness error ${(error as Error).message}`, tally);
       continue;
     }
