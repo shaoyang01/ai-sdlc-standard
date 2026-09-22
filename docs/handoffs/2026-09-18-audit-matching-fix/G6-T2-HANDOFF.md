@@ -94,7 +94,9 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
-- 分支 `feat/g6-t2-m2-scenarios` @ **`1282e73`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 分支 `feat/g6-t2-m2-scenarios` @ **`4302b04`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
+- 矩阵 **47/47 + 行为层 12/12 合并判定全绿**（spec §4.2 merged judgment）：行为层驱动器 = 生产入口本体（runProduction 真实门 + 注入脚本化网关，非 shadow）+ 分级 resume（finding 逐条闭合落在两轮 run 之间，同手动面 finding-action 发布在声明之间）；比较器判 dims 1/2/6/7/8/9（决策轨迹），3/4/5 维 NOT_JUDGED（产物层判）。
+- 行为层接线期实证的生产语义（已固化进驱动器）：findings 属 scan 轮 ledger envelope、verdict envelope 必须 findings: []（自带 finding 即阻断）；FAIL/BU 回流由网关合成 reflow finding 授权；PWR 裁决终态内接受 ledger 成员故不回流；BU envelope 须显式 decisionDepth: null；闭合证据=确认轮 verdict 事件自身 output ref/digest（网关存 envelope 非 raw body）；behavior run 的 runId 走小写；回流=规范序回退跳转（re-gate 是前进不是回流）。
 - 矩阵 **47/47 绿**：39（见下）+ **S-INIT 8**（四类初始化 D-088-01 重基线：NEW_EMPTY / EXISTING_CODE_NO_KNOWLEDGE / LEGACY_SDD / LEGACY_SDLC_SDD × STANDARD×PASS 首轮 / STANDARD×FAIL 回流；类差异在 requirement-intake 收敛、其后链同构——规格 §3 的论证由四类全跑两种波形实证）。
 - **账目对账（待验收报告处理）**：已建 47 = S-CORE 31 + S-MANIFEST 2 + S-CRASH 6 + S-INIT 8；规格 52 = S-CORE 36 + S-INIT 8 + S-MANIFEST 2 + S-CRASH 6，差 5 来自剪枝组合（BU×Re-Gate、升档×BU）与返工波场景同坐标不同粒度的编组，报告需逐条列示。
 - 矩阵 **39/39 绿**：33（见下）+ **S-CRASH 6**（三崩溃点 × 单次/双次恢复：post-gate-verdict 尾段未投影→catch-up；post-finding-migration 闭合+尾段混合追平；pre-manifest-write 丢失写后回滚到 takeover 已发布态、resume 重推出文档必须与丢失写前逐字节一致；双次恢复必须 NO_OP 逐字节稳定；手动侧 publisher 同输入重放逐字节幂等已断言）。范围说明：覆盖投影器 store 级崩溃/恢复语义；真实 CLI `--resume` 路径属行为层 full-chain 驱动器。
