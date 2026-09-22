@@ -827,3 +827,196 @@ export function coreReviewRequirementReflowScenarios(): ScenarioSpec[] {
     }),
   ];
 }
+
+/**
+ * F — the feedback-driven re-gate (the non-finding re-gate path): a
+ * FEEDBACK_DRIVEN_CHANGE record (WP-1) closes the current generation and
+ * opens the next; the feedback wave restarts at the first lagging node —
+ * a FULL rebuild from requirement-intake that subsumes any finding-driven
+ * scope — and the re-run re-adjudicates at the gate (the re-gate) without
+ * any finding ever being registered. Two firing points: after a plain node
+ * (the first pass completed) and after the gate verdict (mid-flight).
+ */
+function waveWithFeedbackRegate(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+  fireAfter: "review" | "gate",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const v1 = (node: string, kind: string, label: string): NodeFact =>
+    nodeFact(node, kind, `# ${requirementId} ${label} v1\n`, "1.0.0");
+  const v2 = (node: string, kind: string, label: string): NodeFact =>
+    nodeFact(node, kind, `# ${requirementId} ${label} v2\n`, "2.0.0", { attempt: 2 });
+  const gateV1 = nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+    gateResult: "PASS",
+    decisionStatus: "CONFIRMED",
+    decisionDepth: depth,
+  });
+  const gateV2 = nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+    attempt: 2,
+    gateResult: "PASS",
+    decisionStatus: "CONFIRMED",
+    decisionDepth: depth,
+  });
+  const firstPass: NodeFact[] =
+    fireAfter === "gate"
+      ? [
+          v1("requirement-intake", "requirement_summary", "intake"),
+          v1("solution-design", "technical_design", "design"),
+          Object.freeze({ ...gateV1, opensFeedbackChange: true }),
+        ]
+      : [
+          v1("requirement-intake", "requirement_summary", "intake"),
+          v1("solution-design", "technical_design", "design"),
+          gateV1,
+          v1("task-planning", "task_plan", "plan"),
+          v1("implementation", "implementation_record", "impl"),
+          Object.freeze({ ...v1("code-review", "review_summary", "review"), opensFeedbackChange: true }),
+        ];
+  // The feedback wave: the whole chain re-runs from requirement-intake in the
+  // new generation; the re-run re-adjudicates at the gate (the re-gate).
+  const rerun: NodeFact[] = [
+    v2("requirement-intake", "requirement_summary", "intake"),
+    v2("solution-design", "technical_design", "design"),
+    gateV2,
+  ];
+  if (fireAfter === "review") {
+    rerun.push(v2("task-planning", "task_plan", "plan"), v2("implementation", "implementation_record", "impl"), v2("code-review", "review_summary", "review"));
+  } else {
+    rerun.push(v1("task-planning", "task_plan", "plan"), v1("implementation", "implementation_record", "impl"), v1("code-review", "review_summary", "review"));
+  }
+  rerun.push(nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"));
+  return { nodes: [...firstPass, ...rerun], findings: [] };
+}
+
+/** F — feedback-driven re-gate scenarios (2): fired after the review vs after the gate verdict. */
+export function coreFeedbackRegateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const cases: readonly { depth: "LIGHT" | "STANDARD" | "DEEP"; fireAfter: "review" | "gate"; suffix: string }[] = [
+    { depth: "DEEP", fireAfter: "review", suffix: "post-review" },
+    { depth: "DEEP", fireAfter: "gate", suffix: "post-gate" },
+  ];
+  for (const testCase of cases) {
+    const id = `S-CORE-${testCase.depth}-PASS-feedback-regate-${testCase.suffix}`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: testCase.depth, verdict: "PASS", round: "re-gate" }),
+        prunes: `feedback-driven re-gate (no finding): a FEEDBACK_DRIVEN_CHANGE record fired ${testCase.fireAfter === "review" ? "after the completed first pass" : "after the gate verdict (mid-flight)"} opens generation 2; the feedback wave is a full rebuild from requirement-intake (subsumes any finding-driven scope) and the re-run re-adjudicates at the gate`,
+        build: () => {
+          const wave = waveWithFeedbackRegate(`20260920-${id}`, testCase.depth, testCase.fireAfter);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: testCase.depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * G — escalation with a FAIL round (spec coordinate 升档 × FAIL): the
+ * escalation verdict (ESCALATED) drives the deeper rework; the re-gate at the
+ * deeper level FAILs once (one finding), and the following round passes. Gate
+ * stage rounds: R1 ESCALATED (registers Fa), R2 closes Fa (design v2) and
+ * registers Fb but FAILs, R3 closes Fb (design v3) and PASSes.
+ */
+function waveWithEscalationFail(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD",
+  escalatedDepth: "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, v === 1 ? {} : { attempt: v });
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({ schema: "loop-capability-findings:v1", findings: [{ finding_id: `${requirementId}-${key}` }] })}\n`;
+  const finding = (key: string, registeredRound: number, examinedDesign: number, closedAtRound: number): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${examinedDesign}`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
+      gateRound: registeredRound,
+      closedAtRound,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${closedAtRound}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${closedAtRound}`,
+      }),
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "ESCALATED",
+      decisionDepth: escalatedDepth,
+      ledgerContent: ledgerFor("Fa"),
+      staleNodes: ["solution-design"],
+    }),
+    design(2),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+      ledgerContent: ledgerFor("Fb"),
+      staleNodes: ["solution-design"],
+    }),
+    design(3),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v3\n`, "3.0.0", {
+      attempt: 3,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [finding("Fa", 1, 1, 2), finding("Fb", 2, 2, 3)];
+  return { nodes, findings };
+}
+
+/** G — escalation-with-FAIL scenarios (2): LIGHT→STANDARD and STANDARD→DEEP. */
+export function coreEscalationFailScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const cases: readonly { depth: "LIGHT" | "STANDARD"; escalated: "STANDARD" | "DEEP" }[] = [
+    { depth: "LIGHT", escalated: "STANDARD" },
+    { depth: "STANDARD", escalated: "DEEP" },
+  ];
+  for (const testCase of cases) {
+    const id = `S-CORE-${testCase.depth}-FAIL-upgrade`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: testCase.depth, verdict: "FAIL", round: "upgrade" }),
+        prunes: `escalation × FAIL: R1 ESCALATED (${testCase.depth}→${testCase.escalated}) registers Fa; R2 closes Fa (design v2), registers Fb and FAILs; R3 closes Fb (design v3) and PASSes; gate stage rounds counted independently of the review stage`,
+        build: () => {
+          const wave = waveWithEscalationFail(`20260920-${id}`, testCase.depth, testCase.escalated);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: testCase.depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}

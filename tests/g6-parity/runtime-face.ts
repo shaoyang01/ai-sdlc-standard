@@ -21,6 +21,7 @@ import { LoopRunStore } from "../../core/loop-run-store";
 import { projectLoopManifest } from "../../core/loop-manifest-projector";
 import { materializeProducerRevision } from "../../runtime";
 import { createLoopFinding, loopFindingId, type LoopFindingCategory } from "../../core/loop-finding-lifecycle";
+import { createLoopRequirementChangeRecord } from "../../core/loop-change-classification";
 import type { LoopCapabilityExecutionEvent } from "../../core/loop-capability-execution";
 import { LOOP_CAPABILITY_EXECUTION_SCHEMA_VERSION } from "../../core/loop-capability-execution";
 import { LOOP_CAPABILITY_EXECUTION_POINTS, type NodeCapabilityId } from "../../loop/types";
@@ -285,6 +286,42 @@ export function driveRuntimeStoreLevel(
     script.findings.some(
       (finding) => finding.registerAfter === node.node && !findingSequences.has(finding.findingId),
     );
+  /**
+   * The WP-1 FEEDBACK_DRIVEN_CHANGE record (the re-gate path that needs no
+   * finding): external feedback closes the current generation and opens the
+   * next, so the feedback wave restarts at the first lagging node — a full
+   * rebuild from requirement-intake that subsumes any finding-driven scope.
+   */
+  const recordFeedbackChange = (node: NodeFact, terminalCreatedAt: string): void => {
+    if (node.opensFeedbackChange !== true) return;
+    const previousGeneration = stores.runStore.getRunGeneration(runId);
+    stores.runStore.appendRequirementChange(
+      createLoopRequirementChangeRecord({
+        runId,
+        requirementId: script.requirementId,
+        sequence: previousGeneration,
+        status: "CLASSIFIED",
+        changeKind: "FEEDBACK_DRIVEN_CHANGE",
+        payloadForm: "DELTA_CHANGE",
+        previousGeneration,
+        currentChangeScope: `G6 feedback wave (generation ${previousGeneration + 1})`,
+        confirmedFactsPreserved: ["G6-CONFIRMED-FACT"],
+        sourceRefs: [
+          {
+            sourceType: "CONVERSATION",
+            locator: "g6-parity-feedback",
+            priority: 1,
+            sourceVersion: null,
+            observedAt: terminalCreatedAt,
+          },
+        ],
+        triggerEvidence: ["source:g6-parity-feedback"],
+        classificationReason: "外部反馈开启新代际",
+        blockedReasonCode: null,
+        createdAt: terminalCreatedAt,
+      }),
+    );
+  };
   const settleFindingActions = (
     node: NodeFact,
     ruling: { scopeId: string } | null,
@@ -489,6 +526,7 @@ export function driveRuntimeStoreLevel(
         verdictTerminal.decisionScopeId === null ? null : { scopeId: verdictTerminal.decisionScopeId },
         gateRoundCounter,
       );
+      recordFeedbackChange(node, verdictTerminal.createdAt);
       continue;
     }
 
@@ -534,6 +572,7 @@ export function driveRuntimeStoreLevel(
     // current at this point), THEN registers what it newly discovers.
     settleFindingActions(node, null, node.node === "code-review" ? reviewRoundCounter : 0);
     registerNodeFindings(node, null, succeeded.createdAt);
+    recordFeedbackChange(node, succeeded.createdAt);
   }
 
   const outcome = projectLoopManifest({

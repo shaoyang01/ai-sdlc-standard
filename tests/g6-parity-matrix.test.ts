@@ -20,6 +20,8 @@ import {
   coreReviewRegateScenarios,
   coreGateRequirementReflowScenarios,
   coreReviewRequirementReflowScenarios,
+  coreFeedbackRegateScenarios,
+  coreEscalationFailScenarios,
 } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
@@ -75,13 +77,15 @@ function allScenarios() {
     ...coreReviewRegateScenarios(),
     ...coreGateRequirementReflowScenarios(),
     ...coreReviewRequirementReflowScenarios(),
+    ...coreFeedbackRegateScenarios(),
+    ...coreEscalationFailScenarios(),
   ];
 }
 
 function main(): void {
   const specs = allScenarios();
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (first-round + upgrade + multi-round + review-rework + review-regate + requirement-reflow, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (first-round + upgrade + multi-round + review-rework + review-regate + requirement-reflow + feedback-regate + escalation-fail, artifact layer)`);
 
   for (const spec of specs) {
     let comparison;

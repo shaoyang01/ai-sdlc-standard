@@ -59,6 +59,14 @@ export interface NodeFact {
    * a gate-round finding registers (its earliest-affected scope goes STALE).
    */
   readonly staleNodes?: readonly string[];
+  /**
+   * When set, a WP-1 FEEDBACK_DRIVEN_CHANGE record is appended after this
+   * node's completion: external feedback opens the next generation and the
+   * feedback wave restarts at the first lagging node (a full rebuild from
+   * requirement-intake subsumes any finding-driven scope). This is the
+   * re-gate path that needs NO finding — a design/requirement change.
+   */
+  readonly opensFeedbackChange?: boolean;
 }
 
 /** One finding fact (register + optional lifecycle action). */
