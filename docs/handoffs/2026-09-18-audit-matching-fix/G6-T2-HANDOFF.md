@@ -92,6 +92,15 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 - ruby 须 PATH 前置 `/opt/homebrew/opt/ruby@3.3/bin`（系统 2.6.10 触发 canonical gate 假阳）；node v24。
 - 测试跑法：`node --import tsx tests/g6-parity-matrix.test.ts`（勿用 bun）。
+## 2026-09-22 晚收工状态（公司机会话第三波收工；回家后按本文件 + 唤醒 prompt 继续）
+
+**下一步（按序，每步先请 Current User 确认）**：
+1. **行为层扩展到其余家族**：把两层合并判定从 S-CORE 首轮 12 铺到其余 35 个波形（多轮 3 / review 返工 3 / review→re-gate 3 / 需求级回流 2 / feedback re-gate 2 / 升档×FAIL 2 / S-MANIFEST 2 / S-CRASH 6 / S-INIT 8 + 升档 4）。驱动器与分级 resume 已泛化，预计是接线而非新机制；注意多轮波 finding 的注册/闭合跨 run 交织（store 的 currency 规则要求闭合发生在被绑 revision 被新 finding 失效之前），接管时按实测调整。
+2. **超限暂停 4**（FAIL×LIGHT/STANDARD/DEEP + BU×STANDARD，行为层 only）：轮数预算超限 → runtime 终态 vs 手动面「人停下不等了」——产物层无法 parity（pending 行 triple 漂移，同 D-7/D-17 分析），作行为层轨迹断言，runner 单列不计入产物层通过数。
+3. **账目对账**：产物层 47 + 行为层 12 vs 规格 52，逐条列清（剪枝组合 + 返工波编组粒度 + 两层各自坐标），写入验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7 格式）。
+4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
+5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
+
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
 - 分支 `feat/g6-t2-m2-scenarios` @ **`4302b04`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
