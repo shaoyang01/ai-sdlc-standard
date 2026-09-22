@@ -225,19 +225,40 @@ export function driveRuntimeStoreLevel(
   // decision scope with the ruling's Gate Result blob as evidence).
   const findingSequences = new Map<string, number>();
   const settledFindingIds = new Set<string>();
+  // Re-gate rounds are counted PER STAGE, never shared across the flow: the
+  // solution-gate stage and the code-review stage each keep their own rework
+  // round counter (both stages can trigger a re-gate, but their round numbers
+  // are independent sequences — Current User ruling 2026-09-22).
   let gateRoundCounter = 0;
-  const registerGateFindings = (ledger: { artifactRef: string; digest: string }, scanTerminalCreatedAt: string): void => {
+  let reviewRoundCounter = 0;
+  /**
+   * Registers the findings a node's completion discovers (registerAfter names
+   * the node). Gate rounds pass their scan-ledger blob (a scan-sourced
+   * finding's evidence IS the consumed ledger — the only origin the
+   * risk-acceptance path admits); non-gate rounds (code-review rework)
+   * anchor to their own artifact. terminalCreatedAt is the producing
+   * terminal's own timestamp — the invalidation-edge recovery identifies the
+   * registering event by it, so it must match exactly one terminal.
+   */
+  const registerNodeFindings = (
+    node: NodeFact,
+    ledger: { artifactRef: string; digest: string } | null,
+    terminalCreatedAt: string,
+  ): void => {
+    // The finding's round fields refer to ITS OWN stage's counter — the stage
+    // where it registers (and settles).
+    const stageRound = node.node === "solution-gate" ? gateRoundCounter : reviewRoundCounter;
     for (const finding of script.findings) {
-      if (finding.registerAfter !== "solution-gate" || findingSequences.has(finding.findingId)) continue;
-      // Multi-round waves register one finding per gate round; a finding whose
-      // gateRound has not been reached yet waits for its round's scan terminal.
-      if ((finding.gateRound ?? 1) > gateRoundCounter) continue;
+      if (finding.registerAfter !== node.node || findingSequences.has(finding.findingId)) continue;
+      // Multi-round waves register one finding per stage round; a finding
+      // whose round has not been reached yet waits for that round's terminal.
+      if ((finding.gateRound ?? 1) > stageRound) continue;
       const findingSequence = findingSequences.size + 1;
       findingSequences.set(finding.findingId, findingSequence);
       // A scan-sourced finding's evidence IS the consumed Finding Ledger (the
-      // only origin the risk-acceptance path admits); a rework-wave gate
-      // finding anchors to the examined design artifact instead.
-      const scanSourced = finding.evidenceKind === "capability_findings";
+      // only origin the risk-acceptance path admits); other rounds anchor to
+      // their own node artifact.
+      const scanSourced = finding.evidenceKind === "capability_findings" && ledger !== null;
       stores.runStore.appendFinding(
         createLoopFinding({
           runId,
@@ -249,19 +270,23 @@ export function driveRuntimeStoreLevel(
           introducedByRevisionId: null,
           severity: "MEDIUM",
           category: finding.category as LoopFindingCategory,
-          evidenceRef: scanSourced ? ledger.artifactRef : `loop-artifact:v1:${finding.evidenceKind}:sha256:${sha256(finding.evidenceContent)}`,
-          evidenceDigest: scanSourced ? ledger.digest : sha256(finding.evidenceContent),
+          evidenceRef: scanSourced ? ledger!.artifactRef : `loop-artifact:v1:${finding.evidenceKind}:sha256:${sha256(finding.evidenceContent)}`,
+          evidenceDigest: scanSourced ? ledger!.digest : sha256(finding.evidenceContent),
           earliestAffectedNodeId: finding.earliest as NodeCapabilityId,
           // The membership receipt: the finding's createdAt IS the producing
-          // scan terminal's own (a later borrower is refused).
-          createdAt: scanTerminalCreatedAt,
+          // terminal's own (a later borrower is refused).
+          createdAt: terminalCreatedAt,
         }),
       );
     }
   };
+  /** Whether this node's completion discovers a yet-unregistered finding. */
+  const nodeCompletionBlocks = (node: NodeFact): boolean =>
+    script.findings.some(
+      (finding) => finding.registerAfter === node.node && !findingSequences.has(finding.findingId),
+    );
   const settleFindingActions = (
     node: NodeFact,
-    output: PointOutput,
     ruling: { scopeId: string } | null,
     gateRound: number,
     onlyRoundSettled = false,
@@ -286,19 +311,30 @@ export function driveRuntimeStoreLevel(
         continue;
       }
       const findingId = loopFindingId(runId, findingSequences.get(finding.findingId)!);
+      // The closure evidence is the SCRIPT-DECLARED artifact — the same one
+      // the manual face cites — not implicitly the settling node's output.
+      // The real flows prove the spread: a gate-round finding closes on the
+      // round's gate artifact, a review-local finding on the RE-REVIEW
+      // artifact, and a design-level finding (even when discovered at the
+      // review) on the DESIGN artifact that fixed it (wms-monitor
+      // lifecycle-actions CR-F12: closure evidence = the design artifact,
+      // bound = the design revision). The store verifies the blob exists.
+      const evidenceRef = `loop-artifact:v1:${finding.action.evidenceKind}:sha256:${sha256(finding.action.evidenceContent)}`;
+      const evidenceDigest = sha256(finding.action.evidenceContent);
       if (finding.action.action === "accept") {
         if (ruling === null) throw new Error(`no PWR ruling to accept the risk of ${finding.findingId}`);
         stores.runStore.acceptFindingRisk(runId, findingId, {
           riskAcceptedBy: "formal_verdict",
-          riskAcceptanceEvidenceRef: output.ref,
-          riskAcceptanceEvidenceDigest: output.digest,
+          riskAcceptanceEvidenceRef: evidenceRef,
+          riskAcceptanceEvidenceDigest: evidenceDigest,
           decisionScopeId: ruling.scopeId,
         });
       } else {
         // The closure revision is the script-declared bound revision (the
-        // revision that fixed it — the confirming round's design, or the
-        // re-adjudicating gate revision in the M1 single-wave shape). The
-        // store enforces existence/currency/ordering.
+        // revision that fixed it — the confirming round's design or
+        // implementation revision, or the re-adjudicating gate revision in
+        // the M1 single-wave shape). The store enforces existence,
+        // currency and earliest-node ordering.
         const boundId = finding.action.boundRevisionId;
         const revisions = stores.runStore.listArtifactRevisions(runId);
         if (!revisions.some((item) => item.revisionId === boundId)) {
@@ -307,8 +343,8 @@ export function driveRuntimeStoreLevel(
         stores.runStore.resolveFinding(runId, findingId, {
           resolvedByNodeId: finding.discoveredAt as NodeCapabilityId,
           resolvedByRevisionId: boundId,
-          resolutionEvidenceRef: output.ref,
-          resolutionEvidenceDigest: output.digest,
+          resolutionEvidenceRef: evidenceRef,
+          resolutionEvidenceDigest: evidenceDigest,
         });
       }
       settledFindingIds.add(finding.findingId);
@@ -372,16 +408,10 @@ export function driveRuntimeStoreLevel(
       // fixed them — still current at this point), THEN registers what it
       // newly discovered: the new finding's invalidation would otherwise stale
       // that very revision before the closures bind it.
-      settleFindingActions(
-        node,
-        { ref: stored.artifactRef, version: node.version, digest },
-        null,
-        gateRoundCounter,
-        true,
-      );
+      settleFindingActions(node, null, gateRoundCounter, true);
       // Gate-round findings register at the SCAN terminal (membership receipt
       // + before the verdict can author a gate revision).
-      registerGateFindings({ artifactRef: ledger.artifactRef, digest: ledger.digest }, scanSucceeded.createdAt);
+      registerNodeFindings(node, { artifactRef: ledger.artifactRef, digest: ledger.digest }, scanSucceeded.createdAt);
 
       // Verdict terminal shape (canonical production model): the formal_verdict
       // ALWAYS ends succeeded — it renders the decision (a verdict never ends
@@ -456,7 +486,6 @@ export function driveRuntimeStoreLevel(
       // risk-accepts the scan-source finding.
       settleFindingActions(
         node,
-        { ref: stored.artifactRef, version: node.version, digest },
         verdictTerminal.decisionScopeId === null ? null : { scopeId: verdictTerminal.decisionScopeId },
         gateRoundCounter,
       );
@@ -467,6 +496,12 @@ export function driveRuntimeStoreLevel(
       (point) => point.capability === node.node && point.executionRole === "primary",
     );
     const nodeInput = upstreamInputFor(nodePointIndex);
+    // A completion that discovers a finding blocks the chain: the canonical
+    // advance requires the predecessor's eligibility=ELIGIBLE, so the rework
+    // restart must be authorized by the OPEN finding (the regate context
+    // derives it from journal facts, exactly like the gate rework wave).
+    if (node.node === "code-review") reviewRoundCounter += 1;
+    const blocksChain = nodeCompletionBlocks(node);
     const started = event(runId, {
       sequence: sequence++,
       status: "started",
@@ -487,14 +522,18 @@ export function driveRuntimeStoreLevel(
       gateResult: node.gateResult ?? "NOT_APPLICABLE",
       decisionDepth: node.decisionDepth ?? null,
       decisionStatus: node.decisionStatus ?? null,
-      nextStepEligibility: "ELIGIBLE",
+      nextStepEligibility: blocksChain ? "BLOCKED" : "ELIGIBLE",
     });
     sequence += 1;
     stores.runStore.appendCapabilityExecution(started);
     stores.runStore.appendCapabilityExecution(succeeded);
     materializeProducerRevision(stores.runStore, script.requirementId, runId, succeeded, () => succeeded.createdAt);
     lastOutput.set(pointKey(node.node, "primary"), { ref: stored.artifactRef, version: node.version, digest });
-    settleFindingActions(node, { ref: stored.artifactRef, version: node.version, digest }, null, 0);
+    // Same settle-then-register order as the gate round: the re-review first
+    // CLOSES what it confirms (binding the revision that fixed them — still
+    // current at this point), THEN registers what it newly discovers.
+    settleFindingActions(node, null, node.node === "code-review" ? reviewRoundCounter : 0);
+    registerNodeFindings(node, null, succeeded.createdAt);
   }
 
   const outcome = projectLoopManifest({

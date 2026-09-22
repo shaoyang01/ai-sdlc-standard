@@ -12,7 +12,13 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
-import { coreFirstRoundScenarios, coreUpgradeScenarios, coreMultiRoundScenarios } from "./g6-parity/fact-scripts";
+import {
+  coreFirstRoundScenarios,
+  coreUpgradeScenarios,
+  coreMultiRoundScenarios,
+  coreReviewReworkScenarios,
+  coreReviewRegateScenarios,
+} from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
 interface Tally {
@@ -59,13 +65,19 @@ function allScenarios() {
   // (ambiguity refuses), and the provenance map requires unique closure
   // revision refs — so the per-round registration stays on the per-finding
   // path (settle-then-register at the scan terminal), not the fused batch API.
-  return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios(), ...coreMultiRoundScenarios()];
+  return [
+    ...coreFirstRoundScenarios(),
+    ...coreUpgradeScenarios(),
+    ...coreMultiRoundScenarios(),
+    ...coreReviewReworkScenarios(),
+    ...coreReviewRegateScenarios(),
+  ];
 }
 
 function main(): void {
   const specs = allScenarios();
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE first-round + upgrade + multi-round, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (first-round + upgrade + multi-round + review-rework + review-regate, artifact layer)`);
 
   for (const spec of specs) {
     let comparison;
