@@ -3,8 +3,8 @@
 // Per scenario, BOTH layers run: the artifact layer (the takeover comparison)
 // and the behavior layer (the production entry's decision trajectory). A
 // scenario passes only when both are clean — the spec's merged judgment. The
-// scope is the S-CORE first-round cross (the M1 core); the remaining
-// families' behavior layers are wired as their drivers generalize.
+// scope is the full 47-scenario matrix (S-CORE families + S-MANIFEST +
+// S-CRASH + S-INIT).
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,8 +14,20 @@ import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer } from "./g6-parity/comparator";
 import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace } from "./g6-parity/behavior-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
-import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
-import { NINE_DIMENSIONS } from "./g6-parity/types";
+import {
+  coreFirstRoundScenarios,
+  coreUpgradeScenarios,
+  coreMultiRoundScenarios,
+  coreReviewReworkScenarios,
+  coreReviewRegateScenarios,
+  coreGateRequirementReflowScenarios,
+  coreReviewRequirementReflowScenarios,
+  coreFeedbackRegateScenarios,
+  coreEscalationFailScenarios,
+  coreManifestStateScenarios,
+  coreCrashResumeScenarios,
+  coreInitClassScenarios,
+} from "./g6-parity/fact-scripts";
 
 let passed = 0;
 let failed = 0;
@@ -30,9 +42,31 @@ function ok(condition: boolean, message: string): void {
   }
 }
 
+function allScenarios() {
+  // The multi-round wave registers ONE finding per round: same-round findings
+  // sharing a scan-ledger blob are indistinguishable to the takeover pairing
+  // (ambiguity refuses), and the provenance map requires unique closure
+  // revision refs — so the per-round registration stays on the per-finding
+  // path (settle-then-register at the scan terminal), not the fused batch API.
+  return [
+    ...coreFirstRoundScenarios(),
+    ...coreUpgradeScenarios(),
+    ...coreMultiRoundScenarios(),
+    ...coreReviewReworkScenarios(),
+    ...coreReviewRegateScenarios(),
+    ...coreGateRequirementReflowScenarios(),
+    ...coreReviewRequirementReflowScenarios(),
+    ...coreFeedbackRegateScenarios(),
+    ...coreEscalationFailScenarios(),
+    ...coreManifestStateScenarios(),
+    ...coreCrashResumeScenarios(),
+    ...coreInitClassScenarios(),
+  ];
+}
+
 async function main(): Promise<void> {
-  const specs = coreFirstRoundScenarios();
-  console.log(`G6 parity behavior layer: ${specs.length} scenarios (S-CORE first-round, production-entry trace + merged judgment)`);
+  const specs = allScenarios();
+  console.log(`G6 parity behavior layer: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, production-entry trace + merged judgment)`);
 
   for (const spec of specs) {
     const script = spec.build();
@@ -52,9 +86,24 @@ async function main(): Promise<void> {
           manual.manifestText,
           manual.intermediateManifestText,
         );
-        const artifact = compareArtifactLayer(manual.manifestText, runtime.manifestText, script);
+        // The catch-up regime carries the projector's designed face exemptions
+        // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
+        const artifact = compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
+          catchUpRegime: script.midTakeoverAfter !== undefined,
+        });
         artifactClean = artifact.equal;
         artifactDetail = artifactClean ? "deep-equal" : (artifact.diffs[0] ?? "diverged");
+      } catch (error) {
+        // A fail-closed scenario asserts a STOP code instead of a comparison
+        // (S-MANIFEST corrupt: level-1 discrimination, single-level per the
+        // frozen spec — the behavior layer still replays the trajectory).
+        const expected = spec.expectStop;
+        if (expected !== undefined && (error as Error).message.includes(expected)) {
+          artifactClean = true;
+          artifactDetail = `fail-closed ${expected} (artifact layer only)`;
+        } else {
+          artifactDetail = `harness error ${(error as Error).message}`;
+        }
       } finally {
         stores.runStore.close();
         rmSync(stores.root, { recursive: true, force: true });
@@ -83,7 +132,7 @@ async function main(): Promise<void> {
 
   console.log("");
   console.log(`==== g6 parity behavior summary: ${passed} passed, ${failed} failed ====`);
-  console.log(`(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9; ${NINE_DIMENSIONS.length - 6} behavior dims judged by the production-entry trace)`);
+  console.log(`(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9 — 6 dims judged by the production-entry trace)`);
   if (failed > 0) process.exit(1);
 }
 

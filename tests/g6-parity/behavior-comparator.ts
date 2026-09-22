@@ -78,12 +78,17 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
         return { dimension, verdict: same ? "MATCH" : "DIVERGE", detail: same ? `terminal ${trace.finalStatus}/${trace.chainStatus} as the script requires` : `terminal ${trace.finalStatus}/${trace.chainStatus}${trace.blockingReasonCode === null ? "" : ` (${trace.blockingReasonCode})`} vs script expects ${expected.success ? "success/COMPLETED" : "a blocked chain"}` };
       }
       case "earliest-reroute": {
+        // The reflow targets: the findings' earliest nodes (the finding-driven
+        // backward jumps). A WP-1 feedback wave adds its own restart target —
+        // the full rebuild restarts at the first lagging node
+        // (requirement-intake): a generation restart, not a finding reflow.
         const expectedTargets = [
-          ...new Set(
-            script.findings
+          ...new Set([
+            ...script.findings
               .filter((finding) => finding.action === undefined || finding.action.action !== "accept")
               .map((finding) => finding.earliest),
-          ),
+            ...(script.nodes.some((node) => node.opensFeedbackChange === true) ? ["requirement-intake"] : []),
+          ]),
         ];
         const actualTargets = trace.reflowTargets;
         const same = JSON.stringify([...actualTargets].sort()) === JSON.stringify([...expectedTargets].sort());

@@ -13,9 +13,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseProductionEntryRequest, PRODUCTION_ENTRY_SCHEMA } from "../../core/loop-production-entry";
 import { createRuntimeBindingRegistry, runProduction } from "../../runtime";
+import { createLoopRequirementChangeRecord } from "../../core/loop-change-classification";
 import { NODE_OUTPUT_ENVELOPE_BEGIN, NODE_OUTPUT_ENVELOPE_END } from "../../core/node-output-envelope";
 import type { ExecutionResult } from "../../execution/types";
-import type { FactScript } from "./types";
+import type { FactScript, FindingFact } from "./types";
 import { makeStores, type RuntimeStores } from "./runtime-face";
 
 function runIdOf(script: FactScript): string {
@@ -75,27 +76,40 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
   };
   // The gate round each script node belongs to (the gate stage's own counter).
   let gateRound = 0;
+  // Capabilities whose queue a script node already answered — a rework wave
+  // repeats a capability, and only the discovering round carries the discovery
+  // (a repeat registration is a duplicate fact the store refuses).
+  const answeredCapabilities = new Set<string>();
+  const envelopeFinding = (finding: FindingFact) => ({
+    id: finding.findingId,
+    severity: "HIGH",
+    message: `${finding.findingId} discovered at the ${finding.discoveredAt}`,
+    cause: finding.category === "IMPLEMENTATION" ? "REGRESSION" : "IMPROVEMENT",
+    category: finding.category,
+    earliestAffectedNodeId: finding.earliest,
+  });
   for (const node of script.nodes) {
     const spec: EnvelopeSpec = { summary: "ok", body: node.content };
     if (node.node === "solution-gate") {
       gateRound += 1;
       // The findings this round's SCAN discovers: the gateway registers them
       // as the consumed ledger (the D-087 seam-2 shape); the PWR ruling
-      // accepts the ledger's members. The verdict envelope itself carries
-      // findings: [] — a verdict carrying its own findings blocks the chain.
+      // accepts the ledger's members. Only gate-DISCOVERED findings belong to
+      // a gate round — a review-stage discovery registers on its own node.
       const roundFindings = script.findings
-        .filter((finding) => (finding.gateRound ?? 1) === gateRound)
-        .map((finding) => ({
-          id: finding.findingId,
-          severity: "HIGH",
-          message: `${finding.findingId} discovered at the solution-gate`,
-          cause: finding.category === "IMPLEMENTATION" ? "REGRESSION" : "IMPROVEMENT",
-          category: finding.category,
-          earliestAffectedNodeId: finding.earliest,
-        }));
+        .filter((finding) => finding.discoveredAt === "solution-gate" && (finding.gateRound ?? 1) === gateRound)
+        .map(envelopeFinding);
       if (roundFindings.length > 0 && node.gateResult === "PASS_WITH_RISK") {
         enqueue("solution-gate:adversarial_scan", { ...spec, findings: roundFindings });
       }
+      // A gate-round finding of a NON-reflow class (the D shape: a REQUIREMENT
+      // discovery at the gate) rides the VERDICT envelope: only a verdict
+      // registration propagates the §5.4 invalidation edges that reflow to the
+      // finding's own earliest node — a scan registration is edge-less by
+      // design and leaves the requirement reflow unauthorized. SOLUTION
+      // findings stay on the synthesis path: the non-admitting verdict owes
+      // the synthetic solution-design reflow fact itself.
+      const verdictFindings = roundFindings.filter((finding) => finding.category !== "SOLUTION");
       enqueue("solution-gate:formal_verdict", {
         ...spec,
         ...(node.gateResult === undefined ? {} : { gateResult: node.gateResult }),
@@ -103,12 +117,80 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
         // An absent depth is not an explicit null (the envelope rule): the
         // BLOCKED_UNKNOWN ruling declares decisionDepth: null.
         decisionDepth: node.decisionDepth ?? null,
-        findings: [],
+        findings: verdictFindings,
       });
     } else {
-      enqueue(`${node.node}:primary`, spec);
+      // A non-gate completion that discovers findings (the B/C/E shapes:
+      // review-round discoveries) carries them on its OWN envelope — the only
+      // registration channel a non-gate node has — and the terminal registers
+      // them WITH §5.4 edges, authorizing the backward restart to the
+      // finding's earliest node.
+      const discovering = !answeredCapabilities.has(node.node);
+      answeredCapabilities.add(node.node);
+      const nodeFindings = discovering
+        ? script.findings.filter((finding) => finding.registerAfter === node.node).map(envelopeFinding)
+        : [];
+      enqueue(`${node.node}:primary`, nodeFindings.length > 0 ? { ...spec, findings: nodeFindings } : spec);
     }
   }
+
+  // ── Between-invocation settlement (settle-then-register mirror) ─────────
+  // Finding transitions are legal ONLY between invocations: the store refuses
+  // them while a capability execution is active ("finding transitions cannot
+  // advance while a capability execution is active" — an adapter call runs
+  // inside an open claim). So a wave whose closure must land mid-wave (the
+  // multi-round/G shapes: each round's synthesized reflow stales the previous
+  // round's fix revision, and the D/E shapes: the requirement reflow must
+  // re-derive the normalized source across an invocation boundary) runs ONE
+  // dispatch per invocation (maxDispatches 1 — the pure safety bound, no
+  // durable block), and every closure lands in the between-runs window — the
+  // same seam as the manual face's between-declarations finding-action. A
+  // finding closes as soon as the revision that fixed it is CURRENT-ACTIVE
+  // (the store's currency rule — for the gate waves that window is exactly
+  // "after the fix revision materialized, before the next round's verdict
+  // synthesizes its reflow row"). The evidence is the terminal that AUTHORED
+  // the bound revision (the behavior run's store carries journal output
+  // envelopes, never the script's raw artifact contents — the artifact layer
+  // judges the declared evidence); for the M1 shape the author IS the
+  // confirming verdict, the established convention.
+  const declarationForFinding = (finding: { readonly findingId: string; readonly sequence: number }) =>
+    script.findings.find((item) => item.findingId.endsWith(finding.findingId.split(":").pop() ?? ""))
+      ?? script.findings.find((item) => (item.gateRound ?? 1) === finding.sequence);
+
+  const settleOpenFindings = (): void => {
+    const runId = runIdOf(script);
+    const open = stores.runStore.listFindings(runId).filter((finding) => finding.status === "OPEN");
+    if (open.length === 0) return;
+    const revisions = stores.runStore.listArtifactRevisions(runId);
+    const journal = stores.runStore.listCapabilityExecutions(runId);
+    for (const finding of open) {
+      const declaration = declarationForFinding(finding);
+      // The PWR ruling risk-accepts its scan findings in-terminal; an
+      // accept-action declaration never routes through resolveFinding.
+      if (declaration?.action?.action === "accept") continue;
+      // The closure revision: the script-declared bound revision for a
+      // declared finding; a SYNTHESIZED reflow row (the FAIL/ESCALATED
+      // verdict's own §5.4 fact with no script declaration — the D wave's
+      // extra SOLUTION row) binds the current revision of its own earliest
+      // node.
+      const boundRevisionId = declaration?.action !== undefined
+        ? declaration.action.boundRevisionId.toLowerCase()
+        : revisions.find((item) => item.nodeId === finding.earliestAffectedNodeId && item.validity === "ACTIVE")?.revisionId;
+      if (boundRevisionId === undefined) continue;
+      const bound = revisions.find((item) => item.revisionId === boundRevisionId);
+      // The currency rule — the settle-then-register window itself.
+      // resolveFinding re-enforces it authoritatively.
+      if (bound === undefined || bound.validity !== "ACTIVE") continue;
+      const producer = journal.find((event) => event.executionEventId === bound.producerExecutionId);
+      if (producer === undefined || producer.outputArtifactRef === null || producer.outputDigest === null) continue;
+      stores.runStore.resolveFinding(runId, finding.findingId, {
+        resolvedByNodeId: finding.sourceCapability,
+        resolvedByRevisionId: boundRevisionId,
+        resolutionEvidenceRef: producer.outputArtifactRef,
+        resolutionEvidenceDigest: producer.outputDigest,
+      });
+    }
+  };
 
   const dispatched: string[] = [];
   const execute = async (request: Record<string, unknown>): Promise<ExecutionResult> => {
@@ -145,6 +227,16 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     { now: () => new Date().toISOString(), runId: `g6-${script.requirementId}`.toLowerCase() },
   );
 
+  // Waves that need a mid-invocation-observable grain run one dispatch per
+  // invocation: multi-round/G (a closure must land between rounds — the next
+  // round's synthesized reflow would stale the bound revision), D/E (the
+  // requirement reflow re-derives the normalized source only across an
+  // invocation boundary), F (the WP-1 record is appended between runs). Every
+  // other wave runs whole and stops on a real block — the M1 shape.
+  const boundedRuns = script.findings.some(
+    (finding) => (finding.gateRound ?? 1) >= 2 || finding.earliest === "requirement-intake",
+  ) || script.nodes.some((node) => node.opensFeedbackChange === true);
+
   const invokeProduction = async (): Promise<{ final_status: "success" | "failed"; chain_status: string; blocking_reason_code?: string | null; next_execution_point: { capability: string } | null }> => {
     const result = await runProduction(parsed as never, `G6 parity ${script.requirementId}`, {
       capabilitySource: "real",
@@ -153,6 +245,7 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       artifactStore: stores.artifactStore,
       inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
       prepareWorkspace: async () => ({ workspacePath: workspace }),
+      ...(boundedRuns ? { maxDispatches: 1 } : {}),
     } as never);
     return {
       final_status: result.final_status,
@@ -162,62 +255,69 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     };
   };
 
+  // F — the WP-1 FEEDBACK_DRIVEN_CHANGE record (the re-gate path that needs
+  // no finding). Recorded in the between-runs window once the trigger node's
+  // terminal has settled (the store-level driver's shape); the production
+  // recovery reads the classified record and drives the full generation-2
+  // rebuild from requirement-intake itself. Recording counts as an advance
+  // even after the first generation COMPLETED — that is the shape.
+  const feedbackTrigger = script.nodes.find((node) => node.opensFeedbackChange === true);
+  let feedbackRecorded = false;
+  const recordFeedbackChangeIfDue = (): boolean => {
+    if (feedbackRecorded || feedbackTrigger === undefined) return false;
+    const events = stores.runStore.listCapabilityExecutions(runIdOf(script));
+    const settled = (event: { capability: string; executionRole: string; status: string }): boolean =>
+      event.capability === feedbackTrigger.node &&
+      event.status === "succeeded" &&
+      (feedbackTrigger.node === "solution-gate" ? event.executionRole === "formal_verdict" : true);
+    const triggerTerminal = [...events].reverse().find(settled);
+    if (triggerTerminal === undefined) return false;
+    const previousGeneration = stores.runStore.getRunGeneration(runIdOf(script));
+    stores.runStore.appendRequirementChange(
+      createLoopRequirementChangeRecord({
+        runId: runIdOf(script),
+        requirementId: script.requirementId,
+        sequence: previousGeneration,
+        status: "CLASSIFIED",
+        changeKind: "FEEDBACK_DRIVEN_CHANGE",
+        payloadForm: "DELTA_CHANGE",
+        previousGeneration,
+        currentChangeScope: `G6 feedback wave (generation ${previousGeneration + 1})`,
+        confirmedFactsPreserved: ["G6-CONFIRMED-FACT"],
+        sourceRefs: [
+          {
+            sourceType: "CONVERSATION",
+            locator: "g6-parity-feedback",
+            priority: 1,
+            sourceVersion: null,
+            observedAt: triggerTerminal.createdAt,
+          },
+        ],
+        triggerEvidence: ["source:g6-parity-feedback"],
+        classificationReason: "外部反馈开启新代际",
+        blockedReasonCode: null,
+        createdAt: triggerTerminal.createdAt,
+      }),
+    );
+    feedbackRecorded = true;
+    return true;
+  };
+
   let outcome = await invokeProduction();
-  // The staged resume: after a run that stopped on an OPEN finding whose
-  // confirming round has been dispatched, close it (exactly as the manual
-  // face publishes its finding-action between declarations) and resume.
-  for (let round = 0; round < 8 && outcome.chain_status !== "COMPLETED"; round += 1) {
-    const dispatchedRounds = stores.runStore
-      .listCapabilityExecutions(runIdOf(script))
-      .filter((event) => event.capability === "solution-gate" && event.executionRole === "formal_verdict" && event.status !== "started").length;
-    const open = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN");
-    // The first gate round whose verdict admits (the M1-shape finding's
-    // closing round: the confirming round of the single rework wave).
-    const firstPassingRound =
-      script.nodes
-        .filter((node) => node.node === "solution-gate")
-        .findIndex((node) => node.gateResult === "PASS" || node.gateResult === "PASS_WITH_RISK") + 1;
-    const due = open.filter((finding) => {
-      // The script's own finding: matched by the id suffix. The gateway's
-      // synthesized reflow finding: mapped to the declaration of its
-      // registration round (the store sequence is the registration order).
-      const declaration = script.findings.find((item) => item.findingId.endsWith(finding.findingId.split(":").pop() ?? ""))
-        ?? script.findings.find((item) => (item.gateRound ?? 1) === finding.sequence);
-      if (declaration === undefined) return false;
-      if (declaration.action?.action === "accept") return false; // closed in-terminal by the PWR ruling
-      const closingRound = declaration.closedAtRound ?? firstPassingRound;
-      return closingRound <= dispatchedRounds;
-    });
-    if (due.length === 0) break;
-    // The confirming round's verdict event: its OWN output ref/digest is the
-    // closure evidence (the D-087 shape — the gateway stores the output
-    // ENVELOPE, so the evidence must be read from the journal, never
-    // reconstructed from the script's raw body).
-    const journalEvents = stores.runStore.listCapabilityExecutions(runIdOf(script));
-    const confirmingVerdict = journalEvents
-      .filter(
-        (event) =>
-          event.capability === "solution-gate" &&
-          event.executionRole === "formal_verdict" &&
-          event.status === "succeeded",
-      )
-      .sort((a, b) => a.sequence - b.sequence)
-      .at(-1);
-    if (confirmingVerdict === undefined || confirmingVerdict.outputArtifactRef === null || confirmingVerdict.outputDigest === null) {
-      break;
-    }
-    for (const finding of due) {
-      const declaration = script.findings.find((item) => item.findingId.endsWith(finding.findingId.split(":").pop() ?? ""))
-        ?? script.findings.find((item) => (item.gateRound ?? 1) === finding.sequence)!;
-      stores.runStore.resolveFinding(runIdOf(script), finding.findingId, {
-        resolvedByNodeId: finding.sourceCapability,
-        // The behavior run's run id is lowercased (the production entry's
-        // run-id normalization); the script declares the mixed-case form.
-        resolvedByRevisionId: declaration.action!.boundRevisionId.toLowerCase(),
-        resolutionEvidenceRef: confirmingVerdict.outputArtifactRef,
-        resolutionEvidenceDigest: confirmingVerdict.outputDigest,
-      });
-    }
+  // The staged resume: after a run that stopped, close whatever is now
+  // closable — the manual face publishes its finding-action between
+  // declarations; the store's currency rule subsumes the per-stage round
+  // bookkeeping (a finding's bound revision is current only inside its
+  // confirming round's window). Resume while the chain is live: a closure or
+  // the WP-1 record advanced the state, or the stop carries a live next point
+  // (the safety-bound stop of boundedRuns — plain progress resumes). A stop
+  // with nothing advancing and no live next point is an honest terminal.
+  for (let round = 0; round < 128; round += 1) {
+    const advanced = recordFeedbackChangeIfDue();
+    const openBefore = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN").length;
+    settleOpenFindings();
+    const openAfter = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN").length;
+    if (!advanced && openAfter === openBefore && outcome.next_execution_point === null) break;
     outcome = await invokeProduction();
   }
 

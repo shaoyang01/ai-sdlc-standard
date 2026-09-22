@@ -101,6 +101,16 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
 5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
 
+## 2026-09-22 晚：M2 第 1 步完成——行为层全家族扩展 47/47（家用机会话）
+
+- 行为层矩阵从 S-CORE 首轮 12 扩到**全 47 场景合并判定**（多轮 3 / review 返工 3 / review→re-gate 3 / 需求级回流 2 / feedback re-gate 2 / 升档×FAIL 2 / 升档 4 / S-MANIFEST 2 / S-CRASH 6 / S-INIT 8），`47 passed / 0 failed`；产物层 47/0、负向 28/0、tsc 0、全量 1767/0（170 文件）无回归。改动面仅 tests/（runner + behavior-face + behavior-comparator），**生产代码零改动**。
+- 实测路径：纯注册先跑出缺口图（27 绿/20 红，红面与静态预测逐条吻合）→ 机制扩展 → 45/47 → F 族接线 47/47。
+- 驱动器机制（behavior-face.ts）：① **信封 finding 下放**——非 gate 节点（code-review）完成带 finding 时信封携带（B/C/E 唯一注册通道）；D 的 REQUIREMENT finding 走 **verdict 信封**（scan 注册不带 §5.4 边、无法触发 intake 回流；verdict 注册带边）② **派生闭合只能在 invocation 间**——store 明禁活动执行期 finding 转换（"finding transitions cannot advance while a capability execution is active"，adapter 内闭合实测 illegal：scan attempt 失败→受控重试→轨迹污染，已弃）；闭合规则=「声明绑定 revision 当前 ACTIVE 即闭合」，证据=materialize 该 revision 的终态事件自身 output（M1 的确认轮 verdict 即其特例）③ **有界 invocation**（maxDispatches=1，纯安全边界、不落持久 block）覆盖三类波：多轮/G（闭合须落轮间——下一轮 verdict 合成 reflow 会 stale 绑定 revision）、D/E（requirement 级回流跨边界才重导 origin 规范源）、F（WP-1 记录注入点）；其余波整 invocation 跑到底、staged 停点闭合（M1 原路径不变）④ 未映射合成 reflow 行（D 波多出的 SOLUTION 行）按其 earliest 节点当前 revision 闭合 ⑤ F 族：触发终态 settle 后于 invocation 间落 WP-1 FEEDBACK_DRIVEN_CHANGE 记录，生产 recovery 自行推导二代整链重建；staged 循环退出条件=「无推进（无闭合/无 feedback）且无 live next」。
+- 比较器（behavior-comparator.ts）：earliest-reroute 期望目标在 opensFeedbackChange 时含 requirement-intake（feedback 整链重建是代际重启、非 finding 回流）。
+- runner 两处修正：catchUpRegime 传参（reconcile/crash 的 D-7/D-17 豁免——行为层 runner 原本漏传，注册前必修）；S-MANIFEST-corrupt 的 expectStop 处理（fail-closed 单级判别按冻结规格，行为层只做轨迹回放、输出单列）。
+- 新实证生产语义（评审必含，接七条之后的第 8/9/10 条）：⑧ **活动执行期禁止 finding 转换**——finding 闭合的合法窗口只在 invocation 之间；⑨ **invocation 内回流到 requirement-intake 无法重导 origin 规范源**（loop-capability-entry.ts point 0 检查 + 每迭代输入采用只认前驱输出、point 0 无前驱），只有跨 invocation 边界的 deriveDispatchCommand 推导——requirement 级回流必须跨 run 边界；⑩ **FAIL/ESCALATED verdict 合成 SOLUTION reflow 行**（带边、立即失效当前 design），agent 声明的非 SOLUTION 行不抑制合成（D 波因此多一行，harness 显式闭合）。
+- 剩余（每步先请 Current User 确认）：第 2 步超限暂停 4（FAIL×LIGHT/STANDARD/DEEP + BU×STANDARD，行为层 only，runner 单列不计产物层通过数）→ 第 3 步账目对账 + 验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7）→ 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审（范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）。
+
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
 - 分支 `feat/g6-t2-m2-scenarios` @ **`4302b04`** 已推、工作区干净；主线仍 `b8923fc`（M2 未上主线）。
