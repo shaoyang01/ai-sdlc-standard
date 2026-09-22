@@ -109,6 +109,7 @@ function waveWithRework(
   requirementId: string,
   depth: "LIGHT" | "STANDARD" | "DEEP",
   verdict: "FAIL" | "BLOCKED_UNKNOWN",
+  intakeText?: string,
 ): { nodes: NodeFact[]; findings: FindingFact[] } {
   const runId = runtimeRunId(requirementId);
   const designV1 = nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0");
@@ -120,7 +121,7 @@ function waveWithRework(
       ? { gateResult: "FAIL", decisionStatus: "CONFIRMED", decisionDepth: depth }
       : { gateResult: "FAIL", decisionStatus: "BLOCKED_UNKNOWN" };
   const nodes: NodeFact[] = [
-    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("requirement-intake", "requirement_summary", intakeText ?? `# ${requirementId} intake\n`, "1.0.0"),
     designV1,
     nodeFact("solution-gate", "solution_review", gateV1Content, "1.0.0", failedExtra),
     designV2,
@@ -1265,6 +1266,90 @@ export function coreCrashResumeScenarios(): ScenarioSpec[] {
               ...(crash.lostWrite ? { loseManifestWrite: true } : {}),
               ...(resumeTwice ? { resumeTwice: true } : {}),
               assertPublisherReplayIdempotent: true,
+            });
+          },
+        }),
+      );
+    }
+  }
+  return specs;
+}
+
+/**
+ * S-INIT scenario waves (8): four project-initialization classes (D-088-01
+ * re-baseline, Decision-090: NEW_EMPTY / EXISTING_CODE_NO_KNOWLEDGE /
+ * LEGACY_SDD / LEGACY_SDLC_SDD — the legacy classes execute the
+ * PRESERVE / TRANSFORM / RETIRE disposition and must not let the legacy
+ * SDD/SDLC-SDD workflow remain an active authority) × two key verdicts
+ * (STANDARD × PASS × first-round, STANDARD × FAIL × reflow). The class
+ * difference converges at the requirement-intake node (the init material the
+ * intake carries); the rest of the chain is isomorphic — the frozen spec's
+ * argument, proven here by running all four classes through both shapes.
+ */
+const INIT_CLASSES: readonly { id: "new-project" | "existing-code" | "original-sdd" | "original-sdlc-sdd"; label: string; material: string }[] = [
+  { id: "new-project", label: "NEW_EMPTY", material: "empty repo + requirement doc" },
+  { id: "existing-code", label: "EXISTING_CODE_NO_KNOWLEDGE", material: "codebase survey + requirement doc (no knowledge sink)" },
+  { id: "original-sdd", label: "LEGACY_SDD", material: "PRESERVE/TRANSFORM/RETIRE disposition + requirement doc" },
+  { id: "original-sdlc-sdd", label: "LEGACY_SDLC_SDD", material: "PRESERVE/TRANSFORM/RETIRE disposition + requirement doc" },
+];
+
+function initIntakeText(requirementId: string, material: string): string {
+  return `# ${requirementId} intake (${material})\n`;
+}
+
+/** S-INIT scenarios (8): four init classes × {PASS first-round, FAIL reflow}. */
+export function coreInitClassScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const init of INIT_CLASSES) {
+    const intakeText = initIntakeText(`20260920-S-INIT-${init.id}`, init.material);
+    {
+      const id = `S-INIT-${init.id}-STANDARD-PASS-first`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-INIT" as const,
+          coords: coords({ initClass: init.id, depth: "STANDARD", verdict: "PASS", round: "first" }),
+          prunes: `init class ${init.label} (D-088-01): ${init.material}; the class difference converges at requirement-intake and the rest of the chain is isomorphic (spec §3)`,
+          build: () => {
+            const head = nodeFact("requirement-intake", "requirement_summary", intakeText, "1.0.0");
+            const chain: NodeFact[] = [
+              head,
+              nodeFact("solution-design", "technical_design", `# 20260920-${id} design\n`, "1.0.0"),
+              nodeFact("solution-gate", "solution_review", `# 20260920-${id} gate\n`, "1.0.0", {
+                gateResult: "PASS",
+                decisionStatus: "CONFIRMED",
+                decisionDepth: "STANDARD",
+              }),
+              nodeFact("task-planning", "task_plan", `# 20260920-${id} plan\n`, "1.0.0"),
+              nodeFact("implementation", "implementation_record", `# 20260920-${id} impl\n`, "1.0.0"),
+              nodeFact("code-review", "review_summary", `# 20260920-${id} review\n`, "1.0.0"),
+              nodeFact("knowledge-sync", "knowledge_sync_result", `# 20260920-${id} knowledge\n`, "1.0.0"),
+            ];
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: chain,
+              findings: [],
+            });
+          },
+        }),
+      );
+    }
+    {
+      const id = `S-INIT-${init.id}-STANDARD-FAIL-reflow`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-INIT" as const,
+          coords: coords({ initClass: init.id, depth: "STANDARD", verdict: "FAIL", round: "first" }),
+          prunes: `init class ${init.label} with a FAIL first-round verdict: the gate finding reflows to design v2 and the re-gate PASSes; the class difference converges at requirement-intake`,
+          build: () => {
+            const wave = waveWithRework(`20260920-${id}`, "STANDARD", "FAIL", intakeText);
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: wave.nodes,
+              findings: wave.findings,
             });
           },
         }),

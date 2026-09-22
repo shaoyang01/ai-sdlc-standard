@@ -24,6 +24,7 @@ import {
   coreEscalationFailScenarios,
   coreManifestStateScenarios,
   coreCrashResumeScenarios,
+  coreInitClassScenarios,
 } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
@@ -93,13 +94,14 @@ function allScenarios() {
     ...coreEscalationFailScenarios(),
     ...coreManifestStateScenarios(),
     ...coreCrashResumeScenarios(),
+    ...coreInitClassScenarios(),
   ];
 }
 
 function main(): void {
   const specs = allScenarios();
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer)`);
 
   for (const spec of specs) {
     let comparison;
