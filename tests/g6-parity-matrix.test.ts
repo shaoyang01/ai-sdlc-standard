@@ -54,14 +54,18 @@ function runScenario(specId: string): ComparisonResult {
 }
 
 function allScenarios() {
-  // coreMultiRoundScenarios() registered once the ledger-batch registration lands (see handoff)
-  return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios()];
+  // The multi-round wave registers ONE finding per round: same-round findings
+  // sharing a scan-ledger blob are indistinguishable to the takeover pairing
+  // (ambiguity refuses), and the provenance map requires unique closure
+  // revision refs — so the per-round registration stays on the per-finding
+  // path (settle-then-register at the scan terminal), not the fused batch API.
+  return [...coreFirstRoundScenarios(), ...coreUpgradeScenarios(), ...coreMultiRoundScenarios()];
 }
 
 function main(): void {
   const specs = allScenarios();
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE first-round + upgrade, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE first-round + upgrade + multi-round, artifact layer)`);
 
   for (const spec of specs) {
     let comparison;

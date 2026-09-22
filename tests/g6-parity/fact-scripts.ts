@@ -329,25 +329,41 @@ export function coreUpgradeScenarios(): ScenarioSpec[] {
  * ordering; verdict outcome does not participate) with that round's verdict
  * blob as evidence. The wave ends at a full PASS with an empty OPEN set.
  *
- * Canonical shape (the Current User's example, FAIL→FAIL→FAIL→PASS):
- *   R1 scan registers a,b,c → FAIL  |  design v2
- *   R2 scan registers d; verdict closes a,b (bind design v2) → FAIL  |  design v3
- *   R3 scan registers e; verdict closes c,d (bind design v3) → FAIL  |  design v4
- *   R4 verdict closes e (bind design v4) → PASS  |  downstream chain
+ * Canonical shape (FAIL→FAIL→FAIL→PASS, ONE discovery per round):
+ *   R1 scan registers Fa (examines design v1) → FAIL            | design v2
+ *   R2 scan closes Fa (binds design v2), registers Fb → FAIL    | design v3
+ *   R3 scan closes Fb (binds design v3), registers Fc → FAIL    | design v4
+ *   R4 scan closes Fc (binds design v4) → PASS                  | downstream
+ *
+ * ONE finding per round is FORCED by two independent engine constraints:
+ * (1) the takeover pairing matches findings by evidence, so same-round
+ * findings sharing one scan-ledger blob are indistinguishable — the pairing
+ * refuses on ambiguity (and the manual face cannot cite a shared blob N
+ * times unambiguously; cf. the real ledger#F0n per-finding refs);
+ * (2) the projection provenance requires unique closure revision refs, so
+ * two findings closing on the same round's revision are a duplicate-closures
+ * MANIFEST_CORRUPT_STOP. The persistent-SET model itself is untouched.
  */
 function waveWithMultiRound(
   requirementId: string,
   depth: "LIGHT" | "STANDARD" | "DEEP",
 ): { nodes: NodeFact[]; findings: FindingFact[] } {
   const runId = runtimeRunId(requirementId);
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({
+      schema: "loop-capability-findings:v1",
+      findings: [{ finding_id: `${requirementId}-${key}` }],
+    })}\n`;
   const design = (v: number): NodeFact =>
     nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
-  const failGate = (v: number): NodeFact =>
+  const failGate = (v: number, ledger: string): NodeFact =>
     nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
       attempt: v,
       gateResult: "FAIL",
       decisionStatus: "CONFIRMED",
       decisionDepth: depth,
+      ledgerContent: ledger,
+      // The round's new finding invalidates the examined design current.
       staleNodes: ["solution-design"],
     });
   const passGate = (v: number): NodeFact =>
@@ -369,8 +385,10 @@ function waveWithMultiRound(
       category: "SOLUTION",
       earliest: "solution-design",
       sourceRevisionId: `${runId}:revision:solution-design:${examinedDesign}`,
-      evidenceKind: "technical_design",
-      evidenceContent: `# ${requirementId} design v${examinedDesign}\n`,
+      // The finding's evidence IS its round's scan ledger blob (the manual
+      // face cites the same ref, so the takeover pairing is 1:1 per round).
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
       gateRound: registeredRound,
       closedAtRound,
       registerAfter: "solution-gate",
@@ -388,11 +406,11 @@ function waveWithMultiRound(
   const nodes: NodeFact[] = [
     nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
     design(1),
-    failGate(1),
+    failGate(1, ledgerFor("Fa")),
     design(2),
-    failGate(2),
+    failGate(2, ledgerFor("Fb")),
     design(3),
-    failGate(3),
+    failGate(3, ledgerFor("Fc")),
     design(4),
     passGate(4),
     nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
@@ -400,13 +418,7 @@ function waveWithMultiRound(
     nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
     nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
   ];
-  const findings: FindingFact[] = [
-    finding("Fa", 1, 1, 2),
-    finding("Fb", 1, 1, 2),
-    finding("Fc", 1, 1, 3),
-    finding("Fd", 2, 2, 3),
-    finding("Fe", 3, 3, 4),
-  ];
+  const findings: FindingFact[] = [finding("Fa", 1, 1, 2), finding("Fb", 2, 2, 3), finding("Fc", 3, 3, 4)];
   return { nodes, findings };
 }
 
