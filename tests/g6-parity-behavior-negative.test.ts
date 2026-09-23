@@ -85,6 +85,10 @@ function traceFor(script: FactScript, overrides: Partial<BehaviorTrace> = {}): B
     chainStatus: "COMPLETED",
     blockingReasonCode: null,
     nextExecutionPoint: null,
+    // R3-H1 defaults: no generation advance, no WP-1 record — the synthetic
+    // traces carry no journal evidence unless a case injects it.
+    generationRestarts: [],
+    generation: 1,
     handoff: completes
       ? { status: "READY_FOR_MANUAL_GIT_HANDOFF", reason: null, artifactRef: "loop-artifact:v1:governance_tail_result:sha256:" + "a".repeat(64) }
       : { status: null, reason: null, artifactRef: null },
@@ -227,11 +231,14 @@ async function realRunPin(): Promise<void> {
   ok(clean?.verdict === "MATCH", "dim 9: the over-limit ABSENT triple (all null) MATCHes");
 }
 
-// ── 4c. the WP-1 generation restart (R2-H1-A) ─────────────────────────────
+// ── 4c. the WP-1 generation restart (R2-H1-A / R3-H1) ─────────────────────
 // The F family's feedback path legitimately returns to requirement-intake
 // after an ADMITTING gate verdict — a declared new-generation restart, not a
-// finding reflow. The real run must pass; the same trajectory against a
-// script with no declared WP-1 trigger must DIVERGE.
+// finding reflow. R3-H1: the admission is grounded in the JOURNAL evidence,
+// not the declaration: the verified WP-1 record (FEEDBACK_DRIVEN_CHANGE /
+// CLASSIFIED / generation 1→2 / the trigger round) AND the restart intake's
+// new-generation attempt. The real run must pass; every stripped, forged or
+// misattempted variant of the same trajectory must DIVERGE.
 async function feedbackRestartPin(): Promise<void> {
   const fSpec = coreFeedbackRegateScenarios().find((s) => s.id === "S-CORE-DEEP-PASS-feedback-regate-post-gate")!;
   const fScript = fSpec.build();
@@ -239,14 +246,58 @@ async function feedbackRestartPin(): Promise<void> {
   const stores = makeStores("negative-feedback");
   try {
     const run = await driveBehaviorLayer(stores, fScript, workspace);
-    const dim7 = compareBehaviorLayer(fScript, run.trace).dimensions.find((d) => d.dimension === "next-eligibility");
-    ok(dim7?.verdict === "MATCH", "dim 7: the declared WP-1 generation restart to requirement-intake MATCHes (F post-gate)");
+    const dim7 = (trace: BehaviorTrace) =>
+      compareBehaviorLayer(fScript, trace).dimensions.find((d) => d.dimension === "next-eligibility");
+    const record = run.trace.generationRestarts.find((item) => item.changeKind === "FEEDBACK_DRIVEN_CHANGE");
+    if (
+      record === undefined ||
+      record.status !== "CLASSIFIED" ||
+      record.previousGeneration !== 1 ||
+      run.trace.generation !== 2 ||
+      record.triggerCapability !== "solution-gate" ||
+      record.triggerAttempt !== 1
+    ) {
+      ok(false, "real run: the WP-1 record is journal-verified in the trace (FEEDBACK_DRIVEN_CHANGE/CLASSIFIED/gen 1→2, trigger solution-gate@1)");
+      return;
+    }
+    ok(true, "real run: the WP-1 record is journal-verified in the trace (FEEDBACK_DRIVEN_CHANGE/CLASSIFIED/gen 1→2, trigger solution-gate@1)");
+    ok(dim7(run.trace)?.verdict === "MATCH", "dim 7: the declared + journal-verified WP-1 generation restart to requirement-intake MATCHes (F post-gate)");
     const undeclared: FactScript = Object.freeze({
       ...fScript,
       nodes: fScript.nodes.map((node) => (node.opensFeedbackChange === true ? { ...node, opensFeedbackChange: false } : node)),
     });
-    const dim7b = compareBehaviorLayer(undeclared, run.trace).dimensions.find((d) => d.dimension === "next-eligibility");
-    ok(dim7b?.verdict === "DIVERGE", "dim 7: the same restart WITHOUT the declared WP-1 trigger DIVERGEs");
+    const undeclaredDim7 = compareBehaviorLayer(undeclared, run.trace).dimensions.find((d) => d.dimension === "next-eligibility");
+    ok(undeclaredDim7?.verdict === "DIVERGE", "dim 7: the same restart WITHOUT the declared WP-1 trigger DIVERGEs");
+    // R3-H1 attack surface — each variant keeps the trajectory shape and only
+    // removes/forges the evidence the admission must require:
+    ok(dim7({ ...run.trace, generationRestarts: [] })?.verdict === "DIVERGE",
+      "R3-H1: the real trajectory with the WP-1 record evidence stripped → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, changeKind: "REQUIREMENT_CHANGE" }] })?.verdict === "DIVERGE",
+      "R3-H1: a wrong-record-type WP-1 entry → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, status: "BLOCKED" }] })?.verdict === "DIVERGE",
+      "R3-H1: a non-CLASSIFIED WP-1 record → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, previousGeneration: 2 }] })?.verdict === "DIVERGE",
+      "R3-H1: a wrong-generation WP-1 record (gen 2→3 against a run at gen 2) → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, previousGeneration: null }] })?.verdict === "DIVERGE",
+      "R3-H1: a WP-1 record with no generation binding → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, triggerAttempt: 9 }] })?.verdict === "DIVERGE",
+      "R3-H1: a WP-1 record attributed to the wrong trigger round → DIVERGE");
+    ok(dim7({ ...run.trace, generationRestarts: [{ ...record, triggerCapability: "code-review" }] })?.verdict === "DIVERGE",
+      "R3-H1: a WP-1 record attributed to the wrong trigger capability → DIVERGE");
+    // The new-generation attempt: the restart intake re-dispatched at the
+    // run's continuing attempt (2); a fresh attempt-1 intake is a fabricated
+    // restart and must not print MATCH.
+    const restartIntakeIdx = run.trace.terminals.findIndex(
+      (t) => t.capability === "requirement-intake" && t.attempt === 2,
+    );
+    if (restartIntakeIdx < 0) {
+      ok(false, "real run: the generation-2 intake is observed at attempt 2");
+      return;
+    }
+    ok(true, "real run: the generation-2 intake is observed at attempt 2");
+    const flipped = run.trace.terminals.map((t, i) => (i === restartIntakeIdx ? { ...t, attempt: 1 } : t));
+    ok(dim7({ ...run.trace, terminals: flipped })?.verdict === "DIVERGE",
+      "R3-H1: the new-generation intake re-dispatched at attempt 1 → DIVERGE");
   } finally {
     stores.runStore.close();
     rmSync(stores.root, { recursive: true, force: true });

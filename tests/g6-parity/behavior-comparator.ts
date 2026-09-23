@@ -135,17 +135,51 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
             // The WP-1 feedback path (the F family): an admitting gate round
             // may OPEN a new generation — the FEEDBACK_DRIVEN_CHANGE record
             // drives a full rebuild from requirement-intake that is a
-            // GENERATION RESTART, not a finding reflow (R2-H1-A). The backward
-            // jump is legitimate only when the script declares the trigger at
-            // this round; an undeclared backward jump after an admitting
-            // verdict still DIVERGEs.
-            const feedbackRestart = script.nodes.some(
+            // GENERATION RESTART, not a finding reflow (R2-H1-A). R3-H1: the
+            // backward jump is legitimate only when the SCRIPT declares the
+            // trigger at this round AND the journal carries the matching
+            // verified WP-1 record (type / CLASSIFIED status / generation
+            // binding / trigger round) AND the next intake dispatch shows the
+            // NEW GENERATION's attempt — the declaration alone, or the next
+            // node name alone, no longer admits. An undeclared backward jump
+            // after an admitting verdict still DIVERGEs.
+            const declaredTrigger = script.nodes.find(
               (n) => n.opensFeedbackChange === true && n.node === "solution-gate" && (n.attempt ?? 1) === attempt,
             );
             const forward = actualNext !== null && NODE_ORDER.indexOf(actualNext) > NODE_ORDER.indexOf("solution-gate");
-            const okAdmit = feedbackRestart ? actualNext === "requirement-intake" : forward;
+            let okAdmit = forward;
+            let restartDetail = "";
+            if (declaredTrigger !== undefined && actualNext === "requirement-intake") {
+              // The declared restart trajectory: the script's next node after
+              // the trigger is the new generation's intake, carrying ITS
+              // attempt — a re-dispatch at the run's continuing attempt, not a
+              // fresh attempt-1 intake (a fabricated restart).
+              const declaredIntake = script.nodes[script.nodes.findIndex((n) => n === declaredTrigger) + 1];
+              const expectedIntakeAttempt = declaredIntake?.attempt ?? 1;
+              const observedIntakeAttempt = trace.terminals[verdictIdx + 1]?.attempt ?? null;
+              const record = trace.generationRestarts.find(
+                (item) =>
+                  item.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+                  item.status === "CLASSIFIED" &&
+                  item.triggerCapability === declaredTrigger.node &&
+                  item.triggerAttempt === attempt,
+              );
+              const generationOk =
+                record !== undefined &&
+                record.previousGeneration !== null &&
+                record.previousGeneration >= 1 &&
+                record.previousGeneration + 1 === trace.generation;
+              const attemptOk = observedIntakeAttempt === expectedIntakeAttempt && expectedIntakeAttempt > 1;
+              okAdmit = generationOk && attemptOk;
+              restartDetail = record === undefined
+                ? "declared WP-1 restart but the journal carries no matching CLASSIFIED FEEDBACK_DRIVEN_CHANGE record for this trigger round"
+                : `declared WP-1 restart: record ${record.changeKind}/${record.status}/gen ${record.previousGeneration ?? "?"} (trigger ${record.triggerCapability}@${record.triggerAttempt}), run generation ${trace.generation}, next intake attempt ${observedIntakeAttempt ?? "none"} vs expected ${expectedIntakeAttempt}`;
+            }
             if (!okAdmit) {
-              divergences.push(`round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"}${feedbackRestart ? " (expected the declared WP-1 generation restart to requirement-intake)" : ""}`);
+              divergences.push(
+                `round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"}` +
+                  `${restartDetail === "" ? "" : ` — ${restartDetail}`}`,
+              );
             }
             continue;
           }

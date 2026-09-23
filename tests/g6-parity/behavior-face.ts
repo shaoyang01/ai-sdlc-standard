@@ -65,6 +65,23 @@ export interface BehaviorTrace {
     readonly reason: string | null;
     readonly artifactRef: string | null;
   };
+  /**
+   * R3-H1: the verified WP-1 generation-restart records, read back from the
+   * run journal (never from driver memory) — the durable fact that a feedback
+   * restart was CLASSIFIED, its generation binding, and the trigger terminal
+   * that created it (the record's own sourceRef observedAt joined to the
+   * journal; an ambiguous or missing join carries no trigger, which refuses
+   * the admission fail-closed).
+   */
+  readonly generationRestarts: readonly {
+    readonly changeKind: string | null;
+    readonly status: string;
+    readonly previousGeneration: number | null;
+    readonly triggerCapability: string;
+    readonly triggerAttempt: number;
+  }[];
+  /** R3-H1: the run's final generation (the WP-1 advance target). */
+  readonly generation: number;
 }
 
 export interface BehaviorRunResult {
@@ -397,6 +414,29 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     }
     previousIndex = index;
   }
+  // R3-H1: the WP-1 evidence, read back from the journal AFTER the run — the
+  // durable classified fact a feedback restart happened, its generation
+  // binding, and the trigger terminal. The record's sourceRef observedAt is
+  // the trigger terminal's own createdAt; the join is exact by construction
+  // and an ambiguous or missing join carries NO trigger, so the admission
+  // refuses fail-closed rather than guessing.
+  const generationRestarts = stores.runStore
+    .listRequirementChanges(runIdOf(script))
+    .map((record) => {
+      const observedAt = record.sourceRefs[0]?.observedAt ?? null;
+      const candidates = observedAt === null
+        ? []
+        : events.filter((event) => event.status === "succeeded" && event.createdAt === observedAt);
+      const trigger = candidates.length === 1 ? candidates[0]! : undefined;
+      return Object.freeze({
+        changeKind: record.changeKind,
+        status: record.status,
+        previousGeneration: record.previousGeneration,
+        triggerCapability: trigger?.capability ?? "",
+        triggerAttempt: trigger?.attempt ?? -1,
+      });
+    });
+  const generation = stores.runStore.getRunGeneration(runIdOf(script));
   return {
     trace: {
       dispatched,
@@ -412,6 +452,8 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
         reason: outcome.handoff_reason,
         artifactRef: outcome.handoff_artifact_ref,
       },
+      generationRestarts,
+      generation,
     },
     manifestText: null,
   };
