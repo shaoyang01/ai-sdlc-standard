@@ -101,6 +101,41 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
 5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
 
+## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
+
+**R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
+
+### R-G6-01（路由的生产发现，两个症状，同属 c2/c3 证据链读错源）
+
+生产入口的 c2/c3 handoff checklist 对**任何 conforming completing 链**恒报 BLOCKED：① **closureReviewDone** 读 code-review 事件的 gateResult，而事件合同把非 formal_verdict 执行的该字段钉死为 `NOT_APPLICABLE`（node-output-envelope.ts:22 / loop-capability-execution.ts:479；closure review 裁决本在 review 输出产物里——node-capability-contracts.ts:89-91）；② **pathEntry** 读**单次 invocation 内**的 c1 变量 `resolvedImplementationDepth`（runtime.ts:1089/1271），staged/有界波（正式生产 rework/resume 的常态）在完成 invocation 里该变量已丢 → 「development path entry not allowed: no formal_verdict event with materialized depth found」。两个症状的 reason 串已被 runner 桶钉死（见下）。**修复需 decision record + 生产代码变更，超 D-090-04 授权，单独路由；G6 测试不掩盖。**
+
+### H1 补救（A′，已落地验证）
+
+- **driver**（behavior-face.ts）：捕获生产入口返回的**真实 handoff 三元组**（status/reason/artifact_ref——此前整个丢弃）；trace 增 `handoff` 字段。
+- **比较器**（behavior-comparator.ts）：dim 9 = 真实三元组 vs 声明期望（`FactScript.expectedHandoff`，缺省按脚本终态形状推导：末节点 knowledge-sync ⇒ READY_FOR_MANUAL_GIT_HANDOFF + ref 必需；否则 ABSENT），字段级比对、**缺失证据拒判**；dim 2 从计数升级为逐轮双 binding 条目（角色×attempt）；dim 7 从链终态布尔升级为逐轮 §7.3 A1 准入语义（admitting ⇒ 前进；non-admitting ⇒ finding 授权的回退或预算拒绝的停机），以**实际调度序列**为据（伪造入口字段不再能打印 MATCH）。
+- **runner A′ 桶**：dim-9 分歧按 R-G6-01 双签名分类（BLOCKED + reason∈{两症状} + ref 存在 = 已知原因）；桶必须恰好等于 completing 场景数且零新因，否则硬失败。本次实测：**50/50 已知原因、0 新因**；合并判定 0 passed / 50 failed（dim-9 surfaced，符合 A′——门等生产修复）；超限单列 4/4 且 durable 终态码恢复（`REGATE_ROUND_BUDGET_EXHAUSTED`——修复了一处 H1 改造误将快照读码回退的回归）。
+- **负向钉死**（新文件 tests/g6-parity-behavior-negative.test.ts，11 项）：R-G6-01 反例本例（真实跑 S-CORE-STANDARD-PASS-first：链 COMPLETED/success 而 checklist BLOCKED，比较器必须 DIVERGE）、缺失证据拒判、ref/reason 漂移、dim2 缺 binding/错 attempt、dim7 前进违规/回退错节点。
+- **验证**：tsc 0；行为负向 11/0；比较器负向 33/0（+5 新例）。
+
+### H3 补救（已落地验证）
+
+- **comparator.ts**：删 catch-up 模式对**每一行** finding_id 的 blanket 重写（真实 ID 从不参与比较——复审的伪造 ID 反例因此通行）；改为 `applyVerifiedFindingIdExemption`：仅当运行时 ID **经 store 证实时**（`storeFindingIds`，runner 从 journal 事实传入）且与手动行在稳定身份（discovered_at::evidence_ref）上配对，才赦免该闭合行的 ID 翻转；OPEN 行/未配对行/伪造 ID 逐字比较必败；无证传入时零赦免（fail closed）。
+- **runtime-face.ts**：StoreLevelResult 回传 store finding ids；两 runner 传证。
+- **负向**：reconcile 真实 finding 基线四例——合法翻转赦免（正控）、**复审反例（伪造 ID）必败**、takeover 字面必败、未配对行（即便 ID 有证）必败。产物层矩阵 50/0 复跑确认（reconcile 在新豁免下仍过）。
+
+### H2 调查结论（实现待续）
+
+- **S-INIT：四类初始化在生产入口路径无行为面**（授权分支之一的结论）。init 类（NEW_EMPTY/EXISTING_CODE_NO_KNOWLEDGE/LEGACY_SDD/LEGACY_SDLC_SDD）属 **D-088-01 初始化器层**（Decision-090/091），入口请求的 sourceFiles 全仓无下游消费者（loop-production-entry.ts:173 仅校验数组、允许空；loop-intake-manifest.ts 的非空要求不在 runProduction 路径），入口内无 readiness/类判别逻辑。§3「init 类影响入口节点与 readiness preflight」只剩 intake 材料差异被脚本建模——readiness preflight 部分无法经本入口 parity。处置：如实写入验收报告（H4）为规格-实现边界发现 + 路由建议（§3 论证修订，或 init 类 parity 归 D-088-01 验收面）；不伪造覆盖。
+- **S-CRASH：设计已定，实现为下一 beat**。行为层加「中断-重入」模式：三崩溃点映射为 dispatch 边界中断（post-gate-verdict = 首轮 verdict terminal 后；post-finding-migration = 闭合窗（design v2 物化后）；pre-manifest-write = 末节点 terminal 后、invocation 收尾前），首 invocation 以 maxDispatches 定界中断，同 runId 重入 runProduction 走真实恢复路径，断言：不重派已完成节点、链续跑至完成、双恢复稳定；manifestLibraryDir 传入使入口内投影调用点（runtime.ts:1043-1058）生效，journal/manifest 追赶可观测。负向：错误续点必须拒。store 级 digest 对照保留但不代称入口恢复（复审原话）。
+
+### 验证现状（本 beat）
+
+tsc 0；产物层 50/0；行为层负向 11/0；比较器负向 33/0；行为层矩阵：合并 0/50（dim-9 全数 R-G6-01 已知原因，pin 闭合）+ 超限单列 4/0。全量回归待 H2/H4 落地后重跑（serial 基准）。
+
+### 剩余（每步先请 Current User 确认）
+
+① S-CRASH 中断-重入实现 + 负向；② H4 报告重写（54 可定位条目、账目 **52−5−4+7=50**（剔 5/退 4/挂 7）、语义第 1 条按 D 族 verdict 登记通道实证改写、R-G6-01 双症状单列、S-INIT 边界发现、并行抖动归因收窄）；③ 全量回归（serial 基准 + 三 G6 文件 + 两负向）；④ 推送授权；⑤ R2 独立复审（H1～H4 逐项闭环 + 负例全部门 + M1 R2 已 PASS 项不回归）。
+
 ## 2026-09-23 公司机会话：M2 第 3 步——PWR×Re-Gate 补建 3 + 账目对账 + 验收报告骨架
 
 - **账目对账结论**（程序化提取全部场景坐标 vs 规格 §3 逐行比对，提取脚本结论已复核）：规格 52 = S-CORE 36 + S-INIT 8 + S-MANIFEST 2 + S-CRASH 6；S-INIT/S-MANIFEST/S-CRASH 与建成 1:1。S-CORE 36 行 = **27 建成行**（24 原有 + 3 补建）+ **5 规格剔除行**（升档×BU×2、BU×Re-Gate×3）+ **4 退化行**（DEEP×升档：规格 round 语义限定升档仅 LIGHT→STANDARD / STANDARD→DEEP，hard ceiling）。34 个 S-CORE 场景 = 27 行 + **7 个同行加挂**（B×3 与首轮 PASS 行、E/F×3 与 DEEP-PASS-Re-Gate 行、D 与 DEEP-FAIL-Re-Gate 行，各为「同行不同粒度/不同授权路径」）。产物层合计 **50 = 52−5+3**；行为层单列 4（FAIL×3 在 A 已覆盖行加第二种粒度、BU×1 在剔除行作演示）。
