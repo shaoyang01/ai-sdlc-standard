@@ -128,6 +128,21 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：R4 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R3-H1 闭环 + R2-H1-B/H3 不回归 + 攻击「修复是否引入新恒真/恒假」：WP-1 放行是否过严错过合法多变体、attempt>1 是否过严、observedAt join 的确定性）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
 
+## 2026-09-23 家用机会话：R4 复审 FAIL → R4-H1/H2 修复（有序代际绑定 + 已声明必须实际重启）
+
+**R4 判定 FAIL**（外部只读副本 @6fd12c8，两项新阻塞；R3-H1 原两条绕过判定已闭合，R2-H1-B/H3、R1-H3 等已 CLOSED 面复审判不回归；observedAt join 实测 10/10 唯一，非阻塞建议「改用稳定 journal event id 绑定触发事件」记录在案）：
+
+1. **R4-H1 双代际误拒**：store 接受连续两条 CLASSIFIED WP-1 记录（代际 1→2→3）且该双重启轨迹合法，但比较器要求**每一波**记录的 previousGeneration+1 都等于 run **最终**代际——第一波（1+1=2≠3）即被 dim 7 误拒。修法边界（评审给定）：按各触发轮与紧随其后的重启核对**有序代际**（第 i 个声明触发期望 previousGeneration=i，每个 WP-1 恰好推进一代），只用最终代际校验最后一波（未声明的多余记录会使其漂移而被抓）。
+2. **R4-H2 dim 7 放行掩蔽**：已声明 F post-gate 重启时，若实际下一节点改为前进节点且无 WP-1 记录，代码先按 forward 放行、只在 next=intake 时才查记录——「声明了却没重启」被掩蔽（dim 1 仍 DIVERGE、合并判定未假绿，但 dim 7 仪器被污染）。修法边界：gate 轮已声明重启时，脚本和实际下一节点**均**须为 intake 才走完整证据校验；保留 F post-review 的 gate-round 前进分支（无 gate 声明时不变）。
+
+**修复（harness-only，生产零改动；@b1bd730 已推）**：
+- **behavior-comparator.ts**：① admitting 分支按声明分叉——`declaredTrigger !== undefined && actualNext !== "requirement-intake"` 直接 DIVERGE（声明即期望，前进/非 intake 回退都是未发生重启）；② `declaredTrigger && actualNext === intake` 走完整校验：记录匹配（类型/CLASSIFIED/触发轮）+ **有序代际**（`declaredWaves` 按脚本声明序取 waveIndex，previousGeneration 必须等于 waveIndex；仅最后一波追加 `trace.generation === waveIndex + 1`）+ restart intake attempt=脚本声明 attempt 且 >1。
+- **behavior-negative.test.ts**：+8 例（26→**34/0**）：合成双代际脚本（两 gate 触发、intake attempt 2/3、末波后下游 attempt 1）合法轨迹六维全 MATCH；任一波代际错、最终代际漂移、第二波缺记录均 DIVERGE；已声明但 forward / 已声明但跳非 intake 节点均 DIVERGE（真实 F post-gate 轨迹注入）。
+
+**验证**：tsc 0；行为负向 **34/0**；产物层 **50/0**；比较器负向 **38/0**；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、**非 dim-9 分歧 0**、超限 4/4；退出码 1 预期）。
+
+剩余（每步先请 Current User 确认）：R5 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R4-H1/H2 闭环 + 已 CLOSED 面不回归 + 新注入面：三波有序代际、gate/review 混类触发轮的 waveIndex 计数、forward/non-intake 掩蔽变体、observedAt join 重复实测）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
