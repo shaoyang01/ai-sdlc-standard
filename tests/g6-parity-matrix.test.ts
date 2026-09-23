@@ -65,8 +65,11 @@ function runScenario(specId: string): ComparisonResult {
       );
       // The catch-up regime carries the projector's designed face exemptions
       // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
+      // The D-17 id flip is forgiven only against the run's STORE-assigned
+      // finding ids (R1-H3): no proof, no exemption.
       return compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
         catchUpRegime: script.midTakeoverAfter !== undefined,
+        storeFindingIds: new Set(runtime.findingIds),
       });
     } finally {
       stores.runStore.close();

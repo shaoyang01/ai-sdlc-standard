@@ -54,6 +54,17 @@ export interface BehaviorTrace {
   readonly chainStatus: string;
   readonly blockingReasonCode: string | null;
   readonly nextExecutionPoint: string | null;
+  /**
+   * H1-remediation: the production entry's REAL final handoff (the c2/c3
+   * manual-handoff checklist), captured verbatim from the invocation result —
+   * never derived from a success proxy. Null status = the chain never
+   * completed (the entry builds no handoff artifact).
+   */
+  readonly handoff: {
+    readonly status: string | null;
+    readonly reason: string | null;
+    readonly artifactRef: string | null;
+  };
 }
 
 export interface BehaviorRunResult {
@@ -237,7 +248,7 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     (finding) => (finding.gateRound ?? 1) >= 2 || finding.earliest === "requirement-intake",
   ) || script.nodes.some((node) => node.opensFeedbackChange === true);
 
-  const invokeProduction = async (): Promise<{ final_status: "success" | "failed"; chain_status: string; blocking_reason_code?: string | null; next_execution_point: { capability: string } | null }> => {
+  const invokeProduction = async (): Promise<{ final_status: "success" | "failed"; chain_status: string; blocking_reason_code?: string | null; next_execution_point: { capability: string } | null; handoff_status: string | null; handoff_reason: string | null; handoff_artifact_ref: string | null }> => {
     const result = await runProduction(parsed as never, `G6 parity ${script.requirementId}`, {
       capabilitySource: "real",
       realGatewayDeps: { adapter: { execute } as never, attemptWorkspace: () => workspace },
@@ -256,6 +267,13 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       chain_status: result.chain_status,
       blocking_reason_code: result.blocking_reason_code ?? null,
       next_execution_point: result.next_execution_point === null ? null : { capability: result.next_execution_point.capability },
+      // H1-remediation: the REAL handoff triple, verbatim from the entry's
+      // result (null status = the chain never completed, so c2/c3 was never
+      // invoked). The previous driver DISCARDED these fields, which let the
+      // comparator's success-proxy report MATCH on a BLOCKED handoff.
+      handoff_status: result.manual_handoff_status ?? null,
+      handoff_reason: result.manual_handoff_reason ?? null,
+      handoff_artifact_ref: result.manual_handoff_artifact_ref ?? null,
     };
   };
 
@@ -389,6 +407,11 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       chainStatus: outcome.chain_status,
       blockingReasonCode: outcome.blocking_reason_code ?? durableBlockReason(),
       nextExecutionPoint: outcome.next_execution_point === null ? null : outcome.next_execution_point.capability,
+      handoff: {
+        status: outcome.handoff_status,
+        reason: outcome.handoff_reason,
+        artifactRef: outcome.handoff_artifact_ref,
+      },
     },
     manifestText: null,
   };

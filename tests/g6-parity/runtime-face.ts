@@ -155,6 +155,13 @@ function startRun(stores: RuntimeStores, requirementId: string): string {
 export interface StoreLevelResult {
   readonly manifestPath: string;
   readonly manifestText: string;
+  /**
+   * The run's STORE-assigned finding ids (journal fact, read from the store at
+   * the end). The artifact comparator's D-17 id exemption is proven against
+   * this set (R1-H3): a closure row's id flip is forgiven only for an id that
+   * is actually one of these.
+   */
+  readonly findingIds: readonly string[];
 }
 
 /** One execution point's last succeeded output (canonical-advance + restart inputs). */
@@ -678,5 +685,9 @@ export function driveRuntimeStoreLevel(
       throw new Error("double resume is not byte-identical");
     }
   }
-  return { manifestPath, manifestText };
+  return {
+    manifestPath,
+    manifestText,
+    findingIds: stores.runStore.listFindings(runId).map((finding) => finding.findingId),
+  };
 }

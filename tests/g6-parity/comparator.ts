@@ -27,9 +27,20 @@ import {
  *   - D-17: when a finding closure lands, the row's authority flips to the
  *     runtime face and the row id becomes the store-assigned id; the
  *     evidence (reference + digest + discovering node) is the identity.
+ *     R1-H3 remediation: the id flip is forgiven ONLY when the runtime id is
+ *     PROVEN store-bound (`storeFindingIds` — the run's journal finding ids,
+ *     passed by the caller from the store) AND the row pairs with a manual
+ *     row on the stable identity (discovered_at + evidence_ref). An OPEN
+ *     row, an unpaired row, or any forged id is compared literally.
  */
 export interface CompareOptions {
   readonly catchUpRegime?: boolean;
+  /**
+   * The run's store-assigned finding ids (journal fact, read from the run
+   * store by the driver). required for the catch-up regime: without it NO
+   * finding-id exemption applies (fail closed).
+   */
+  readonly storeFindingIds?: ReadonlySet<string>;
 }
 
 /** T5-frozen normalization: drop face-only progress/execution fields. */
@@ -49,13 +60,11 @@ export function normalize(doc: Record<string, unknown>, options?: CompareOptions
       }
     }
   }
-  if (options?.catchUpRegime === true && Array.isArray(clone.finding_index)) {
-    for (const row of clone.finding_index as Record<string, unknown>[]) {
-      // D-17: the row id flips to the runtime id on closure; the evidence
-      // reference + discovering node is the stable cross-face identity.
-      row.finding_id = `${String(row.discovered_at)}::${String(row.evidence_ref)}`;
-    }
-  }
+  // The D-17 finding-id exemption is NOT applied here (R1-H3): the blanket
+  // rewrite below made every finding row's id unobservable, so a forged id on
+  // a closure row compared equal. The exemption now lives in
+  // applyVerifiedFindingIdExemption — bilateral, pairing-gated, and proven
+  // against the store's finding ids.
   return clone;
 }
 
@@ -105,6 +114,39 @@ const ARTIFACT_LAYER_DIMENSIONS: ReadonlySet<string> = new Set([
  * A digest/version/artifactPath difference is a real divergence here — the
  * store-level driver carries the manual face's raw digests.
  */
+/**
+ * R1-H3 remediation: the D-17 closure-row id flip, forgiven ONLY under proof.
+ * A runtime finding row is forgiven when (a) its discovering node + evidence
+ * reference pair with a manual row (the stable cross-face identity) and
+ * (b) its id is one of the run's STORE-assigned finding ids (the journal
+ * fact). Both sides then canonicalize the forgiven pair's id to the stable
+ * identity. Every other row keeps its literal id — an OPEN row, an unpaired
+ * row, or a forged id fails the full-document comparison.
+ */
+function applyVerifiedFindingIdExemption(
+  manual: Record<string, unknown>,
+  runtime: Record<string, unknown>,
+  storeFindingIds: ReadonlySet<string> | undefined,
+): void {
+  const manualRows = Array.isArray(manual.finding_index) ? (manual.finding_index as Record<string, unknown>[]) : [];
+  const runtimeRows = Array.isArray(runtime.finding_index) ? (runtime.finding_index as Record<string, unknown>[]) : [];
+  if (manualRows.length === 0 || runtimeRows.length === 0) return;
+  const identityKey = (row: Record<string, unknown>): string =>
+    `${String(row.discovered_at)}::${String(row.evidence_ref)}`;
+  const manualKeys = new Set(manualRows.map(identityKey));
+  const forgiven = new Set<string>();
+  for (const row of runtimeRows) {
+    const key = identityKey(row);
+    if (!manualKeys.has(key)) continue;
+    if (storeFindingIds === undefined || !storeFindingIds.has(String(row.finding_id))) continue;
+    row.finding_id = key;
+    forgiven.add(key);
+  }
+  for (const row of manualRows) {
+    if (forgiven.has(identityKey(row))) row.finding_id = identityKey(row);
+  }
+}
+
 export function compareArtifactLayer(
   manualManifestText: string,
   runtimeManifestText: string,
@@ -119,6 +161,9 @@ export function compareArtifactLayer(
     JSON.parse(JSON.stringify(parseRubyYaml(extractManifestYaml(runtimeManifestText)))) as Record<string, unknown>,
     options,
   );
+  if (options?.catchUpRegime === true) {
+    applyVerifiedFindingIdExemption(manual, runtime, options.storeFindingIds);
+  }
   const diffs = diffPaths(manual, runtime);
   const dims: DimensionResult[] = NINE_DIMENSIONS.map((dimension) => {
     if (!ARTIFACT_LAYER_DIMENSIONS.has(dimension)) {

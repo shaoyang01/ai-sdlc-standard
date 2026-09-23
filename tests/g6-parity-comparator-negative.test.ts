@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer } from "./g6-parity/comparator";
-import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
+import { coreFirstRoundScenarios, coreManifestStateScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 import { parseRubyYaml, dumpRubyYaml } from "../core/loop-manifest-yaml";
 import { extractManifestYaml, wrapManifestYaml } from "../core/loop-manifest-projector";
@@ -225,6 +225,76 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
     impl["artifact_path"] = "04-实现记录/forged-basename.md";
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
     ok(!result.equal, "takeover regime: the same basename difference FAILS (exemptions are catch-up-only)");
+  }
+}
+
+// ── 5. D-17 on a REAL finding baseline (R1-H3 remediation) ────────────────
+// The reviewer's counterexample: on a closure row, a FORGED runtime finding
+// id compared EQUAL because the catch-up regime rewrote every row's id before
+// the comparison (the old D-17 branch never ran — its PASS baseline carried
+// no findings). The exemption is now pairing-gated and proven against the
+// store's finding ids; these cases pin both directions.
+{
+  const reconcileSpec = coreManifestStateScenarios().find((s) => s.id === "S-MANIFEST-STANDARD-reconcile")!;
+  const reconcileScript = reconcileSpec.build();
+  const d17Root = mkdtempSync(join(tmpdir(), "g6-negative-d17-"));
+  let d17Manual: string;
+  let d17Runtime: string;
+  let d17StoreIds: ReadonlySet<string>;
+  try {
+    const manual = driveManualFace(join(d17Root, "lib-manual"), reconcileScript);
+    d17Manual = manual.manifestText;
+    const stores = makeStores("negative-d17");
+    try {
+      const runtime = driveRuntimeStoreLevel(
+        stores,
+        reconcileScript,
+        join(d17Root, "lib-runtime"),
+        manual.manifestText,
+        manual.intermediateManifestText,
+      );
+      d17Runtime = runtime.manifestText;
+      d17StoreIds = new Set(runtime.findingIds);
+    } finally {
+      stores.runStore.close();
+      rmSync(stores.root, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(d17Root, { recursive: true, force: true });
+  }
+  const regime17 = { catchUpRegime: true, storeFindingIds: d17StoreIds };
+  // (a) Positive control: the REAL pair passes WITH the exemption — the
+  //     closure row's id flipped to the store-assigned id and the proof
+  //     forgives exactly that flip.
+  {
+    const result = compareArtifactLayer(d17Manual, d17Runtime, reconcileScript, regime17);
+    ok(result.equal, "D-17 real baseline: the proven closure-row id flip compares equal");
+  }
+  // (b) The reviewer's counterexample: a forged runtime id on the closure row
+  //     (same discovering node + evidence) must FAIL — a forged id is not a
+  //     store id, so the row compares literally.
+  {
+    const doc = parse(d17Runtime);
+    const rows = doc.finding_index as Record<string, unknown>[];
+    ok(rows.length > 0, "D-17 real baseline: the closure row exists (the old branch was skipped)");
+    rows[0]!["finding_id"] = "forged-unrelated-finding-id";
+    const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
+    ok(!result.equal, "D-17: a forged closure-row id FAILS (the exemption requires store proof)");
+  }
+  // (c) The takeover regime carries no exemption: the real flipped id must
+  //     FAIL there (literal comparison).
+  {
+    const result = compareArtifactLayer(d17Manual, d17Runtime, reconcileScript, { catchUpRegime: false });
+    ok(!result.equal, "D-17: the real id flip FAILS under the takeover regime (exemptions are catch-up-only)");
+  }
+  // (d) An unpaired row — even carrying a STORE-PROVEN id — must FAIL: the
+  //     stable identity has no manual counterpart (the OPEN-row case).
+  {
+    const doc = parse(d17Runtime);
+    const rows = doc.finding_index as Record<string, unknown>[];
+    rows[0]!["discovered_at"] = "implementation";
+    const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
+    ok(!result.equal, "D-17: a store-proven id on an unpaired row FAILS (pairing is required)");
   }
 }
 

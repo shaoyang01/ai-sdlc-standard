@@ -71,6 +71,28 @@ async function main(): Promise<void> {
   const specs = allScenarios();
   console.log(`G6 parity behavior layer: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, production-entry trace + merged judgment)`);
 
+  // ── H1 A′ bucket: the dim-9 known-cause pin (R-G6-01, routed production
+  // finding). Every conforming COMPLETING chain hands off BLOCKED because the
+  // c2/c3 evidence chain reads the wrong sources, with TWO observed symptoms:
+  //   (a) closureReviewDone reads the code-review event's gateResult, which
+  //       the event contract pins to NOT_APPLICABLE for non-formal_verdict
+  //       executions → "code review closure review not done";
+  //   (b) pathEntry reads the PER-INVOCATION c1-guard variable
+  //       (resolvedImplementationDepth), which any staged/resumed (bounded)
+  //       wave has already lost in its completing invocation → "development
+  //       path entry not allowed: no formal_verdict event with materialized
+  //       depth found" (usually joined with (a)).
+  // The divergence is SURFACED by the comparator — never judged as MATCH —
+  // and pinned here: the bucket must be exactly the completing-scenario
+  // count with one of these two reasons, or the run fails.
+  const RG601_REASONS: ReadonlySet<string> = new Set([
+    "code review closure review not done",
+    "development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done",
+  ]);
+  let expectedKnownDim9 = 0;
+  let knownDim9 = 0;
+  const newCauseDim9: string[] = [];
+
   for (const spec of specs) {
     const script = spec.build();
     const root = mkdtempSync(join(tmpdir(), "g6-behavior-"));
@@ -91,8 +113,11 @@ async function main(): Promise<void> {
         );
         // The catch-up regime carries the projector's designed face exemptions
         // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
+        // The D-17 id flip is forgiven only against the run's STORE-assigned
+        // finding ids (R1-H3): no proof, no exemption.
         const artifact = compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
           catchUpRegime: script.midTakeoverAfter !== undefined,
+          storeFindingIds: new Set(runtime.findingIds),
         });
         artifactClean = artifact.equal;
         artifactDetail = artifactClean ? "deep-equal" : (artifact.diffs[0] ?? "diverged");
@@ -117,6 +142,25 @@ async function main(): Promise<void> {
         const run = await driveBehaviorLayer(behaviorStores, script, workspace);
         const behavior = compareBehaviorLayer(script, run.trace);
         const diverged = behavior.dimensions.filter((d) => d.verdict === "DIVERGE");
+        // H1 A′ classification: a dim-9 divergence on a completing script is
+        // the known routed production cause ONLY when it carries the exact
+        // R-G6-01 signature (BLOCKED / "code review closure review not done"
+        // / artifact ref present). Anything else is a NEW cause and fails
+        // the pin below.
+        if (script.nodes[script.nodes.length - 1]?.node === "knowledge-sync") expectedKnownDim9 += 1;
+        const dim9 = behavior.dimensions.find((d) => d.dimension === "final-handoff");
+        if (dim9?.verdict === "DIVERGE") {
+          const knownCause =
+            run.trace.handoff.status === "BLOCKED" &&
+            run.trace.handoff.reason !== null &&
+            RG601_REASONS.has(run.trace.handoff.reason) &&
+            run.trace.handoff.artifactRef !== null;
+          if (knownCause) {
+            knownDim9 += 1;
+          } else {
+            newCauseDim9.push(`${spec.id}: ${dim9.detail}`);
+          }
+        }
         ok(
           artifactClean && diverged.length === 0,
           `${spec.id}: artifact ${artifactDetail}; behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}`,
@@ -136,6 +180,15 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`==== g6 parity behavior summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9 — 6 dims judged by the production-entry trace)`);
+
+  // ── H1 A′ bucket summary + pin ──────────────────────────────────────────
+  const bucketOk = knownDim9 === expectedKnownDim9 && newCauseDim9.length === 0;
+  console.log(`==== g6 dim-9 known-cause bucket (R-G6-01): ${knownDim9}/${expectedKnownDim9} divergences are the routed production cause; new-cause divergences: ${newCauseDim9.length} ====`);
+  console.log(`(pinned signatures: BLOCKED + reason in {closureReviewDone, pathEntry per-invocation loss} + artifactRef present — the pin fails on a new cause or signature drift)`);
+  if (!bucketOk) {
+    for (const item of newCauseDim9) console.error(`  ✗ dim-9 NEW CAUSE: ${item}`);
+    console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${expectedKnownDim9} known-cause divergences, observed ${knownDim9}`);
+  }
 
   // ── Over-limit pause waves — behavior layer only, single-listed ──────────
   // A FAIL/BLOCKED_UNKNOWN verdict authors no gate revision (WP6), so the
@@ -180,7 +233,7 @@ async function main(): Promise<void> {
   console.log(`==== g6 parity over-limit pause (behavior layer only): ${pausePassed} passed, ${pauseFailed} failed ====`);
   console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count)`);
 
-  if (failed > 0 || pauseFailed > 0) process.exit(1);
+  if (failed > 0 || pauseFailed > 0 || !bucketOk) process.exit(1);
 }
 
 void main();

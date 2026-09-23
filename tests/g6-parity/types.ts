@@ -159,6 +159,33 @@ export interface FactScript {
    * same class as maxDispatches), never a shadow substitution.
    */
   readonly maxRegateRounds?: number;
+  /**
+   * H1-remediation: the declared final-handoff expectation — the production
+   * entry's REAL c2/c3 handoff triple, compared field-for-field by the
+   * behavior comparator's dim 9 (never derived from a success proxy).
+   *
+   * R-G6-01 (routed production finding, two observed symptoms — the c2/c3
+   * evidence chain reads the wrong sources): (a) closureReviewDone reads the
+   * code-review event's gateResult, which the event contract pins to
+   * NOT_APPLICABLE for non-formal_verdict executions → "code review closure
+   * review not done"; (b) pathEntry reads the PER-INVOCATION c1-guard
+   * variable, which a staged/resumed (bounded) wave loses in its completing
+   * invocation → "development path entry not allowed: no formal_verdict
+   * event with materialized depth found". A completing script therefore
+   * declares the SPEC-semantic expectation (READY_FOR_MANUAL_GIT_HANDOFF) and
+   * the divergence is surfaced, bucketed, and routed — never reported as
+   * MATCH.
+   *
+   * When absent, the comparator derives it from the script's own terminal
+   * shape (last node knowledge-sync ⇒ completing ⇒ READY_FOR_MANUAL_GIT_HANDOFF
+   * with a required artifact ref; otherwise ABSENT — the chain never
+   * completed, so the entry builds no handoff artifact).
+   */
+  readonly expectedHandoff?: {
+    readonly status: "READY_FOR_MANUAL_GIT_HANDOFF" | "BLOCKED" | "FAILED" | "ABSENT";
+    readonly reason: string | null;
+    readonly requireArtifactRef: boolean;
+  };
 }
 
 /** Matrix coordinates (frozen spec §3). */
