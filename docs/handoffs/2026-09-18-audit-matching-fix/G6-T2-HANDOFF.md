@@ -101,6 +101,16 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
 5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
 
+## 2026-09-23 公司机会话：M2 第 2 步完成——超限暂停 4（行为层单列，全量回归绿）
+
+- 落地超限暂停 4（`S-CORE-LIGHT/STANDARD/DEEP-FAIL-overlimit-pause` + `S-CORE-STANDARD-BU-overlimit-pause`，行为层 only）：两轮非收敛裁决后，轮数预算拒绝第二次重启，runtime 落 **durable 终态 `REGATE_ROUND_BUDGET_EXHAUSTED`**（journal 持久 block、零 dispatch 落定；该码由 run 快照 `blockingReasonCode` 读出——invocation 终态返回不携带它）。合并判定 **47/0 无回归** + 单列 **4/0**；产物层 47/0、负向 28/0、tsc 0、全量 npm test **1767 passed / 0 failed（170 文件，960s）**。改动面仅 tests/（+201/−8，5 文件），**生产代码零改动**。
+- **预算分层实证（新知识）**：`maxDesignRounds`/`paused`/`DESIGN_REVISION_EXHAUSTED` 属 design-orchestrator（coordinator 装配），**不在 `runProduction` 链内核路径上**，行为层无法直达该终态；行为层入口的预算是链内核的 `maxRegateRounds`（默认 9，按持久化回退跳转计数，`authorizeRegateDispatch` 同 permit 事务落 block——零 dispatch、零 revision 写；仅 `releaseRunRegateBlock` 的 RISK_ACCEPTED/SCOPE_RESET 可释放）。
+- **预算注入口径**：`FactScript.maxRegateRounds`（types.ts 新增字段）把 entry 自身选项 `ProductionRunDeps.maxRegateRounds` 原样透传，这 4 个场景填 1 =「一次重启授权、第二次拒绝」，对应 maxDesignRounds=2 的轮预算语义（2 轮内须 PASS，第三轮设计即超限）。与 maxDispatches 同性质的边界参数，非 shadow；挂账两项（默认 2→3；journal 回流显式上限）不动。
+- **驱动器两处新机制**（behavior-face.ts）：① **durable-block 护栏**——预算耗尽后 recovery 仍把 regate 目标报为 next point（非 null），无护栏会空转重 invoke 至 128 次上限；改为快照 durable block 存在即诚实停机（对应手动面「人停下不等了」——无 release 决策可 Advance）② 场景 `maxRegateRounds` 透传。结算逻辑零改动：F01 于 design v2 物化后的 invocation 间窗口闭合（绑 design v2），F02 绑 design v3 永不产出保持 OPEN，R2 verdict 合成 reflow 行因 design v2 已被 stale 无 ACTIVE 可绑保持 OPEN——停机时 OPEN 集即手动面「人停下、修复待办」形状。
+- **比较器一处推导**（behavior-comparator.ts）：final-handoff 期望终态按脚本末 gate 裁决推导——非收敛脚本（末 gate 非 PASS）期望「停在最后脚本节点的非成功终态」；现有 47 脚本末 gate 全 PASS/PWR，语义不变、向后兼容。next-eligibility 原已支持（期望 blocked 链）。
+- **runner 单列口径**（g6-parity-behavior-matrix.test.ts）：合并判定节 47 不动；新增 over-limit pause 节——只跑生产入口轨迹 + 比较器六维 + 显式断言 durable 终态码，独立计数、独立摘要行，注明「artifact layer NOT judged … not counted in the artifact-layer pass count」（R2 诚实性约束④）。产物层 runner 不 import 新家族，47 计数不变。
+- 剩余（每步先请 Current User 确认）：第 3 步账目对账（产物层 47 + 行为层 47 + 超限单列 4 vs 规格 52，逐条列清剪枝组合 + 返工波编组粒度 + 两层各自坐标；超限 4 行是 S-CORE/re-gate 坐标的 behavior-only 新增行，是否计入 S-CORE 36 由对账定）+ 验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7；须含 D-7/D-17 finding-identity 说明、十条生产语义、未归因 diff 单列）→ 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审 prompt（会话内展示不落文档；范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）→ PASS 后请授权合并。
+
 ## 2026-09-22 晚：M2 第 1 步完成——行为层全家族扩展 47/47（家用机会话）
 
 - 行为层矩阵从 S-CORE 首轮 12 扩到**全 47 场景合并判定**（多轮 3 / review 返工 3 / review→re-gate 3 / 需求级回流 2 / feedback re-gate 2 / 升档×FAIL 2 / 升档 4 / S-MANIFEST 2 / S-CRASH 6 / S-INIT 8），`47 passed / 0 failed`；产物层 47/0、负向 28/0、tsc 0、全量 1767/0（170 文件）无回归。改动面仅 tests/（runner + behavior-face + behavior-comparator），**生产代码零改动**。
@@ -109,7 +119,7 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 - 比较器（behavior-comparator.ts）：earliest-reroute 期望目标在 opensFeedbackChange 时含 requirement-intake（feedback 整链重建是代际重启、非 finding 回流）。
 - runner 两处修正：catchUpRegime 传参（reconcile/crash 的 D-7/D-17 豁免——行为层 runner 原本漏传，注册前必修）；S-MANIFEST-corrupt 的 expectStop 处理（fail-closed 单级判别按冻结规格，行为层只做轨迹回放、输出单列）。
 - 新实证生产语义（评审必含，接七条之后的第 8/9/10 条）：⑧ **活动执行期禁止 finding 转换**——finding 闭合的合法窗口只在 invocation 之间；⑨ **invocation 内回流到 requirement-intake 无法重导 origin 规范源**（loop-capability-entry.ts point 0 检查 + 每迭代输入采用只认前驱输出、point 0 无前驱），只有跨 invocation 边界的 deriveDispatchCommand 推导——requirement 级回流必须跨 run 边界；⑩ **FAIL/ESCALATED verdict 合成 SOLUTION reflow 行**（带边、立即失效当前 design），agent 声明的非 SOLUTION 行不抑制合成（D 波因此多一行，harness 显式闭合）。
-- 剩余（每步先请 Current User 确认）：第 2 步超限暂停 4（FAIL×LIGHT/STANDARD/DEEP + BU×STANDARD，行为层 only，runner 单列不计产物层通过数）→ 第 3 步账目对账 + 验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7）→ 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审（范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）。
+- 剩余（每步先请 Current User 确认；第 2 步已于 2026-09-23 完成，见上「M2 第 2 步完成」节）：第 3 步账目对账 + 验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7）→ 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审（范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）。
 
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
