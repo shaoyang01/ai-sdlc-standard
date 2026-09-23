@@ -762,6 +762,146 @@ export function coreReviewRegateScenarios(): ScenarioSpec[] {
 }
 
 /**
+ * PWR × Re-Gate — the frozen matrix's re-gate rows whose round-1 verdict is
+ * PASS_WITH_RISK. The 2026-09-23 accounting found these rows uncovered with
+ * NO sanctioned pruning (a planning gap, not a design exclusion), so they are
+ * built here. Shape: the C-family re-gate authorization (a review-discovered
+ * design-class finding reflows to solution-design; the re-gate closes it
+ * binding design v2) on top of a PWR first round (the scan-source finding
+ * risk-accepted under the PWR ruling — §3's defining fact, the first-round
+ * PWR convention unchanged).
+ */
+function waveWithPwrRegate(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerContent = `${JSON.stringify({
+    schema: "loop-capability-findings:v1",
+    findings: [{ finding_id: `${requirementId}-scan-1` }],
+  })}\n`;
+  const gateV1Content = `# ${requirementId} gate v1\n`;
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const designV2 = `# ${requirementId} design v2\n`;
+  const gateV2Content = `# ${requirementId} gate v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", gateV1Content, "1.0.0", {
+      gateResult: "PASS_WITH_RISK",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      // The scan round's Finding Ledger: one member, the finding the PWR
+      // ruling risk-accepts (the store cross-checks the membership count).
+      ledgerContent,
+      // The scan finding invalidates the examined design current — the
+      // manual face mirrors that truth on the gate entry-update (T5
+      // ACCEPTED pattern: a current design row would be a real B2 drift).
+      staleNodes: ["solution-design"],
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v1\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      // The design-class finding's invalidation stales the whole downstream
+      // scope (design, gate, planning, implementation, review).
+      staleNodes: ["solution-design", "solution-gate", "task-planning", "implementation"],
+    }),
+    // Reflow to solution-design (the finding authorizes the restart); the
+    // re-gate round closes it binding this design revision.
+    nodeFact("solution-design", "technical_design", designV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", gateV2Content, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    // The scan-source finding: risk-accepted by the PWR ruling (the accept
+    // action's bound id is the verdict artifact version, per the publisher's
+    // accept rule — the first-round PWR convention, unchanged).
+    Object.freeze({
+      findingId: `${requirementId}-F01`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:1`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerContent,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "accept" as const,
+        closedBy: "formal_verdict",
+        evidenceKind: "solution_review",
+        evidenceContent: gateV1Content,
+        boundRevisionId: "1.0.0",
+      }),
+    }),
+    // The review-discovered design-class finding: the re-gate authorization
+    // (the C-family shape); closed by the re-gate round binding design v2,
+    // the design artifact as evidence (production shape CR-F12). Anchored to
+    // the reviewed implementation v1 — NOT the design: the PWR round's scan
+    // finding already invalidated the examined design at the gate scan
+    // terminal (the M1-evidenced staleness), and a finding may only bind an
+    // ACTIVE revision (loop-run-store.ts appendFinding). The earliest node
+    // (solution-design) is unchanged — it drives the reflow and the scope.
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review after the re-gate reflow; the
+      // review stage's round counter is independent of the gate's.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "technical_design",
+        evidenceContent: designV2,
+        boundRevisionId: `${runId}:revision:solution-design:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** PWR × Re-Gate scenarios × depth (3): the frozen matrix's PWR re-gate rows. */
+export function corePwrRegateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-PASS_WITH_RISK-review-regate`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "PASS_WITH_RISK", round: "re-gate" }),
+        prunes: "PWR first-round verdict (scan finding risk-accepted under the PWR ruling) + review-discovered design-class finding → reflow → re-gate PASS closes it binding design v2; closes the frozen matrix's PWR×Re-Gate rows — the 2026-09-23 accounting found them uncovered with no sanctioned pruning (planning gap, now built)",
+        build: () => {
+          const wave = waveWithPwrRegate(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
  * D — a gate-discovered REQUIREMENT-level finding reflowing to requirement
  * normalization (production sample: wms-monitor 20260916-config-page-usability
  * F07 — discovered at the solution-gate, earliest=requirement-intake, closed

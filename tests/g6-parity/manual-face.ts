@@ -9,7 +9,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import type { FactScript } from "./types";
+import type { FactScript, NodeFact } from "./types";
 import { CANONICAL_PATHS } from "./types";
 
 const PUBLISHER = join(process.cwd(), "scripts", "publish-requirement-manifest.sh");
@@ -76,6 +76,59 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     ]);
   }
 
+  // Finding ACTIONS publish BETWEEN declarations at the settlement points the
+  // runtime face uses — the real manual flow's shape. The publisher validates
+  // an accept against the gate's CURRENT verdict row, so a PWR accept must
+  // land while its own round's row is current: end-batching the actions reads
+  // a later re-gate's PASS row and refuses (the PWR × Re-Gate wave's first
+  // failure). The rule mirrors runtime-face's settleFindingActions exactly:
+  // the round basis is STAGE-LOCAL (the solution-gate stage counts gate
+  // rounds, the code-review stage counts review rounds — neither shares the
+  // other's counter), a finding carrying closedAtRound settles at that
+  // stage-round's node, and an M1-shape finding (accepts, single-wave
+  // resolves) settles at the first passing gate round or its non-gate
+  // closing node.
+  let gateRoundCounter = 0;
+  let reviewRoundCounter = 0;
+  const settledFindingIds = new Set<string>();
+  const settleDueFindingActions = (node: NodeFact): void => {
+    let stageRound = 0;
+    if (node.node === "solution-gate") {
+      gateRoundCounter += 1;
+      stageRound = gateRoundCounter;
+    } else if (node.node === "code-review") {
+      reviewRoundCounter += 1;
+      stageRound = reviewRoundCounter;
+    }
+    const gatePassing =
+      node.node === "solution-gate" && (node.gateResult === "PASS" || node.gateResult === "PASS_WITH_RISK");
+    for (const finding of script.findings) {
+      if (finding.action === undefined || settledFindingIds.has(finding.findingId)) continue;
+      if (finding.resolveAfter !== node.node) continue;
+      if (finding.closedAtRound !== undefined) {
+        if (finding.closedAtRound !== stageRound) continue;
+      } else if (node.node === "solution-gate" && !gatePassing) {
+        continue;
+      }
+      publisher(libDir, [
+        "finding-action",
+        "--finding-id",
+        finding.findingId,
+        "--action",
+        finding.action.action,
+        "--closed-by",
+        finding.action.closedBy,
+        "--evidence-ref",
+        `loop-artifact:v1:${finding.action.evidenceKind}:sha256:${sha256(finding.action.evidenceContent)}`,
+        "--evidence-digest",
+        sha256(finding.action.evidenceContent),
+        "--bound-revision-id",
+        finding.action.boundRevisionId,
+      ]);
+      settledFindingIds.add(finding.findingId);
+    }
+  };
+
   for (const node of script.nodes) {
     const digest = sha256(node.content);
     const args = [
@@ -112,6 +165,7 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     ) {
       intermediateManifestText = readFileSync(manifestPath, "utf8");
     }
+    settleDueFindingActions(node);
   }
 
   // S-CRASH manual-face assertion: the publisher's same-input replay is a
@@ -124,23 +178,13 @@ export function driveManualFace(libDir: string, script: FactScript): ManualFaceR
     }
   }
 
-  for (const finding of script.findings) {
-    if (finding.action === undefined) continue;
-    publisher(libDir, [
-      "finding-action",
-      "--finding-id",
-      finding.findingId,
-      "--action",
-      finding.action.action,
-      "--closed-by",
-      finding.action.closedBy,
-      "--evidence-ref",
-      `loop-artifact:v1:${finding.action.evidenceKind}:sha256:${sha256(finding.action.evidenceContent)}`,
-      "--evidence-digest",
-      sha256(finding.action.evidenceContent),
-      "--bound-revision-id",
-      finding.action.boundRevisionId,
-    ]);
+  // Every declared action must have landed at its settlement point — an
+  // unsettleable finding is a script/driver bug, never a silent drop.
+  const unsettled = script.findings.filter(
+    (finding) => finding.action !== undefined && !settledFindingIds.has(finding.findingId),
+  );
+  if (unsettled.length > 0) {
+    throw new Error(`findings never reached their settlement point: ${unsettled.map((f) => f.findingId).join(", ")}`);
   }
 
   return {
