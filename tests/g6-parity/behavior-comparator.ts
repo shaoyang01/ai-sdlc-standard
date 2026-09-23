@@ -136,20 +136,22 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
             // may OPEN a new generation — the FEEDBACK_DRIVEN_CHANGE record
             // drives a full rebuild from requirement-intake that is a
             // GENERATION RESTART, not a finding reflow (R2-H1-A). R3-H1: the
-            // backward jump is legitimate only when the SCRIPT declares the
-            // trigger at this round AND the journal carries the matching
-            // verified WP-1 record (type / CLASSIFIED status / generation
-            // binding / trigger round) AND the next intake dispatch shows the
-            // NEW GENERATION's attempt — the declaration alone, or the next
-            // node name alone, no longer admits. An undeclared backward jump
-            // after an admitting verdict still DIVERGEs.
+            // restart is legitimate only with the matching verified record
+            // (type / CLASSIFIED status / trigger round) AND the restart
+            // intake's new-generation attempt. R4-H2: a declared restart is
+            // an EXPECTATION — a declared trigger whose next dispatch is a
+            // forward node never restarted and must not ride the forward
+            // admission; the declaration forces the intake branch.
             const declaredTrigger = script.nodes.find(
               (n) => n.opensFeedbackChange === true && n.node === "solution-gate" && (n.attempt ?? 1) === attempt,
             );
             const forward = actualNext !== null && NODE_ORDER.indexOf(actualNext) > NODE_ORDER.indexOf("solution-gate");
             let okAdmit = forward;
             let restartDetail = "";
-            if (declaredTrigger !== undefined && actualNext === "requirement-intake") {
+            if (declaredTrigger !== undefined && actualNext !== "requirement-intake") {
+              okAdmit = false;
+              restartDetail = `declared WP-1 restart at round ${attempt} but the next dispatch is ${actualNext ?? "none"} (expected the generation restart to requirement-intake)`;
+            } else if (declaredTrigger !== undefined && actualNext === "requirement-intake") {
               // The declared restart trajectory: the script's next node after
               // the trigger is the new generation's intake, carrying ITS
               // attempt — a re-dispatch at the run's continuing attempt, not a
@@ -157,6 +159,15 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
               const declaredIntake = script.nodes[script.nodes.findIndex((n) => n === declaredTrigger) + 1];
               const expectedIntakeAttempt = declaredIntake?.attempt ?? 1;
               const observedIntakeAttempt = trace.terminals[verdictIdx + 1]?.attempt ?? null;
+              // R4-H1: the ORDERED generation binding — the i-th declared
+              // trigger (script declaration order) expects the record whose
+              // previousGeneration is i (each WP-1 advances exactly one
+              // generation); only the LAST declared wave is additionally
+              // anchored to the run's final generation (an undeclared extra
+              // record would drift it).
+              const declaredWaves = script.nodes.filter((n) => n.opensFeedbackChange === true);
+              const waveIndex = declaredWaves.findIndex((n) => n === declaredTrigger) + 1;
+              const isLastWave = waveIndex === declaredWaves.length;
               const record = trace.generationRestarts.find(
                 (item) =>
                   item.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
@@ -166,14 +177,13 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
               );
               const generationOk =
                 record !== undefined &&
-                record.previousGeneration !== null &&
-                record.previousGeneration >= 1 &&
-                record.previousGeneration + 1 === trace.generation;
+                record.previousGeneration === waveIndex &&
+                (!isLastWave || trace.generation === waveIndex + 1);
               const attemptOk = observedIntakeAttempt === expectedIntakeAttempt && expectedIntakeAttempt > 1;
               okAdmit = generationOk && attemptOk;
               restartDetail = record === undefined
                 ? "declared WP-1 restart but the journal carries no matching CLASSIFIED FEEDBACK_DRIVEN_CHANGE record for this trigger round"
-                : `declared WP-1 restart: record ${record.changeKind}/${record.status}/gen ${record.previousGeneration ?? "?"} (trigger ${record.triggerCapability}@${record.triggerAttempt}), run generation ${trace.generation}, next intake attempt ${observedIntakeAttempt ?? "none"} vs expected ${expectedIntakeAttempt}`;
+                : `declared WP-1 restart (wave ${waveIndex}/${declaredWaves.length}): record ${record.changeKind}/${record.status}/gen ${record.previousGeneration ?? "?"} (trigger ${record.triggerCapability}@${record.triggerAttempt}), run generation ${trace.generation}, next intake attempt ${observedIntakeAttempt ?? "none"} vs expected ${expectedIntakeAttempt}`;
             }
             if (!okAdmit) {
               divergences.push(

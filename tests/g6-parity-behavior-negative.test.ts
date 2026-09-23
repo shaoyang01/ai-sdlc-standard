@@ -21,7 +21,7 @@ import { makeStores } from "./g6-parity/runtime-face";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { FactScript } from "./g6-parity/types";
+import type { FactScript, NodeFact } from "./g6-parity/types";
 
 let passed = 0;
 let failed = 0;
@@ -298,11 +298,91 @@ async function feedbackRestartPin(): Promise<void> {
     const flipped = run.trace.terminals.map((t, i) => (i === restartIntakeIdx ? { ...t, attempt: 1 } : t));
     ok(dim7({ ...run.trace, terminals: flipped })?.verdict === "DIVERGE",
       "R3-H1: the new-generation intake re-dispatched at attempt 1 → DIVERGE");
+    // R4-H2: a declared restart is an EXPECTATION — the declaration must not
+    // ride the forward admission. Replace the restart intake with a forward
+    // (and, secondarily, a non-intake backward) node and strip the record.
+    const gateVerdictIdx = run.trace.terminals.findIndex(
+      (t) => t.capability === "solution-gate" && t.executionRole === "formal_verdict" && t.attempt === 1,
+    );
+    const forwardMasked = run.trace.terminals.map((t, i) =>
+      i === gateVerdictIdx + 1 ? { capability: "task-planning", executionRole: "primary", attempt: 1, status: "succeeded" } : t,
+    );
+    ok(dim7({ ...run.trace, terminals: forwardMasked, generationRestarts: [] })?.verdict === "DIVERGE",
+      "R4-H2: a declared restart whose next dispatch is FORWARD (no WP-1 record) → DIVERGE (no forward mask)");
+    const backwardMasked = run.trace.terminals.map((t, i) =>
+      i === gateVerdictIdx + 1 ? { capability: "solution-design", executionRole: "primary", attempt: 2, status: "succeeded" } : t,
+    );
+    ok(dim7({ ...run.trace, terminals: backwardMasked, generationRestarts: [] })?.verdict === "DIVERGE",
+      "R4-H2: a declared restart jumping to a non-intake node → DIVERGE");
   } finally {
     stores.runStore.close();
     rmSync(stores.root, { recursive: true, force: true });
     removeBehaviorWorkspace(workspace);
   }
+}
+
+// ── 4d. the two-generation feedback wave (R4-H1) ───────────────────────────
+// The store accepts consecutive CLASSIFIED WP-1 records (generations
+// 1→2→3): the ordered generation binding must admit the legal dual-restart
+// trajectory. Each declared trigger expects the record whose
+// previousGeneration is its wave index; only the LAST declared wave is
+// anchored to the run's final generation.
+const twoWaveNodes: NodeFact[] = [
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v1", version: "1.0.0" },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v1", version: "1.0.0" },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v1", version: "1.0.0", gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP", opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v2", version: "2.0.0", attempt: 2, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP", opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v3", version: "3.0.0", attempt: 3, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP" },
+  { node: "task-planning", artifactKind: "task_plan", content: "plan v3", version: "1.0.0" },
+  { node: "implementation", artifactKind: "implementation_record", content: "impl v3", version: "1.0.0" },
+  { node: "code-review", artifactKind: "review_summary", content: "review v3", version: "1.0.0" },
+  { node: "knowledge-sync", artifactKind: "knowledge_sync_result", content: "knowledge v3", version: "1.0.0" },
+];
+const twoWaveScript: FactScript = Object.freeze({
+  requirementId: "20260920-two-wave-feedback",
+  requestedDepth: "DEEP",
+  findings: [],
+  nodes: twoWaveNodes,
+});
+
+const twoWaveRestart = (previousGeneration: number, triggerAttempt: number) => ({
+  changeKind: "FEEDBACK_DRIVEN_CHANGE",
+  status: "CLASSIFIED",
+  previousGeneration,
+  triggerCapability: "solution-gate",
+  triggerAttempt,
+});
+
+{
+  const dim7 = (trace: BehaviorTrace) =>
+    compareBehaviorLayer(twoWaveScript, trace).dimensions.find((d) => d.dimension === "next-eligibility");
+  const legalTrace = traceFor(twoWaveScript, {
+    generationRestarts: [twoWaveRestart(1, 1), twoWaveRestart(2, 2)],
+    generation: 3,
+  });
+  ok(dim7(legalTrace)?.verdict === "MATCH", "R4-H1: the legal dual-generation wave (records gen 1 and 2, run at gen 3) MATCHes");
+  ok(compareBehaviorLayer(twoWaveScript, legalTrace).equal,
+    "R4-H1: the legal dual-generation trace passes all six behavior dimensions");
+  ok(dim7(traceFor(twoWaveScript, {
+    generationRestarts: [{ ...twoWaveRestart(5, 1) }, twoWaveRestart(2, 2)],
+    generation: 3,
+  }))?.verdict === "DIVERGE", "R4-H1: the first wave's record carrying the wrong generation → DIVERGE");
+  ok(dim7(traceFor(twoWaveScript, {
+    generationRestarts: [twoWaveRestart(1, 1), { ...twoWaveRestart(9, 2) }],
+    generation: 3,
+  }))?.verdict === "DIVERGE", "R4-H1: the last wave's record carrying the wrong generation → DIVERGE");
+  ok(dim7(traceFor(twoWaveScript, {
+    generationRestarts: [twoWaveRestart(1, 1), twoWaveRestart(2, 2)],
+    generation: 5,
+  }))?.verdict === "DIVERGE", "R4-H1: the run's final generation drifting past the last declared wave → DIVERGE");
+  ok(dim7(traceFor(twoWaveScript, {
+    generationRestarts: [twoWaveRestart(1, 1)],
+    generation: 2,
+  }))?.verdict === "DIVERGE", "R4-H1: the second declared wave with no journal record → DIVERGE");
 }
 
 async function main(): Promise<void> {
