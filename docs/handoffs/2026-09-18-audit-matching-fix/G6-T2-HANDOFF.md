@@ -101,6 +101,20 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
 5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
 
+## 2026-09-23 公司机会话：R2 复审 FAIL → 三修复（R2-H1-A/B、R2-H3 闭合，验证全绿）
+
+**R2 判定 FAIL**（@87c0b51，三阻塞均判据缺口，非机制回退）：R2-H1-A F 族合法 WP-1 反馈重建被 dim 7 误拒、R2-H1-B ABSENT 期望只查 status 放行伪造 reason/ref、R2-H3 ID 赦免只验集合成员资格未绑具体行（OPEN 行翻转、同 run 错行 ID 均放行）。R-G6-01 证据与 H2/H4 计划部分本轮判 CLOSED（证据真实、范围界定正确）；R1-H2/H4 维持 OPEN。
+
+**三修复（harness-only，生产零改动）**：
+1. **R2-H1-A**：dim 7 准入判据放行**脚本声明的 WP-1 新代际重启**（`opensFeedbackChange` 的 gate 轮，admitting verdict 后回到 requirement-intake 合法——代际重启非 finding 回流）；未声明的回退仍 DIVERGE。真实 F post-gate 复跑 MATCH；去声明负向 DIVERGE。
+2. **R2-H1-B**：dim 9 ABSENT 分支要求 status/reason/artifactRef **全 null**；任一非空即 DIVERGE（伪造证据拒判）。
+3. **R2-H3**：D-17 赦免从「集合成员」升级为**逐行 journal 证明**——赦免需同时满足：稳定身份一对一配对、行为闭合行（RESOLVED/ACCEPTED）、行的 id 正是 journal 绑定该身份的 store id、journal 状态为已闭合；OPEN 行/未配对/伪造 ID/同 run 兄弟行 ID/重复配对全部字面比较必败。runtime-face 回传 `findingProof`（身份键 → {id, status}），两 runner 传图。
+4. 采纳复审建议：runner 增**机器可判的「非 dim-9 分歧数必须为零」**汇总（0/50 红态与 50/50 桶不得再 mask 非 dim-9 回归——F 族回归正是这样藏了一轮）。
+
+**验证**：tsc 0；产物层 50/0；比较器负向 **38/0**（+5：OPEN 翻转、同 run 错行 ID、重复配对、两行正控等）；行为负向 **16/0**（+5：ABSENT 注入×2、ABSENT 正控、F 真实 WP-1 重启、去声明负向）；行为层矩阵：**非 dim-9 分歧 0**、桶 50/50 已知原因 0 新因、超限 4/4。合并判定 0/50 仍为 A′ 预期红态（等 R-G6-01 生产修复）。
+
+剩余（每步先请 Current User 确认）：R3 独立复审（本 prompt 见会话）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
