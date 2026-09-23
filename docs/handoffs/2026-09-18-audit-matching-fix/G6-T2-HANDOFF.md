@@ -115,6 +115,19 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：R3 独立复审（本 prompt 见会话）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口。
 
+## 2026-09-23 家用机会话：R3 复审 FAIL → R3-H1 修复（WP-1 重启准入改挂 journal 证据）
+
+**R3 判定 FAIL**（外部只读副本 @b9cf3db，一项阻塞）：**R3-H1（R2-H1-A 同一根因未闭环）**——dim 7 的 WP-1 新代际重启放行仍仅凭脚本声明 + 下一节点名：屏蔽 WP-1 记录证据或把第二代 intake 的 attempt 2→1 注入，仍报 MATCH。R2-H1-B、R2-H3 及全部已 CLOSED 面复审判 CLOSED 不回归（负向 38/0、16/0；产物 50/0；桶 50/50 零新因；非 dim-9 仪器灵敏度实测：注入缺 scan 计数为 2、普通失败计数强制 0 仍退出 1）。R1-H2/H4 维持 OPEN。
+
+**修复（harness-only，生产零改动；@d6a6432 已推）**：
+- **behavior-face**：`BehaviorTrace` 增 `generationRestarts`（跑完后从 journal 回读 WP-1 change 记录：changeKind / CLASSIFIED 状态 / previousGeneration 代际绑定 / trigger 终态——以记录自身 sourceRef 的 observedAt 与 journal 终态 join，歧义或缺失即无 trigger）与 `generation`（run 最终代际）。证据取自 store 回读而非 driver 内存。
+- **behavior-comparator**：dim 7 admitting 分支的放行三条件齐备才 admit——① 脚本在该 gate 轮声明 opensFeedbackChange 且下一节点为 intake（原有）；② journal 存在匹配的已验证记录（FEEDBACK_DRIVEN_CHANGE + CLASSIFIED + previousGeneration≥1 且 +1 = run 最终代际 + trigger 轮一致）；③ 重启 intake 的观测 attempt = 脚本声明 attempt 且 >1（第二代重派必须是 run attempt 计数延续，attempt 1 是伪造重启）。任缺即 DIVERGE；未声明回退仍 DIVERGE。
+- **behavior-negative**：+10 例（16→**26/0**）：真实 F post-gate 跑证记录在 trace 内（FEEDBACK_DRIVEN_CHANGE/CLASSIFIED/gen 1→2/trigger solution-gate@1）+ 重启 intake attempt 2 观测；剥离记录、错记录类型、非 CLASSIFIED、错/缺代际绑定、错 trigger 轮/能力、attempt 2→1 全部 DIVERGE。
+
+**验证**：tsc 0；行为负向 **26/0**；产物层 **50/0**；比较器负向 **38/0**；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、**非 dim-9 分歧 0**、超限 4/4，退出码 1 预期）；并行全量套件（R3 前基线）1767 passed/0 failed，唯一红文件=按 A′ 设计红的行为矩阵（171 文件）。
+
+剩余（每步先请 Current User 确认）：R4 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R3-H1 闭环 + R2-H1-B/H3 不回归 + 攻击「修复是否引入新恒真/恒假」：WP-1 放行是否过严错过合法多变体、attempt>1 是否过严、observedAt join 的确定性）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
