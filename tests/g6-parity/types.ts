@@ -151,6 +151,14 @@ export interface FactScript {
    * self-consistency check refuses on the same manifest).
    */
   readonly tamperTakeoverBaseline?: boolean;
+  /**
+   * Behavior-layer only: the chain kernel's persisted backward-jump budget
+   * (the runtime entry's own `maxRegateRounds` option, forwarded verbatim).
+   * Set on the over-limit pause waves so the entry's budget bites once the
+   * scripted rounds are spent — the knob belongs to the entry itself (the
+   * same class as maxDispatches), never a shadow substitution.
+   */
+  readonly maxRegateRounds?: number;
 }
 
 /** Matrix coordinates (frozen spec §3). */

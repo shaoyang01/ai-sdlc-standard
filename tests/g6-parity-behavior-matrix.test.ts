@@ -27,6 +27,7 @@ import {
   coreManifestStateScenarios,
   coreCrashResumeScenarios,
   coreInitClassScenarios,
+  coreOverLimitPauseScenarios,
 } from "./g6-parity/fact-scripts";
 
 let passed = 0;
@@ -133,7 +134,51 @@ async function main(): Promise<void> {
   console.log("");
   console.log(`==== g6 parity behavior summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9 — 6 dims judged by the production-entry trace)`);
-  if (failed > 0) process.exit(1);
+
+  // ── Over-limit pause waves — behavior layer only, single-listed ──────────
+  // A FAIL/BLOCKED_UNKNOWN verdict authors no gate revision (WP6), so the
+  // pending gate row's triple drifts between the faces — the artifact layer
+  // cannot parity these waves (the D-7/D-17 analysis). They assert the
+  // production entry's trajectory AND its durable over-limit terminal
+  // (REGATE_ROUND_BUDGET_EXHAUSTED — the journal fact, read from the run
+  // snapshot), and are counted in their OWN line: never folded into the
+  // artifact-layer pass count (the R2 honesty constraint).
+  let pausePassed = 0;
+  let pauseFailed = 0;
+  for (const spec of coreOverLimitPauseScenarios()) {
+    const script = spec.build();
+    const workspace = makeBehaviorWorkspace();
+    try {
+      const behaviorStores = makeStores(`${spec.id}-behavior`);
+      try {
+        const run = await driveBehaviorLayer(behaviorStores, script, workspace);
+        const behavior = compareBehaviorLayer(script, run.trace);
+        const diverged = behavior.dimensions.filter((d) => d.verdict === "DIVERGE");
+        const overLimit = run.trace.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED";
+        if (diverged.length === 0 && overLimit) {
+          pausePassed += 1;
+          console.log(`  ✓ ${spec.id}: behavior 6/6 MATCH; durable over-limit terminal ${run.trace.blockingReasonCode}`);
+        } else {
+          pauseFailed += 1;
+          console.error(
+            `  ✗ ${spec.id}: behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}; over-limit terminal ${run.trace.blockingReasonCode ?? "none"}`,
+          );
+        }
+      } finally {
+        behaviorStores.runStore.close();
+        rmSync(behaviorStores.root, { recursive: true, force: true });
+      }
+    } catch (error) {
+      pauseFailed += 1;
+      console.error(`  ✗ ${spec.id}: harness error ${(error as Error).message}`);
+    } finally {
+      removeBehaviorWorkspace(workspace);
+    }
+  }
+  console.log(`==== g6 parity over-limit pause (behavior layer only): ${pausePassed} passed, ${pauseFailed} failed ====`);
+  console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count)`);
+
+  if (failed > 0 || pauseFailed > 0) process.exit(1);
 }
 
 void main();

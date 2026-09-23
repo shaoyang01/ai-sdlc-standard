@@ -95,13 +95,16 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
         return { dimension, verdict: same ? "MATCH" : "DIVERGE", detail: same ? `reflow targets match the findings' earliest nodes (${actualTargets.join(",") || "none"})` : `runtime reflowed to [${actualTargets.join(",")}] vs findings' earliest [${expectedTargets.join(",")}]` };
       }
       case "final-handoff": {
-        // The terminal handoff state: the completed chain's last node is the
-        // knowledge-sync terminal (the finished state); a blocked chain stops
-        // at its blocking point.
+        // The terminal handoff state: a completing chain's last node is the
+        // knowledge-sync terminal (the finished state); a non-completing
+        // script — its last gate verdict non-passing (the over-limit pause) —
+        // parks at the last scripted node with an honest non-success stop.
         const lastTerminal = trace.terminals[trace.terminals.length - 1];
         const expectedLast = script.nodes[script.nodes.length - 1]?.node;
-        const same = lastTerminal?.capability === expectedLast && trace.finalStatus === "success";
-        return { dimension, verdict: same ? "MATCH" : "DIVERGE", detail: same ? `terminal at ${lastTerminal?.capability} (success)` : `terminal at ${lastTerminal?.capability ?? "none"} vs expected ${expectedLast ?? "none"}` };
+        const terminal = expectedTerminal(script);
+        const stoppedRight = terminal.success ? trace.finalStatus === "success" : trace.finalStatus !== "success";
+        const same = lastTerminal?.capability === expectedLast && stoppedRight;
+        return { dimension, verdict: same ? "MATCH" : "DIVERGE", detail: same ? `terminal at ${lastTerminal?.capability} (${terminal.success ? "success" : "non-success stop"})` : `terminal at ${lastTerminal?.capability ?? "none"} vs expected ${expectedLast ?? "none"}${terminal.success ? "" : " with a non-success stop"}` };
       }
       default:
         // Dims 3/4/5 (artifact-paths / version-state / finding-identity) are

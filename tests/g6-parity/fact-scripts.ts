@@ -453,6 +453,126 @@ export function coreMultiRoundScenarios(): ScenarioSpec[] {
 }
 
 /**
+ * The over-limit pause wave (behavior-layer only — the runtime's answer to a
+ * spent round budget; the manual flow answers the same moment with "the
+ * person stops waiting"). Two non-passing adjudications at one depth
+ * (FAIL×2 or BU×2); the second failing verdict's reflow jump is the budget's
+ * denial point. A FAIL/BLOCKED_UNKNOWN verdict authors no gate revision
+ * (WP6), so the pending gate row's triple drifts between the faces — the
+ * artifact layer cannot parity this wave (the D-7/D-17 analysis) and the
+ * runner lists it as a trajectory assertion only.
+ *
+ * The finding model is the multi-round wave's persistent set truncated: F01
+ * registers at round 1's scan (the FAIL verdict's synthesized SOLUTION
+ * reflow row — semantics ⑩) and closes at round 2's design revision; F02
+ * registers at round 2's scan and never closes (no confirming round exists),
+ * so the run parks with the OPEN set that authorizes the restart the budget
+ * refuses. That OPEN set is the manual face's stop shape: the human stopped,
+ * repair pending.
+ */
+function waveWithOverLimitPause(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+  verdict: "FAIL" | "BLOCKED_UNKNOWN",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({
+      schema: "loop-capability-findings:v1",
+      findings: [{ finding_id: `${requirementId}-${key}` }],
+    })}\n`;
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
+  const failedGate = (v: number, ledger: string): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "FAIL",
+      // BLOCKED_UNKNOWN carries no depth (the envelope's explicit null);
+      // FAIL carries the requested depth.
+      ...(verdict === "FAIL"
+        ? { decisionStatus: "CONFIRMED" as const, decisionDepth: depth }
+        : { decisionStatus: "BLOCKED_UNKNOWN" as const }),
+      ledgerContent: ledger,
+      // The round's finding invalidates the examined design current.
+      staleNodes: ["solution-design"],
+    });
+  const finding = (key: string, registeredRound: number): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${registeredRound}`,
+      // The finding's evidence IS its round's scan ledger blob (the manual
+      // face cites the same ref, so the takeover pairing is 1:1 per round).
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
+      gateRound: registeredRound,
+      closedAtRound: registeredRound + 1,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${registeredRound + 1}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${registeredRound + 1}`,
+      }),
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    failedGate(1, ledgerFor("F01")),
+    design(2),
+    failedGate(2, ledgerFor("F02")),
+  ];
+  const findings: FindingFact[] = [finding("F01", 1), finding("F02", 2)];
+  return { nodes, findings };
+}
+
+/**
+ * S-CORE over-limit pause scenarios (4, behavior-layer only): the round
+ * budget (maxDesignRounds 2 — one restart authorized, the second denied)
+ * spends itself on two non-passing adjudications and the runtime parks
+ * durably; the manual face's person simply stops. FAIL spans all three
+ * depths; BLOCKED_UNKNOWN once at STANDARD.
+ */
+export function coreOverLimitPauseScenarios(): ScenarioSpec[] {
+  const waves: readonly { depth: "LIGHT" | "STANDARD" | "DEEP"; verdict: "FAIL" | "BLOCKED_UNKNOWN"; tag: string }[] = [
+    { depth: "LIGHT", verdict: "FAIL", tag: "FAIL" },
+    { depth: "STANDARD", verdict: "FAIL", tag: "FAIL" },
+    { depth: "DEEP", verdict: "FAIL", tag: "FAIL" },
+    { depth: "STANDARD", verdict: "BLOCKED_UNKNOWN", tag: "BU" },
+  ];
+  const specs: ScenarioSpec[] = [];
+  for (const wave of waves) {
+    const id = `S-CORE-${wave.depth}-${wave.tag}-overlimit-pause`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: wave.depth, verdict: wave.verdict, round: "re-gate" }),
+        prunes:
+          "behavior layer only: a FAIL/BLOCKED_UNKNOWN verdict authors no gate revision, so the pending gate row's triple drifts between faces (D-7/D-17 analysis) — trajectory assertion, NOT counted in the artifact-layer pass count. Round budget maxDesignRounds 2: one restart authorized, the second denied → REGATE_ROUND_BUDGET_EXHAUSTED",
+        build: () => {
+          const built = waveWithOverLimitPause(`20260920-${id}`, wave.depth, wave.verdict);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: wave.depth,
+            nodes: built.nodes,
+            findings: built.findings,
+            // The entry's own budget knob (ProductionRunDeps.maxRegateRounds):
+            // one persisted backward jump authorized, the second denied.
+            maxRegateRounds: 1,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
  * B — the review-local rework wave (wms-monitor production sample: 22 of 25
  * code-review findings in lifecycle-actions + all 4 in config-page-usability).
  * An IMPLEMENTATION-class finding discovered at the code-review round: its

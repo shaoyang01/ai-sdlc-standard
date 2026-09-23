@@ -246,6 +246,10 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
       prepareWorkspace: async () => ({ workspacePath: workspace }),
       ...(boundedRuns ? { maxDispatches: 1 } : {}),
+      // The over-limit pause waves spend the entry's OWN backward-jump budget:
+      // the option is forwarded verbatim from the script — the same knob class
+      // as maxDispatches, never a shadow substitution.
+      ...(script.maxRegateRounds !== undefined ? { maxRegateRounds: script.maxRegateRounds } : {}),
     } as never);
     return {
       final_status: result.final_status,
@@ -303,6 +307,19 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     return true;
   };
 
+  // The journal's durable block (the over-limit pause's
+  // REGATE_ROUND_BUDGET_EXHAUSTED): an honest terminal that only an explicit
+  // release decision (RISK_ACCEPTED / SCOPE_RESET — releaseRunRegateBlock) can
+  // advance. The manual face's "the person stops waiting" issues no release,
+  // so re-invoking would only spin on the same permit denial (recovery keeps
+  // reporting the regate target as the next point). Read from the run
+  // snapshot — the same channel the release guard reads; the invocation
+  // result does not carry the reason on its final-return path.
+  const durableBlockReason = (): string | null => {
+    const snapshot = stores.runStore.getSnapshot(runIdOf(script));
+    return snapshot?.state.blockingReasonCode ?? null;
+  };
+
   let outcome = await invokeProduction();
   // The staged resume: after a run that stopped, close whatever is now
   // closable — the manual face publishes its finding-action between
@@ -312,7 +329,7 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
   // the WP-1 record advanced the state, or the stop carries a live next point
   // (the safety-bound stop of boundedRuns — plain progress resumes). A stop
   // with nothing advancing and no live next point is an honest terminal.
-  for (let round = 0; round < 128; round += 1) {
+  for (let round = 0; round < 128 && durableBlockReason() === null; round += 1) {
     const advanced = recordFeedbackChangeIfDue();
     const openBefore = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN").length;
     settleOpenFindings();
@@ -370,7 +387,7 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       reflowTargets,
       finalStatus: outcome.final_status,
       chainStatus: outcome.chain_status,
-      blockingReasonCode: outcome.blocking_reason_code ?? null,
+      blockingReasonCode: outcome.blocking_reason_code ?? durableBlockReason(),
       nextExecutionPoint: outcome.next_execution_point === null ? null : outcome.next_execution_point.capability,
     },
     manifestText: null,
