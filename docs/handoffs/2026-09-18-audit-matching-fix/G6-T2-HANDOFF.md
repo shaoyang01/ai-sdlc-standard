@@ -101,6 +101,15 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 4. **收尾**：全量回归 → 单 PR（base feature/loop-runtime-v1，分支保护禁直推）→ R1 自证 → 独立复审 prompt（**会话内展示、不落文档**；逐字遵循 docs/handoffs/2026-09-09-g5-t1/review-request.md 模板；评审范围必须含 D-7/D-17 表示分歧发现 + 行为层七条生产语义实证 + 账目对账）→ PASS 后请 Current User 授权合并。
 5. 远期不变：G6 完成门 = 全矩阵通过 + 无 shadow 替代生产入口；run8/C03-E/C05 单独授权。挂账两项（maxDesignRounds 默认 2→3；journal 回流显式上限）不在 G6 内改。
 
+## 2026-09-23 公司机会话：M2 第 3 步——PWR×Re-Gate 补建 3 + 账目对账 + 验收报告骨架
+
+- **账目对账结论**（程序化提取全部场景坐标 vs 规格 §3 逐行比对，提取脚本结论已复核）：规格 52 = S-CORE 36 + S-INIT 8 + S-MANIFEST 2 + S-CRASH 6；S-INIT/S-MANIFEST/S-CRASH 与建成 1:1。S-CORE 36 行 = **27 建成行**（24 原有 + 3 补建）+ **5 规格剔除行**（升档×BU×2、BU×Re-Gate×3）+ **4 退化行**（DEEP×升档：规格 round 语义限定升档仅 LIGHT→STANDARD / STANDARD→DEEP，hard ceiling）。34 个 S-CORE 场景 = 27 行 + **7 个同行加挂**（B×3 与首轮 PASS 行、E/F×3 与 DEEP-PASS-Re-Gate 行、D 与 DEEP-FAIL-Re-Gate 行，各为「同行不同粒度/不同授权路径」）。产物层合计 **50 = 52−5+3**；行为层单列 4（FAIL×3 在 A 已覆盖行加第二种粒度、BU×1 在剔除行作演示）。
+- **对账发现 + Current User 裁决**：**PWR×Re-Gate ×3（LIGHT/STANDARD/DEEP）无场景且无剔除依据**——M2 家族规划遗漏（规格 36 行内的合法坐标：re-gate 终裁 PWR 无语义障碍）。裁决选项 A **补建**（备选 B「事后列剔除」无规格依据、削弱完成门成色，弃）。落地形态 = C 族 re-gate 授权（review 发现 SOLUTION finding → reflow → re-gate 闭合绑 design v2）+ PWR 首轮（scan finding 风险接受）。
+- **补建期两轮修复（新实证生产语义）**：① **手动面 finding-action 结算点镜像**——从「末尾批处理」改为「按结算点在声明之间发布」，镜像 runtime `settleFindingActions` 的 **stage-local 轮次基数**（gate 段用 gateRound、code-review 段用 reviewRound，互不共享；Current User 2026-09-22 流程模型定案的同一原则）。动因：publisher 校验 accept 时读 gate **当前**行，末尾批处理会把 PWR accept 读到后续 re-gate 的 PASS 行而拒收（ADMISSION_DENIED）。50 场景零回归，且更贴近真实手动流程形状。② **finding 注册的 source revision 必须 ACTIVE 且为当前指针**（loop-run-store.ts appendFinding）——PWR 轮 scan finding 注册即失效被审 design v1（M1 已实证、手动面 staleNodes 镜像），故 PWR×Re-Gate 波中 review 发现（CR-F01）锚定改挂被审 **implementation v1**（§5.1 允许任意节点产物作发现锚），earliest（回流目标）不变。
+- **验证**：tsc 0；产物层 **50 passed / 0 failed**；行为层 **50/0 合并判定 + 4/0 单列**；负向 28/0；全量 npm test 首跑 1767 passed/0 failed 但触发已知环境抖动（loop-delivery-checkpoint-store.test.ts 并行满载间歇 1 文件失败，failed_file_count 1），隔离复跑 **268/0 恢复**，全量复跑中（干净数字待回填报告 §2.1）。改动面仍限 tests/ + docs，生产代码零改动。
+- **验收报告骨架落盘**：`docs/reports/g6-d09004-parity-acceptance-report.md`（规格 §7 格式：逐场景 54 节 / 52 行×九维汇总表 / 账目对账 / D-7/D-17 finding-identity 说明 / 十条生产语义 + 本轮新实证 / 未归因 diff 单列（无）/ 剔除项清单（含 BU×Re-Gate 实证张力备注）/ 完成门三项判定 = PASS·PASS·未申请）。
+- 剩余（每步先请 Current User 确认）：本 beat 提交（feat PWR×Re-Gate + docs 交接 + report）→ 全量复跑干净后**推送授权** → 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审 prompt（会话内展示不落文档；范围必须含 D-7/D-17 + 十条 + ⑧⑨⑩ + finding 注册货币性新实证 + 账目对账 + PWR×Re-Gate 补建裁决记录）。
+
 ## 2026-09-23 公司机会话：M2 第 2 步完成——超限暂停 4（行为层单列，全量回归绿）
 
 - 落地超限暂停 4（`S-CORE-LIGHT/STANDARD/DEEP-FAIL-overlimit-pause` + `S-CORE-STANDARD-BU-overlimit-pause`，行为层 only）：两轮非收敛裁决后，轮数预算拒绝第二次重启，runtime 落 **durable 终态 `REGATE_ROUND_BUDGET_EXHAUSTED`**（journal 持久 block、零 dispatch 落定；该码由 run 快照 `blockingReasonCode` 读出——invocation 终态返回不携带它）。合并判定 **47/0 无回归** + 单列 **4/0**；产物层 47/0、负向 28/0、tsc 0、全量 npm test **1767 passed / 0 failed（170 文件，960s）**。改动面仅 tests/（+201/−8，5 文件），**生产代码零改动**。
@@ -119,7 +128,7 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 - 比较器（behavior-comparator.ts）：earliest-reroute 期望目标在 opensFeedbackChange 时含 requirement-intake（feedback 整链重建是代际重启、非 finding 回流）。
 - runner 两处修正：catchUpRegime 传参（reconcile/crash 的 D-7/D-17 豁免——行为层 runner 原本漏传，注册前必修）；S-MANIFEST-corrupt 的 expectStop 处理（fail-closed 单级判别按冻结规格，行为层只做轨迹回放、输出单列）。
 - 新实证生产语义（评审必含，接七条之后的第 8/9/10 条）：⑧ **活动执行期禁止 finding 转换**——finding 闭合的合法窗口只在 invocation 之间；⑨ **invocation 内回流到 requirement-intake 无法重导 origin 规范源**（loop-capability-entry.ts point 0 检查 + 每迭代输入采用只认前驱输出、point 0 无前驱），只有跨 invocation 边界的 deriveDispatchCommand 推导——requirement 级回流必须跨 run 边界；⑩ **FAIL/ESCALATED verdict 合成 SOLUTION reflow 行**（带边、立即失效当前 design），agent 声明的非 SOLUTION 行不抑制合成（D 波因此多一行，harness 显式闭合）。
-- 剩余（每步先请 Current User 确认；第 2 步已于 2026-09-23 完成，见上「M2 第 2 步完成」节）：第 3 步账目对账 + 验收报告骨架 docs/reports/g6-d09004-parity-acceptance-report.md（规格 §7）→ 第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审（范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）。
+- 剩余（每步先请 Current User 确认；第 2 步已于 2026-09-23 完成，见上两节；第 3 步亦已完成）：第 4 步单 PR（base feature/loop-runtime-v1）+ R1 自证 + 独立复审（范围含 D-7/D-17 + 七条 + ⑧⑨⑩ + 账目对账）。
 
 ## 2026-09-22 收工状态（接 2026-09-21 晚进展；公司机会话第二、三波）
 
