@@ -156,12 +156,14 @@ export interface StoreLevelResult {
   readonly manifestPath: string;
   readonly manifestText: string;
   /**
-   * The run's STORE-assigned finding ids (journal fact, read from the store at
-   * the end). The artifact comparator's D-17 id exemption is proven against
-   * this set (R1-H3): a closure row's id flip is forgiven only for an id that
-   * is actually one of these.
+   * The run's journal finding PROOF (R2-H3): the store-assigned finding id
+   * and lifecycle status per stable cross-face identity (discovering node ::
+   * evidence reference), read from the store at the end. The artifact
+   * comparator's D-17 id exemption is proven PER ROW against this map — a
+   * closure row's id flip is forgiven only for the id the journal binds to
+   * that row's identity.
    */
-  readonly findingIds: readonly string[];
+  readonly findingProof: ReadonlyMap<string, { readonly id: string; readonly status: string }>;
 }
 
 /** One execution point's last succeeded output (canonical-advance + restart inputs). */
@@ -688,6 +690,11 @@ export function driveRuntimeStoreLevel(
   return {
     manifestPath,
     manifestText,
-    findingIds: stores.runStore.listFindings(runId).map((finding) => finding.findingId),
+    findingProof: new Map(
+      stores.runStore.listFindings(runId).map((finding) => [
+        `${finding.sourceCapability}::${finding.evidenceRef}`,
+        { id: finding.findingId, status: finding.status },
+      ]),
+    ),
   };
 }

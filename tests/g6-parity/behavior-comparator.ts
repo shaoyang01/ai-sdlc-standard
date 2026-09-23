@@ -132,8 +132,20 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
           const admitting =
             (gate.gateResult === "PASS" || gate.gateResult === "PASS_WITH_RISK") && gate.decisionStatus === "CONFIRMED";
           if (admitting) {
-            if (actualNext === null || NODE_ORDER.indexOf(actualNext) <= NODE_ORDER.indexOf("solution-gate")) {
-              divergences.push(`round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"}`);
+            // The WP-1 feedback path (the F family): an admitting gate round
+            // may OPEN a new generation — the FEEDBACK_DRIVEN_CHANGE record
+            // drives a full rebuild from requirement-intake that is a
+            // GENERATION RESTART, not a finding reflow (R2-H1-A). The backward
+            // jump is legitimate only when the script declares the trigger at
+            // this round; an undeclared backward jump after an admitting
+            // verdict still DIVERGEs.
+            const feedbackRestart = script.nodes.some(
+              (n) => n.opensFeedbackChange === true && n.node === "solution-gate" && (n.attempt ?? 1) === attempt,
+            );
+            const forward = actualNext !== null && NODE_ORDER.indexOf(actualNext) > NODE_ORDER.indexOf("solution-gate");
+            const okAdmit = feedbackRestart ? actualNext === "requirement-intake" : forward;
+            if (!okAdmit) {
+              divergences.push(`round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"}${feedbackRestart ? " (expected the declared WP-1 generation restart to requirement-intake)" : ""}`);
             }
             continue;
           }
@@ -192,10 +204,13 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
         let handoffOk: boolean;
         let handoffDetail: string;
         if (expected.status === "ABSENT") {
-          handoffOk = observed.status === null;
-          handoffDetail = observed.status === null
-            ? "chain not completed: no handoff artifact, as the script's terminal requires"
-            : `unexpected handoff artifact ${observed.status}/${observed.reason ?? "-"}`;
+          // R2-H1-B: ABSENT means the entry built NO handoff artifact — the
+          // whole triple must be null. A non-null reason or artifactRef on a
+          // null status is fabricated evidence and must not pass as MATCH.
+          handoffOk = observed.status === null && observed.reason === null && observed.artifactRef === null;
+          handoffDetail = handoffOk
+            ? "chain not completed: no handoff artifact (status/reason/ref all null), as the script's terminal requires"
+            : `ABSENT expectation violated: observed status=${String(observed.status)} reason=${String(observed.reason)} ref=${observed.artifactRef === null ? "null" : "present"}`;
         } else if (observed.status === null) {
           // Missing evidence refuses to judge — never a MATCH.
           handoffOk = false;

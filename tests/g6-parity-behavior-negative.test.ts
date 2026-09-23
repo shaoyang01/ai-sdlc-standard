@@ -14,7 +14,7 @@
 // reads the code-review event's gateResult, which the event contract pins to
 // NOT_APPLICABLE for non-formal_verdict executions).
 
-import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
+import { coreFirstRoundScenarios, coreFeedbackRegateScenarios, coreOverLimitPauseScenarios } from "./g6-parity/fact-scripts";
 import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace, type BehaviorTrace } from "./g6-parity/behavior-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
@@ -210,8 +210,53 @@ async function realRunPin(): Promise<void> {
   }
 }
 
+// ── 4b. ABSENT means ALL-NULL (R2-H1-B) ──────────────────────────────────
+// The chain never completed, so the entry builds no handoff artifact: a
+// non-null reason or artifactRef on a null status is fabricated evidence.
+{
+  const overSpec = coreOverLimitPauseScenarios().find((s) => s.id === "S-CORE-STANDARD-FAIL-overlimit-pause")!;
+  const overScript = overSpec.build();
+  for (const [label, handoff] of [
+    ["reason", { status: null, reason: "injected reason", artifactRef: null }],
+    ["ref", { status: null, reason: null, artifactRef: "loop-artifact:v1:governance_tail_result:sha256:" + "d".repeat(64) }],
+  ] as const) {
+    const dim9 = compareBehaviorLayer(overScript, traceFor(overScript, { handoff })).dimensions.find((d) => d.dimension === "final-handoff");
+    ok(dim9?.verdict === "DIVERGE", `dim 9: ABSENT expectation with a fabricated ${label} → DIVERGE`);
+  }
+  const clean = compareBehaviorLayer(overScript, traceFor(overScript)).dimensions.find((d) => d.dimension === "final-handoff");
+  ok(clean?.verdict === "MATCH", "dim 9: the over-limit ABSENT triple (all null) MATCHes");
+}
+
+// ── 4c. the WP-1 generation restart (R2-H1-A) ─────────────────────────────
+// The F family's feedback path legitimately returns to requirement-intake
+// after an ADMITTING gate verdict — a declared new-generation restart, not a
+// finding reflow. The real run must pass; the same trajectory against a
+// script with no declared WP-1 trigger must DIVERGE.
+async function feedbackRestartPin(): Promise<void> {
+  const fSpec = coreFeedbackRegateScenarios().find((s) => s.id === "S-CORE-DEEP-PASS-feedback-regate-post-gate")!;
+  const fScript = fSpec.build();
+  const workspace = makeBehaviorWorkspace();
+  const stores = makeStores("negative-feedback");
+  try {
+    const run = await driveBehaviorLayer(stores, fScript, workspace);
+    const dim7 = compareBehaviorLayer(fScript, run.trace).dimensions.find((d) => d.dimension === "next-eligibility");
+    ok(dim7?.verdict === "MATCH", "dim 7: the declared WP-1 generation restart to requirement-intake MATCHes (F post-gate)");
+    const undeclared: FactScript = Object.freeze({
+      ...fScript,
+      nodes: fScript.nodes.map((node) => (node.opensFeedbackChange === true ? { ...node, opensFeedbackChange: false } : node)),
+    });
+    const dim7b = compareBehaviorLayer(undeclared, run.trace).dimensions.find((d) => d.dimension === "next-eligibility");
+    ok(dim7b?.verdict === "DIVERGE", "dim 7: the same restart WITHOUT the declared WP-1 trigger DIVERGEs");
+  } finally {
+    stores.runStore.close();
+    rmSync(stores.root, { recursive: true, force: true });
+    removeBehaviorWorkspace(workspace);
+  }
+}
+
 async function main(): Promise<void> {
   await realRunPin();
+  await feedbackRestartPin();
   console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
   if (failed > 0) process.exit(1);

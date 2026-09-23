@@ -27,20 +27,24 @@ import {
  *   - D-17: when a finding closure lands, the row's authority flips to the
  *     runtime face and the row id becomes the store-assigned id; the
  *     evidence (reference + digest + discovering node) is the identity.
- *     R1-H3 remediation: the id flip is forgiven ONLY when the runtime id is
- *     PROVEN store-bound (`storeFindingIds` — the run's journal finding ids,
- *     passed by the caller from the store) AND the row pairs with a manual
- *     row on the stable identity (discovered_at + evidence_ref). An OPEN
- *     row, an unpaired row, or any forged id is compared literally.
+ *     R1-H3/R2-H3 remediation: the id flip is forgiven PER ROW only when the
+ *     row's id is proven store-bound BY THE JOURNAL (`findingProof` — the
+ *     per-identity {store id, lifecycle status} map the driver passes), the
+ *     row is a closure row (RESOLVED/ACCEPTED), and the pairing is
+ *     one-to-one. An OPEN row, an unpaired row, a forged id, or an id
+ *     borrowed from a sibling row is compared literally.
  */
 export interface CompareOptions {
   readonly catchUpRegime?: boolean;
   /**
-   * The run's store-assigned finding ids (journal fact, read from the run
-   * store by the driver). required for the catch-up regime: without it NO
-   * finding-id exemption applies (fail closed).
+   * The run's journal finding proof, keyed by the stable cross-face identity
+   * (discovered_at :: evidence_ref): the store-assigned finding id and its
+   * lifecycle status. R2-H3: the D-17 id flip is forgiven PER ROW only when
+   * the row's id IS the proven store id for that row's identity, the row is
+   * a CLOSURE row (RESOLVED/ACCEPTED — the authority-flipped rows), and the
+   * pairing is one-to-one. Without this proof there is NO exemption.
    */
-  readonly storeFindingIds?: ReadonlySet<string>;
+  readonly findingProof?: ReadonlyMap<string, { readonly id: string; readonly status: string }>;
 }
 
 /** T5-frozen normalization: drop face-only progress/execution fields. */
@@ -114,31 +118,56 @@ const ARTIFACT_LAYER_DIMENSIONS: ReadonlySet<string> = new Set([
  * A digest/version/artifactPath difference is a real divergence here — the
  * store-level driver carries the manual face's raw digests.
  */
+/** The manifest row statuses whose authority has flipped to the runtime face
+ *  (the store's RESOLVED / ACCEPTED_RISK, mapped by the projector). Only
+ *  these closure rows may carry the D-17 id flip. */
+const CLOSURE_ROW_STATUSES: ReadonlySet<string> = new Set(["RESOLVED", "ACCEPTED"]);
+
 /**
- * R1-H3 remediation: the D-17 closure-row id flip, forgiven ONLY under proof.
- * A runtime finding row is forgiven when (a) its discovering node + evidence
- * reference pair with a manual row (the stable cross-face identity) and
- * (b) its id is one of the run's STORE-assigned finding ids (the journal
- * fact). Both sides then canonicalize the forgiven pair's id to the stable
+ * R2-H3 remediation: the D-17 closure-row id flip, forgiven per row under
+ * proof. A runtime finding row is forgiven when ALL hold:
+ *   (a) its stable identity (discovered_at + evidence_ref) pairs with
+ *       exactly one manual row (one-to-one on both sides);
+ *   (b) the row is a CLOSURE row (status RESOLVED/ACCEPTED — OPEN rows keep
+ *       their literal id);
+ *   (c) its id IS the store-assigned id the journal proves for THAT identity
+ *       (another row's id in the same run is not proof);
+ *   (d) the journal says that finding is closed (RESOLVED/ACCEPTED_RISK).
+ * Both sides then canonicalize the forgiven pair's id to the stable
  * identity. Every other row keeps its literal id — an OPEN row, an unpaired
- * row, or a forged id fails the full-document comparison.
+ * row, a forged id, or an id borrowed from a sibling row fails.
  */
 function applyVerifiedFindingIdExemption(
   manual: Record<string, unknown>,
   runtime: Record<string, unknown>,
-  storeFindingIds: ReadonlySet<string> | undefined,
+  findingProof: ReadonlyMap<string, { readonly id: string; readonly status: string }> | undefined,
 ): void {
+  if (findingProof === undefined) return; // no proof, no exemption (fail closed)
   const manualRows = Array.isArray(manual.finding_index) ? (manual.finding_index as Record<string, unknown>[]) : [];
   const runtimeRows = Array.isArray(runtime.finding_index) ? (runtime.finding_index as Record<string, unknown>[]) : [];
   if (manualRows.length === 0 || runtimeRows.length === 0) return;
   const identityKey = (row: Record<string, unknown>): string =>
     `${String(row.discovered_at)}::${String(row.evidence_ref)}`;
+  const keyCounts = (rows: Record<string, unknown>[]): Map<string, number> => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      const key = identityKey(row);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const manualCounts = keyCounts(manualRows);
+  const runtimeCounts = keyCounts(runtimeRows);
   const manualKeys = new Set(manualRows.map(identityKey));
   const forgiven = new Set<string>();
   for (const row of runtimeRows) {
     const key = identityKey(row);
-    if (!manualKeys.has(key)) continue;
-    if (storeFindingIds === undefined || !storeFindingIds.has(String(row.finding_id))) continue;
+    if ((runtimeCounts.get(key) ?? 0) !== 1 || (manualCounts.get(key) ?? 0) !== 1) continue;   // (a) one-to-one
+    if (!manualKeys.has(key)) continue;                                                          // unpaired
+    if (!CLOSURE_ROW_STATUSES.has(String(row.status))) continue;                                 // (b) OPEN stays literal
+    const proof = findingProof.get(key);
+    if (proof === undefined || proof.id !== String(row.finding_id)) continue;                    // (c) this row's proven id
+    if (proof.status !== "RESOLVED" && proof.status !== "ACCEPTED_RISK") continue;               // (d) journal says closed
     row.finding_id = key;
     forgiven.add(key);
   }
@@ -162,7 +191,7 @@ export function compareArtifactLayer(
     options,
   );
   if (options?.catchUpRegime === true) {
-    applyVerifiedFindingIdExemption(manual, runtime, options.storeFindingIds);
+    applyVerifiedFindingIdExemption(manual, runtime, options.findingProof);
   }
   const diffs = diffPaths(manual, runtime);
   const dims: DimensionResult[] = NINE_DIMENSIONS.map((dimension) => {

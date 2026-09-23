@@ -240,7 +240,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
   const d17Root = mkdtempSync(join(tmpdir(), "g6-negative-d17-"));
   let d17Manual: string;
   let d17Runtime: string;
-  let d17StoreIds: ReadonlySet<string>;
+  let d17Proof: ReadonlyMap<string, { readonly id: string; readonly status: string }>;
   try {
     const manual = driveManualFace(join(d17Root, "lib-manual"), reconcileScript);
     d17Manual = manual.manifestText;
@@ -254,7 +254,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
         manual.intermediateManifestText,
       );
       d17Runtime = runtime.manifestText;
-      d17StoreIds = new Set(runtime.findingIds);
+      d17Proof = runtime.findingProof;
     } finally {
       stores.runStore.close();
       rmSync(stores.root, { recursive: true, force: true });
@@ -262,24 +262,24 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
   } finally {
     rmSync(d17Root, { recursive: true, force: true });
   }
-  const regime17 = { catchUpRegime: true, storeFindingIds: d17StoreIds };
+  const regime17 = { catchUpRegime: true, findingProof: d17Proof };
   // (a) Positive control: the REAL pair passes WITH the exemption — the
-  //     closure row's id flipped to the store-assigned id and the proof
-  //     forgives exactly that flip.
+  //     closure row's id flipped to the store-assigned id and the per-row
+  //     proof forgives exactly that flip.
   {
     const result = compareArtifactLayer(d17Manual, d17Runtime, reconcileScript, regime17);
     ok(result.equal, "D-17 real baseline: the proven closure-row id flip compares equal");
   }
   // (b) The reviewer's counterexample: a forged runtime id on the closure row
-  //     (same discovering node + evidence) must FAIL — a forged id is not a
-  //     store id, so the row compares literally.
+  //     (same discovering node + evidence) must FAIL — a forged id is not the
+  //     id the journal binds to that row, so the row compares literally.
   {
     const doc = parse(d17Runtime);
     const rows = doc.finding_index as Record<string, unknown>[];
     ok(rows.length > 0, "D-17 real baseline: the closure row exists (the old branch was skipped)");
     rows[0]!["finding_id"] = "forged-unrelated-finding-id";
     const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
-    ok(!result.equal, "D-17: a forged closure-row id FAILS (the exemption requires store proof)");
+    ok(!result.equal, "D-17: a forged closure-row id FAILS (the exemption requires per-row proof)");
   }
   // (c) The takeover regime carries no exemption: the real flipped id must
   //     FAIL there (literal comparison).
@@ -295,6 +295,66 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
     rows[0]!["discovered_at"] = "implementation";
     const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
     ok(!result.equal, "D-17: a store-proven id on an unpaired row FAILS (pairing is required)");
+  }
+  // (e) An OPEN row keeps its literal id (R2-H3): flipping an OPEN row's id
+  //     fails even when the journal proves the finding — only closure rows
+  //     (RESOLVED/ACCEPTED) may carry the flip.
+  {
+    const manualDoc = parse(d17Manual);
+    const runtimeDoc = parse(d17Runtime);
+    for (const doc of [manualDoc, runtimeDoc]) {
+      (doc.finding_index as Record<string, unknown>[])[0]!["status"] = "OPEN";
+    }
+    (runtimeDoc.finding_index as Record<string, unknown>[])[0]!["finding_id"] = "forged-open-row-id";
+    const result = compareArtifactLayer(
+      render(manualDoc, reconcileScript.requirementId),
+      render(runtimeDoc, reconcileScript.requirementId),
+      reconcileScript,
+      regime17,
+    );
+    ok(!result.equal, "D-17: an OPEN row's id flip FAILS (closure rows only)");
+  }
+  // (f) Per-row proof (R2-H3): a closure row's id must be the journal id bound
+  //     to THAT row's identity — a sibling finding's id in the same run is not
+  //     proof, and a duplicated pairing is not one-to-one.
+  {
+    const row = (id: string, key: string, status: string): Record<string, unknown> => ({
+      finding_id: id,
+      discovered_at: "code-review",
+      root_cause_category: "SOLUTION",
+      earliest_affected_node_id: "solution-design",
+      source_revision: null,
+      evidence_ref: `loop-artifact:v1:review_summary:sha256:${key}`,
+      status,
+      closed_by: "code-review",
+      closure_evidence_ref: `loop-artifact:v1:technical_design:sha256:${key}`,
+      closure_evidence_digest: key,
+      closure_bound_revision_id: `g6-${key}:revision:solution-design:2`,
+    });
+    const k1 = "a".repeat(8);
+    const k2 = "b".repeat(8);
+    // The proof map is keyed by the stable cross-face identity, exactly as
+    // runtime-face builds it from the journal facts.
+    const identityOf = (key: string): string => `code-review::loop-artifact:v1:review_summary:sha256:${key}`;
+    const proof = new Map([
+      [identityOf(k1), { id: `${k1}-store`, status: "RESOLVED" }],
+      [identityOf(k2), { id: `${k2}-store`, status: "RESOLVED" }],
+    ]);
+    const opts = { catchUpRegime: true, findingProof: proof };
+    const manualDoc: Doc = { entries: [], finding_index: [row(`${k1}-declared`, k1, "RESOLVED"), row(`${k2}-declared`, k2, "RESOLVED")] };
+    const legit: Doc = { entries: [], finding_index: [row(`${k1}-store`, k1, "RESOLVED"), row(`${k2}-store`, k2, "RESOLVED")] };
+    const swapped: Doc = { entries: [], finding_index: [row(`${k2}-store`, k1, "RESOLVED"), row(`${k2}-store`, k2, "RESOLVED")] };
+    const duplicated: Doc = { entries: [], finding_index: [row(`${k1}-store`, k1, "RESOLVED"), row(`${k1}-store`, k1, "RESOLVED")] };
+    const manualOpen: Doc = { entries: [], finding_index: [row(`${k1}-declared`, k1, "OPEN")] };
+    const runtimeOpen: Doc = { entries: [], finding_index: [row(`${k1}-store`, k1, "OPEN")] };
+    ok(compareArtifactLayer(render(manualDoc, requirementId), render(legit, requirementId), script, opts).equal,
+      "D-17: two proven closure rows (distinct per-row ids) compare equal");
+    ok(!compareArtifactLayer(render(manualDoc, requirementId), render(swapped, requirementId), script, opts).equal,
+      "D-17: a row carrying a SIBLING finding's store id FAILS (per-row proof)");
+    ok(!compareArtifactLayer(render(manualDoc, requirementId), render(duplicated, requirementId), script, opts).equal,
+      "D-17: a duplicated pairing (two rows on one identity) FAILS (one-to-one)");
+    ok(!compareArtifactLayer(render(manualOpen, requirementId), render(runtimeOpen, requirementId), script, opts).equal,
+      "D-17: an OPEN row's id flip FAILS (closure rows only)");
   }
 }
 

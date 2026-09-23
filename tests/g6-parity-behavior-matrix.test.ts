@@ -92,6 +92,10 @@ async function main(): Promise<void> {
   let expectedKnownDim9 = 0;
   let knownDim9 = 0;
   const newCauseDim9: string[] = [];
+  // R2 suggestion, machine-checkable: ANY non-dim-9 divergence is a
+  // regression, independent of the R-G6-01 bucket — the 0/50 red state must
+  // never mask one (the F-family dim-7 regression hid in the red once).
+  const nonDim9Divergences: string[] = [];
 
   for (const spec of specs) {
     const script = spec.build();
@@ -113,11 +117,11 @@ async function main(): Promise<void> {
         );
         // The catch-up regime carries the projector's designed face exemptions
         // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
-        // The D-17 id flip is forgiven only against the run's STORE-assigned
-        // finding ids (R1-H3): no proof, no exemption.
+        // The D-17 closure-row id flip is forgiven only against the run's
+        // journal finding proof (R2-H3): no proof, no exemption.
         const artifact = compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
           catchUpRegime: script.midTakeoverAfter !== undefined,
-          storeFindingIds: new Set(runtime.findingIds),
+          findingProof: runtime.findingProof,
         });
         artifactClean = artifact.equal;
         artifactDetail = artifactClean ? "deep-equal" : (artifact.diffs[0] ?? "diverged");
@@ -161,6 +165,11 @@ async function main(): Promise<void> {
             newCauseDim9.push(`${spec.id}: ${dim9.detail}`);
           }
         }
+        for (const divergedDim of diverged) {
+          if (divergedDim.dimension !== "final-handoff") {
+            nonDim9Divergences.push(`${spec.id}: ${divergedDim.dimension}(${divergedDim.detail})`);
+          }
+        }
         ok(
           artifactClean && diverged.length === 0,
           `${spec.id}: artifact ${artifactDetail}; behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}`,
@@ -185,6 +194,8 @@ async function main(): Promise<void> {
   const bucketOk = knownDim9 === expectedKnownDim9 && newCauseDim9.length === 0;
   console.log(`==== g6 dim-9 known-cause bucket (R-G6-01): ${knownDim9}/${expectedKnownDim9} divergences are the routed production cause; new-cause divergences: ${newCauseDim9.length} ====`);
   console.log(`(pinned signatures: BLOCKED + reason in {closureReviewDone, pathEntry per-invocation loss} + artifactRef present — the pin fails on a new cause or signature drift)`);
+  console.log(`==== g6 non-dim-9 divergences: ${nonDim9Divergences.length} (must be 0 — any non-dim-9 divergence is a regression, independent of the R-G6-01 bucket) ====`);
+  for (const item of nonDim9Divergences) console.error(`  ✗ non-dim-9 DIVERGE: ${item}`);
   if (!bucketOk) {
     for (const item of newCauseDim9) console.error(`  ✗ dim-9 NEW CAUSE: ${item}`);
     console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${expectedKnownDim9} known-cause divergences, observed ${knownDim9}`);
@@ -233,7 +244,7 @@ async function main(): Promise<void> {
   console.log(`==== g6 parity over-limit pause (behavior layer only): ${pausePassed} passed, ${pauseFailed} failed ====`);
   console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count)`);
 
-  if (failed > 0 || pauseFailed > 0 || !bucketOk) process.exit(1);
+  if (failed > 0 || pauseFailed > 0 || !bucketOk || nonDim9Divergences.length > 0) process.exit(1);
 }
 
 void main();
