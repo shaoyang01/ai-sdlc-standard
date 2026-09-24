@@ -156,6 +156,19 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：R6 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R5-H1 闭环 + 全部已 CLOSED 面不回归 + 新注入面：三波/四波有序链、gate/review 交替触发、逐波 attempt 伪造、记录多于声明波、无声明而有记录、observedAt join 重复实测）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
 
+## 2026-09-24 家用机会话：R6 复审 PASS + R1-H2 S-CRASH 中断-重入实现（@c5c2a77 已推）
+
+**R6 判定 PASS**（外部只读副本 @7cd336f）：R5-H1 CLOSED（原两条绕过闭合、混类双波合法链六维 MATCH、剥离/置空/漂移攻击全 DIVERGE），无新阻塞，全部已 CLOSED 面不回归（负向 38/0、41/0；产物 50/0；A′ 四要素完整；T5 32/0、YAML 150/0）。非阻塞建议留存：trigger 归因绑定改稳定 journal event id。
+
+**R1-H2 S-CRASH 落地**（harness-only，生产零改动）：崩溃场景从「轨迹重放」升级为**经生产入口走真实恢复路径的中断-重入**——
+- **fact-scripts**：补漏——`crashPoint` 字段类型早有、builder 从未设置（行为层此前看不见崩溃族）。
+- **behavior-face crash 模式**：manifest 库以**手动面中间态清单**播种（发布态），入口 preflight 对其 takeover-A（无对账）后每终态投影点持续 catch-up——journal/manifest 追赶可观测。首 invocation 以 **maxDispatches 安全边界**在崩溃点 dispatch 边界中断（不落持久 block），同 runId 重入走真实恢复。边界映射：post-gate-verdict = 首轮 gate verdict 后；post-finding-migration = 闭合窗（fix revision 物化后，finding 于 invocation 间窗口结算）；pre-manifest-write = 倒数第二个 dispatch 后（**末终态及其投影故意落在重入里**，成为可捕获的丢失写）。
+- **丢失写模拟**：回滚目标是**中断窗口处捕获的已接管清单**（journal 背书、normal catch-up 路径）——**绝不是 manual 种子**（两面 digest 覆盖对象按设计不同：raw content vs 输出 envelope，对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移——本轮实测抓到的坑）；重入必须逐字节重推一致。双恢复：第二次重入零 dispatch 且清单字节稳定（NO_OP）。
+- **runner**：六崩溃场景断言 recovery 事实（interruptedAtBoundary / duplicateDispatches=0 / manifestProjected / loseManifestWrite⇒redriveByteIdentical / resumeTwice⇒doubleResumeNoOp）。**负向** +1：对篡改的发布态清单重入必须 fail-closed（MANIFEST_CORRUPT_STOP），绝不静默续跑。
+- **验证**：tsc 0；行为负向 **42/0**；产物 **50/0**；比较器负向 **38/0**；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、非 dim-9 **0**、超限 4/4），六崩溃场景全部 interrupt@boundary=true、零重派、manifest=true，pre-manifest-write 两场景 redrive=true，三个 double-resume 场景 doubleNoOp=true；全量 **1767/0 / 171 文件**（唯一红文件=按设计红矩阵）。
+
+剩余（每步先请 Current User 确认）：**H4 报告重写**（54 个可定位逐场景条目 + 账目 52−5−4+7=50 三本账 + D-7/D-17 finding-identity 说明 + 十条生产语义 + ⑧⑨⑩ + R-G6-01 双症状单列 + S-INIT 边界发现 + S-CRASH 行为层恢复路径新覆盖）→ 全量 serial 回归 → 单 PR 收口（更新 PR #197）→ 独立复审（R7）→ PASS 后请合并授权。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
