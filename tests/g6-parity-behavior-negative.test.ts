@@ -634,11 +634,74 @@ async function crashRefusalPin(): Promise<void> {
   }
 }
 
+// ── 4h. a refusal AFTER the lost-write rollback terminates the epilogue (R9-H2) ──
+// The rollback's own re-entry can be refused (the rolled-back library is
+// made inconsistent before the entry re-reads it). The refusal must be
+// terminal: the double-resume branch does NOT run, doubleResumeNoOp is never
+// recorded on a refusal, the refused bytes are pinned, and the crash facts
+// honestly report the failure.
+async function crashPostRollbackRefusalPin(): Promise<void> {
+  const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-pre-manifest-write-double-resume")!;
+  const crashScript = crashSpec.build();
+  const flipFirstHex = (digest: string): string => `${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`;
+  const root = mkdtempSync(join(tmpdir(), "g6-neg-crash-postrollback-"));
+  const seedFor = async (): Promise<string> => {
+    const libRoot = mkdtempSync(join(root, "lib-"));
+    const manual = driveManualFace(join(libRoot, "lib-manual"), crashScript);
+    const seed = manual.intermediateManifestText;
+    if (seed === undefined) throw new Error("pre-manifest-write scenario carries no manual intermediate manifest");
+    return seed;
+  };
+  try {
+    const workspace = makeBehaviorWorkspace();
+    const stores = makeStores("negative-crash-postrollback");
+    try {
+      let refusedText: string | null = null;
+      const manifestPath = join(stores.root, "repo", "library", crashScript.requirementId, "manifest.md");
+      const run = await driveBehaviorLayer(
+        stores,
+        crashScript,
+        workspace,
+        await seedFor(),
+        undefined,
+        async (postRollbackPath) => {
+          // The rolled-back (window) library is corrupted before the entry
+          // re-reads it: the re-deriving re-entry must be refused.
+          refusedText = readFileSync(postRollbackPath, "utf8").replace(
+            /(manifest_digest:\s*sha256:)([0-9a-f]{64})/,
+            (_match, prefix: string, digest: string) => `${prefix}${flipFirstHex(digest)}`,
+          );
+          writeFileSync(postRollbackPath, refusedText, "utf8");
+        },
+      );
+      const finalText = existsSync(manifestPath) ? readFileSync(manifestPath, "utf8") : null;
+      const facts = run.crashRecovery;
+      ok(
+        run.trace.chainStatus === "BLOCKED" &&
+          (run.trace.blockingReasonCode ?? "") === "MANIFEST_CORRUPT_STOP" &&
+          facts !== null &&
+          facts.doubleResumeNoOp === false &&
+          facts.redriveByteIdentical === false &&
+          facts.refusedManifestStable === true &&
+          finalText === refusedText,
+        "R9-H2: a refusal after the lost-write rollback is terminal — the double-resume branch does not run and the refused bytes survive the driver",
+      );
+    } finally {
+      stores.runStore.close();
+      rmSync(stores.root, { recursive: true, force: true });
+      removeBehaviorWorkspace(workspace);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await realRunPin();
   await feedbackRestartPin();
   await crashSeedTamperPin();
   await crashRefusalPin();
+  await crashPostRollbackRefusalPin();
   console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
   if (failed > 0) process.exit(1);

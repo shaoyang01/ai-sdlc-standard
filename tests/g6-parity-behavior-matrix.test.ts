@@ -99,8 +99,14 @@ async function main(): Promise<void> {
   // R8-H3: the crash-instrument counter — the crash scenarios must ALL return
   // non-null recovery facts. A null-facts crash scenario is an instrument
   // failure that the A' red state must never mask.
+  // R9-H1: the crash-instrument counter — the denominator comes from the
+  // S-CRASH REGISTRY (the matrix's frozen family identity), never from the
+  // per-script crashPoint under verification: a script that lost its crash
+  // fact must fail loudly, not silently shrink the denominator to 0/0.
+  const CRASH_REGISTRY: ReadonlySet<string> = new Set(coreCrashResumeScenarios().map((spec) => spec.id));
   let crashScenariosTotal = 0;
   let crashScenariosWithFacts = 0;
+  let crashPointMissing = 0;
 
   for (const spec of specs) {
     const script = spec.build();
@@ -172,8 +178,12 @@ async function main(): Promise<void> {
         // for non-crash scenarios. The A' red state must never stand in for
         // the assertion (a null-facts crash scenario is an instrument failure
         // in its own right, counted below and hard-failed).
-        if (script.crashPoint !== undefined) {
+        if (CRASH_REGISTRY.has(spec.id)) {
           crashScenariosTotal += 1;
+          if (script.crashPoint === undefined) {
+            crashPointMissing += 1;
+            ok(false, `${spec.id}: the crash-registry scenario's script lost its crashPoint fact — the crash mode cannot engage (R9-H1)`);
+          }
           if (crash !== null) {
             crashScenariosWithFacts += 1;
           } else {
@@ -250,13 +260,28 @@ async function main(): Promise<void> {
     console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${expectedKnownDim9} known-cause divergences, observed ${knownDim9}`);
   }
 
-  // ── R8-H3: the crash-instrument summary — its own count, its own line ────
-  // The crash facts are an independent assertion surface: the red 0/50 state
-  // must never be the evidence that they were checked.
-  const crashFactsOk = crashScenariosWithFacts === crashScenariosTotal;
-  console.log(`==== g6 crash-recovery facts: ${crashScenariosWithFacts}/${crashScenariosTotal} crash scenarios returned non-null facts (must be equal — R8-H3) ====`);
+  // ── R8-H3/R9-H1: the crash-instrument summary — its own count, its own
+  // line, its own hard pin. The denominator is the frozen six-scenario
+  // registry (not the crashPoint under verification): every registry scenario
+  // must carry the crash fact AND return non-null facts, and the total must
+  // stay 6 — a 0/0 degeneration (all crashPoints stripped) fails here, not in
+  // the A' red state.
+  const crashFactsOk =
+    crashScenariosWithFacts === crashScenariosTotal &&
+    crashScenariosTotal === CRASH_REGISTRY.size &&
+    CRASH_REGISTRY.size === 6 &&
+    crashPointMissing === 0;
+  console.log(`==== g6 crash-recovery facts: ${crashScenariosWithFacts}/${crashScenariosTotal} registry scenarios returned non-null facts (must be 6/6 with every crashPoint present — R8-H3/R9-H1) ====`);
   if (!crashFactsOk) {
-    console.error(`  ✗ crash facts missing for ${crashScenariosTotal - crashScenariosWithFacts} crash scenario(s) — the A' red state must not stand in for the assertion`);
+    if (crashPointMissing > 0) {
+      console.error(`  ✗ ${crashPointMissing} crash-registry scenario(s) lost their crashPoint fact — the denominator must never shrink to hide it`);
+    }
+    if (crashScenariosWithFacts < crashScenariosTotal) {
+      console.error(`  ✗ crash facts missing for ${crashScenariosTotal - crashScenariosWithFacts} crash scenario(s) — the A' red state must not stand in for the assertion`);
+    }
+    if (CRASH_REGISTRY.size !== 6) {
+      console.error(`  ✗ the crash registry is no longer the frozen six-scenario family (${CRASH_REGISTRY.size})`);
+    }
   }
 
   // ── Over-limit pause waves — behavior layer only, single-listed ──────────
