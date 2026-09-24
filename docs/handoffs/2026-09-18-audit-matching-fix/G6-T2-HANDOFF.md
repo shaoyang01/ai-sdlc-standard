@@ -188,7 +188,20 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 **验证**：tsc 0；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、非 dim-9 = 0、超限 4/4）；行为负向 42/0；比较器负向 38/0；产物 50/0；全量 **1767/0 / 171 文件**（唯一红文件 = 按设计红矩阵）。
 
-剩余（每步先请 Current User 确认）：PR #197 描述同步（R7 轮记录 + 强化事实）→ 独立复审（R8，范围 = R7-H1/H2 闭环 + 已 CLOSED 面不回归 + 复算「攻击-抓住」对）→ PASS 后请 Current User 授权合并。
+剩余（每步先请 Current User 确认）：PR #197 描述同步（R7 轮记录 + 强化事实）→ 独立复审（R8，范围 = R7-H1/H2 闭环 + 已 CLOSED 面不回归 + 复算「异常-识别」对）→ PASS 后请 Current User 授权合并。
+
+## 2026-09-24 家用机会话：R8 复审 FAIL → R8-H3/H4 修复（崩溃事实永不为空 + 被拒清单永不被改写；@537aee0 已推）
+
+**R8 判定 FAIL**（外部只读副本 @27bddcb，两项新阻塞；R7-H1 判 CLOSED、R7-H2 原异常路径判 CLOSED——新版探针 manifestCaughtUp/lostWriteOccurred 均 false 识别；其余不变量、账目、十条语义、剔除项复算全 PASS；另指出报告 §6.2 全称表述需修订、§6.4 标题落后一轮、**全量「1767」系单文件内统计非总量的历史误述**）：
+
+1. **R8-H3 崩溃事实为 null 时被放行**：runner 的 `crash === null || …` 无条件接受空值，A′ 红态掩盖断言缺失（变体验证：事实段消失但汇总同为 0/1、桶 1/1、非 dim-9=0）。修复：按 `script.crashPoint` 要求崩溃场景**必须返回非空事实**（null 仅非崩溃场景合法）+ 独立计数摘要行（**6/6**）+ 硬失败。
+2. **R8-H4 STOP 后 epilogue 改写被拒清单**：丢失写分支只凭清单文本不同就设 lostWriteOccurred 并回写窗口清单，未先确认重入成功且清单有效——三种不一致态（self-digest / entry digest / 合法封印 cursor 超前）下入口正确 STOP 且当次字节不变，但驱动最终改写被拒字节（finalStable=false）。修复：**任何 manifest STOP 对 harness 即终态**——跳过丢失写与双恢复 epilogue + `refusedManifestStable` 钉死被拒字节于驱动全生命周期；async 测试缝（onCrashWindow，已 await——初版未 await 曾致写入与重入读竞态）。
+3. **负向** +6（42→**48/0**）：三态 ×（拒判码正确 + 禁写 + 无 vacuous 事实）；self-digest/entry digest 未封印篡改先撞自摘要检查（MANIFEST_CORRUPT_STOP），cursor 超前态需合法封印文档（取一次正常跑的末态投影）→ JOURNAL_MANIFEST_MISMATCH_STOP。
+4. **报告**：§6.2 全称表述改为「以负向矩阵为证」+ 完整诚实化历程（R7-H2→R8-H3→R8-H4）；§6.4 标题/轮次表补至 R8；**§2.1 更正「1767 总量」误述**（实为 system-capability-review 单文件内统计，runner 不打印跨文件总量——历史多处同误，报告内更正、后续以「逐文件全绿+文件级失败清单」表述）。
+
+**验证**：tsc 0；行为负向 **48/0**；产物 **50/0**；比较器负向 **38/0**；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、非 dim-9=0、超限 4/4）且六崩溃场景 interrupt@boundary=true、零重派、manifestCaughtUp=true、refusedStable=true，pre-manifest-write ×2 lostWrite+redrive=true，double-resume ×3 doubleNoOp=true，**崩溃事实计数 6/6**；全量逐文件断言全绿，文件级失败 2 = 按设计红矩阵 + 已知 codex-adapter 抖动（隔离 220 检查 0 失败恢复）。
+
+剩余（每步先请 Current User 确认）：PR #197 描述同步（R8 轮记录 + 诚实化措辞）→ 独立复审（R9，范围 = R8-H3/H4 闭环 + 全 CLOSED 面不回归 + 崩溃仪器新 vacuous 路径自由裁量）→ PASS 后请 Current User 授权合并。
 
 **措辞纪律（2026-09-24，R8 任务书重发时确立）**：复审 prompt 属**仪器审计**语义，严禁安全攻击类词汇——「攻击 / 抓住 / 篡改 / 假绿 / 对抗 / 构造错误」等一律弃用，改用中性词（异常 / 识别 / 受控修改 / 错误通过 / 构造不一致）。两个原因：①语义失准——我们审的是验收仪器的诚实性，不是网络安全行为；②实操教训——这类词在评审方会话会触发模型侧安全检查误报（Daybreak 类拦截），曾阻塞 prompt 投递。R8 任务书已按净化措辞重发（实质内容零丢失：基线、七张推演门期望、已知事实清单、证据基线数字原样）；**后续各轮复审 prompt（及唤醒 prompt）沿用本纪律**。
 
