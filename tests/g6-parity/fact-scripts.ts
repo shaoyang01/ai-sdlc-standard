@@ -1522,6 +1522,10 @@ export function coreCrashResumeScenarios(): ScenarioSpec[] {
               requestedDepth: "STANDARD" as const,
               nodes: wave.nodes,
               findings: wave.findings,
+              // The crash-point fact for the behavior layer's
+              // interrupt-reentry mode (the artifact layer reads the
+              // checkpoint / lost-write / resume flags below).
+              crashPoint: crash.point,
               midTakeoverAfter: crash.checkpoint,
               ...(crash.lostWrite ? { loseManifestWrite: true } : {}),
               ...(resumeTwice ? { resumeTwice: true } : {}),

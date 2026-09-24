@@ -140,12 +140,39 @@ async function main(): Promise<void> {
         stores.runStore.close();
         rmSync(stores.root, { recursive: true, force: true });
       }
-      // Layer 2 (behavior): the production entry's decision trajectory.
+      // Layer 2 (behavior): the production entry's decision trajectory. The
+      // S-CRASH scenarios seed the manifest library with the manual
+      // intermediate manifest (the published pre-crash state) so the entry's
+      // projection call points run and the interrupt-reentry catch-up is
+      // observable (R1-H2).
       const behaviorStores = makeStores(`${spec.id}-behavior`);
       try {
-        const run = await driveBehaviorLayer(behaviorStores, script, workspace);
+        const run = await driveBehaviorLayer(
+          behaviorStores,
+          script,
+          workspace,
+          script.crashPoint !== undefined ? manual.intermediateManifestText : undefined,
+        );
         const behavior = compareBehaviorLayer(script, run.trace);
         const diverged = behavior.dimensions.filter((d) => d.verdict === "DIVERGE");
+        // R1-H2: the crash-reentry assertions — the first invocation actually
+        // stopped at the crash boundary, no completed node was re-dispatched,
+        // the catch-up projection is observable, the lost write re-derived
+        // byte-identically (pre-manifest-write), the second resume a NO_OP
+        // (double-resume). Non-crash scenarios carry no facts.
+        const crash = run.crashRecovery;
+        const crashOk =
+          crash === null ||
+          (crash.interruptedAtBoundary &&
+            crash.duplicateDispatches === 0 &&
+            crash.manifestProjected &&
+            (script.loseManifestWrite !== true || crash.redriveByteIdentical) &&
+            (script.resumeTwice !== true || crash.doubleResumeNoOp));
+        const crashDetail = crash === null
+          ? ""
+          : `; crash interrupt@boundary=${crash.interruptedAtBoundary} reDispatch=${crash.duplicateDispatches} manifest=${crash.manifestProjected}` +
+            `${script.loseManifestWrite === true ? ` redrive=${crash.redriveByteIdentical}` : ""}` +
+            `${script.resumeTwice === true ? ` doubleNoOp=${crash.doubleResumeNoOp}` : ""}`;
         // H1 A′ classification: a dim-9 divergence on a completing script is
         // the known routed production cause ONLY when it carries the exact
         // R-G6-01 signature (BLOCKED / "code review closure review not done"
@@ -171,8 +198,8 @@ async function main(): Promise<void> {
           }
         }
         ok(
-          artifactClean && diverged.length === 0,
-          `${spec.id}: artifact ${artifactDetail}; behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}`,
+          artifactClean && diverged.length === 0 && crashOk,
+          `${spec.id}: artifact ${artifactDetail}; behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}${crashDetail}`,
         );
       } finally {
         behaviorStores.runStore.close();

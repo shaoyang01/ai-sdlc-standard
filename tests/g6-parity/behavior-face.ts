@@ -8,7 +8,7 @@
 // jumps and the terminal. It never compares digests (the artifact layer's
 // job); it proves both faces make the same decisions.
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseProductionEntryRequest, PRODUCTION_ENTRY_SCHEMA } from "../../core/loop-production-entry";
@@ -87,6 +87,20 @@ export interface BehaviorTrace {
 export interface BehaviorRunResult {
   readonly trace: BehaviorTrace;
   readonly manifestText: string | null;
+  /**
+   * R1-H2: the S-CRASH interrupt-reentry facts (null for non-crash
+   * scenarios). The first invocation was interrupted at the crash boundary;
+   * the re-entry continued the same run through the real recovery path; the
+   * lost write was re-derived byte-identically; the second resume dispatched
+   * nothing; no completed node was re-dispatched.
+   */
+  readonly crashRecovery: {
+    readonly interruptedAtBoundary: boolean;
+    readonly manifestProjected: boolean;
+    readonly duplicateDispatches: number;
+    readonly redriveByteIdentical: boolean;
+    readonly doubleResumeNoOp: boolean;
+  } | null;
 }
 
 /**
@@ -95,7 +109,12 @@ export interface BehaviorRunResult {
  * rework waves repeat a capability, so each queue holds its rounds); the
  * gate node's envelope carries the verdict triple.
  */
-export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScript, workspace: string): Promise<BehaviorRunResult> {
+export async function driveBehaviorLayer(
+  stores: RuntimeStores,
+  script: FactScript,
+  workspace: string,
+  manifestSeedText?: string,
+): Promise<BehaviorRunResult> {
   const queues = new Map<string, EnvelopeSpec[]>();
   const enqueue = (key: string, spec: EnvelopeSpec): void => {
     const queue = queues.get(key) ?? [];
@@ -265,7 +284,63 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     (finding) => (finding.gateRound ?? 1) >= 2 || finding.earliest === "requirement-intake",
   ) || script.nodes.some((node) => node.opensFeedbackChange === true);
 
-  const invokeProduction = async (): Promise<{ final_status: "success" | "failed"; chain_status: string; blocking_reason_code?: string | null; next_execution_point: { capability: string } | null; handoff_status: string | null; handoff_reason: string | null; handoff_artifact_ref: string | null }> => {
+  // ── S-CRASH interrupt-reentry (R1-H2) ──────────────────────────────────
+  // The crash scenarios interrupt the FIRST invocation at the crash point's
+  // dispatch boundary (the production maxDispatches safety bound — a pure
+  // loop bound, no durable block), then re-enter the SAME run through the
+  // real recovery path. The manifest library is seeded with the manual
+  // intermediate manifest (the published pre-crash state) so the entry's
+  // projection call points run and the journal/manifest catch-up is
+  // observable: the entry preflight takes the manual seed over (takeover-A,
+  // no reconciliation) and every terminal's projection catches the manifest
+  // up. The crash's LOST WRITE (pre-manifest-write) is simulated by rolling
+  // the library back to the state the interrupt window published; the resume
+  // must re-derive the document byte-identically, and a second resume must be
+  // a NO_OP. (The manual seed is only the takeover bootstrap: the two faces'
+  // digest covering objects differ by design — raw content vs the output
+  // envelope — so a re-takeover of the manual seed against a populated
+  // journal would drift at the B2 digest check; the rollback therefore
+  // targets the journal-backed window document, never the manual seed.)
+  const crashMode = script.crashPoint !== undefined;
+  const libraryDir = join(stores.root, "repo", "library", script.requirementId);
+  const manifestPath = join(libraryDir, "manifest.md");
+  if (crashMode && manifestSeedText !== undefined) {
+    mkdirSync(libraryDir, { recursive: true });
+    writeFileSync(manifestPath, manifestSeedText, "utf8");
+  }
+  const readManifest = (): string | null => (existsSync(manifestPath) ? readFileSync(manifestPath, "utf8") : null);
+  const dispatchCount = (): number =>
+    stores.runStore.listCapabilityExecutions(runIdOf(script)).filter((event) => event.status === "started").length;
+  /** The dispatch count through the script node at nodeIndex (the dual-role
+   *  gate expands into its two role dispatches per round). */
+  const dispatchesThrough = (nodeIndex: number): number =>
+    script.nodes.slice(0, nodeIndex + 1).reduce((sum, node) => sum + (node.node === "solution-gate" ? 2 : 1), 0);
+  const crashBoundary = (): number | null => {
+    if (script.crashPoint === "post-gate-verdict") {
+      // through the first gate round's verdict terminal
+      return dispatchesThrough(script.nodes.findIndex((node) => node.node === "solution-gate"));
+    }
+    if (script.crashPoint === "post-finding-migration") {
+      // the closure window: through the node that materializes the finding's
+      // bound (fix) revision — the finding settles in the between-invocation
+      // window right after it
+      const bound = script.findings.find((finding) => finding.action?.action === "resolve")?.action?.boundRevisionId;
+      const match = bound === undefined ? undefined : /:revision:([a-z-]+):(\d+)$/.exec(bound);
+      if (match === undefined) return null;
+      const fixIndex = script.nodes.findIndex(
+        (node) => node.node === match[1] && (node.attempt ?? 1) === Number(match[2]),
+      );
+      return fixIndex < 0 ? null : dispatchesThrough(fixIndex);
+    }
+    // pre-manifest-write: through the second-to-last dispatch — the crash
+    // point is the final projection's lost write, so the LAST node's terminal
+    // (and its projection) must land in the re-entry, where the harness can
+    // capture the lost write and roll the library back to the taken-over
+    // state the window published.
+    return Math.max(1, dispatchesThrough(script.nodes.length - 1) - 1);
+  };
+
+  const invokeProduction = async (maxDispatches?: number): Promise<{ final_status: "success" | "failed"; chain_status: string; blocking_reason_code?: string | null; next_execution_point: { capability: string } | null; handoff_status: string | null; handoff_reason: string | null; handoff_artifact_ref: string | null }> => {
     const result = await runProduction(parsed as never, `G6 parity ${script.requirementId}`, {
       capabilitySource: "real",
       realGatewayDeps: { adapter: { execute } as never, attemptWorkspace: () => workspace },
@@ -273,7 +348,11 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       artifactStore: stores.artifactStore,
       inspectWorkspace: async () => ({ baseDrifted: false, taskHasChanges: false, sourceWipDigestSha256: "0".repeat(64) }),
       prepareWorkspace: async () => ({ workspacePath: workspace }),
-      ...(boundedRuns ? { maxDispatches: 1 } : {}),
+      // The crash scenarios wire the manifest library so the entry's projection
+      // call points (preflight + per-terminal) take effect — the journal/
+      // manifest catch-up is observable instead of silently skipped.
+      ...(crashMode ? { manifestLibraryDir: libraryDir } : {}),
+      ...(maxDispatches !== undefined ? { maxDispatches } : boundedRuns ? { maxDispatches: 1 } : {}),
       // The over-limit pause waves spend the entry's OWN backward-jump budget:
       // the option is forwarded verbatim from the script — the same knob class
       // as maxDispatches, never a shadow substitution.
@@ -355,22 +434,56 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
     return snapshot?.state.blockingReasonCode ?? null;
   };
 
-  let outcome = await invokeProduction();
+  // The crash mode's FIRST invocation stops at the crash point's dispatch
+  // boundary (the safety bound) — the interrupt the crash simulates. The
+  // manifest at that window is the published pre-crash state the lost-write
+  // rollback returns to (the taken-over document the window projected — the
+  // re-entry re-derives from it through the normal catch-up path, never a
+  // manual-seed takeover: the two faces' digest covering objects differ by
+  // design, so the manual seed is only the bootstrap for takeover-A).
+  const boundary = crashMode ? crashBoundary() : null;
+  let outcome = await invokeProduction(boundary ?? undefined);
+  const firstInvocationDispatches = dispatchCount();
+  const crashWindowManifest = crashMode ? readManifest() : null;
   // The staged resume: after a run that stopped, close whatever is now
   // closable — the manual face publishes its finding-action between
   // declarations; the store's currency rule subsumes the per-stage round
   // bookkeeping (a finding's bound revision is current only inside its
   // confirming round's window). Resume while the chain is live: a closure or
   // the WP-1 record advanced the state, or the stop carries a live next point
-  // (the safety-bound stop of boundedRuns — plain progress resumes). A stop
-  // with nothing advancing and no live next point is an honest terminal.
-  for (let round = 0; round < 128 && durableBlockReason() === null; round += 1) {
+  // (the safety-bound stop of boundedRuns / the crash interrupt — plain
+  // progress resumes). A stop with nothing advancing and no live next point
+  // is an honest terminal.
+  for (let round = 0; round < 128; round += 1) {
     const advanced = recordFeedbackChangeIfDue();
     const openBefore = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN").length;
     settleOpenFindings();
     const openAfter = stores.runStore.listFindings(runIdOf(script)).filter((finding) => finding.status === "OPEN").length;
     if (!advanced && openAfter === openBefore && outcome.next_execution_point === null) break;
     outcome = await invokeProduction();
+  }
+
+  // The crash epilogue: the lost-write re-derivation (pre-manifest-write) and
+  // the double-resume NO_OP. The lost write is the FINAL projection — the
+  // last node's terminal landed in the re-entry; roll the library back to the
+  // window's published state and require the re-entry to reproduce the
+  // document byte-identically (a crash must not change the result). The
+  // second resume must dispatch nothing and leave the document byte-stable.
+  let redriveByteIdentical = true;
+  let doubleResumeNoOp = true;
+  if (crashMode && script.loseManifestWrite === true) {
+    const lostWrite = readManifest();
+    if (lostWrite !== null && crashWindowManifest !== null && lostWrite !== crashWindowManifest) {
+      writeFileSync(manifestPath, crashWindowManifest, "utf8");
+      outcome = await invokeProduction();
+      redriveByteIdentical = readManifest() === lostWrite;
+    }
+  }
+  if (crashMode && script.resumeTwice === true) {
+    const terminalsBefore = dispatchCount();
+    const manifestBefore = readManifest();
+    outcome = await invokeProduction();
+    doubleResumeNoOp = dispatchCount() === terminalsBefore && readManifest() === manifestBefore;
   }
 
   const events = stores.runStore.listCapabilityExecutions(runIdOf(script));
@@ -437,6 +550,20 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       });
     });
   const generation = stores.runStore.getRunGeneration(runIdOf(script));
+  // The crash-recovery facts (the R1-H2 assertions, surfaced for the runner):
+  // no completed node re-dispatched (no duplicate terminal), the interrupt
+  // actually fired at the boundary, the catch-up projection is observable,
+  // the lost write re-derived byte-identically, the second resume a NO_OP.
+  const terminalKeys = terminals.map((t) => `${t.capability}:${t.executionRole}:${t.attempt}:${t.status}`);
+  const crashRecovery = crashMode
+    ? Object.freeze({
+        interruptedAtBoundary: boundary !== null && firstInvocationDispatches === boundary,
+        manifestProjected: readManifest() !== null,
+        duplicateDispatches: terminalKeys.length - new Set(terminalKeys).size,
+        redriveByteIdentical,
+        doubleResumeNoOp,
+      })
+    : null;
   return {
     trace: {
       dispatched,
@@ -455,7 +582,8 @@ export async function driveBehaviorLayer(stores: RuntimeStores, script: FactScri
       generationRestarts,
       generation,
     },
-    manifestText: null,
+    manifestText: readManifest(),
+    crashRecovery,
   };
 }
 

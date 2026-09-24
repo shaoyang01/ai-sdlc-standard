@@ -14,8 +14,9 @@
 // reads the code-review event's gateResult, which the event contract pins to
 // NOT_APPLICABLE for non-formal_verdict executions).
 
-import { coreFirstRoundScenarios, coreFeedbackRegateScenarios, coreOverLimitPauseScenarios } from "./g6-parity/fact-scripts";
+import { coreCrashResumeScenarios, coreFirstRoundScenarios, coreFeedbackRegateScenarios, coreOverLimitPauseScenarios } from "./g6-parity/fact-scripts";
 import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace, type BehaviorTrace } from "./g6-parity/behavior-face";
+import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -492,9 +493,46 @@ const reviewThenGateScript: FactScript = Object.freeze({
   }))?.verdict === "DIVERGE", "R5-H1: the review→gate chain with the REVIEW (first) wave's record stripped → DIVERGE");
 }
 
+// ── 4f. the S-CRASH recovery fails closed on an inconsistent state ─────────
+// The interrupt-reentry resume must never silently continue: a re-entry
+// against a TAMPERED published manifest (the self-digest corrupted) is
+// refused by the entry preflight's level-1 discrimination
+// (MANIFEST_CORRUPT_STOP) — the durable block, not a fabricated progress.
+async function crashSeedTamperPin(): Promise<void> {
+  const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-post-gate-verdict-resume")!;
+  const crashScript = crashSpec.build();
+  const workspace = makeBehaviorWorkspace();
+  const stores = makeStores("negative-crash-tamper");
+  const root = mkdtempSync(join(tmpdir(), "g6-neg-crash-"));
+  try {
+    const manual = driveManualFace(join(root, "lib-manual"), crashScript);
+    const seed = manual.intermediateManifestText;
+    if (seed === undefined) {
+      ok(false, "crash scenario carries the manual intermediate manifest (the published pre-crash state)");
+      return;
+    }
+    const tampered = seed.replace(
+      /(manifest_digest:\s*sha256:)([0-9a-f]{64})/,
+      (_match, prefix: string, digest: string) => `${prefix}${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`,
+    );
+    const run = await driveBehaviorLayer(stores, crashScript, workspace, tampered);
+    ok(
+      run.trace.chainStatus !== "COMPLETED" &&
+        (run.trace.blockingReasonCode ?? "").includes("MANIFEST_CORRUPT"),
+      "S-CRASH: a re-entry against a tampered published manifest fails closed (MANIFEST_CORRUPT_STOP) — the crash-resume path never silently continues",
+    );
+  } finally {
+    stores.runStore.close();
+    rmSync(stores.root, { recursive: true, force: true });
+    removeBehaviorWorkspace(workspace);
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await realRunPin();
   await feedbackRestartPin();
+  await crashSeedTamperPin();
   console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
   if (failed > 0) process.exit(1);
