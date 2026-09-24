@@ -143,6 +143,19 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：R5 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R4-H1/H2 闭环 + 已 CLOSED 面不回归 + 新注入面：三波有序代际、gate/review 混类触发轮的 waveIndex 计数、forward/non-intake 掩蔽变体、observedAt join 重复实测）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
 
+## 2026-09-24 家用机会话：R5 复审 FAIL → R5-H1 修复（逐波声明校验接管全部触发类型）
+
+**R5 判定 FAIL**（外部只读副本 @1271ee5，一项阻塞；R4-H1/H2 原始反例复审判已闭合）：**R5-H1 混类 WP-1 波记录核验缺口**——dim 7 的记录证据在 gate 轮分支内，而 dim 7 循环只遍历 gate 轮：review 触发的波无人核验。病象：gate→review 两波合法轨迹六维 MATCH（正确），但剥离末波（review）记录、置空其触发归因、或最终代际 3→4 漂移仍六维 MATCH；同探针在 6fd12c8 为 DIVERGE——确证末波代际锚的放行是本轮（R4）修复引入的 mask。反向 review→gate 链剥离前波记录同样假 MATCH。评审方以真实 store 连续记录（review、gate 代际 1、2）独立取证。
+
+**修复（harness-only，生产零改动；@268e6e0 已推）**：
+- **结构改制**：WP-1 记录证据从 gate 轮分支摘出，归**独立的逐波声明校验 `verifyDeclaredWaves`** 唯一所有——按脚本声明序遍历**全部**声明触发（gate 或 review 任意类型）：每波恰一条已验证记录（FEEDBACK_DRIVEN_CHANGE/CLASSIFIED + 触发轮归因，归因不唯一拒判）、有序代际绑定（previousGeneration = 波序，每个 WP-1 推进一代）、末波锚 run 最终代际（未声明多余记录会漂移而被抓）、重启 intake 的新代际 attempt、以及「每条 journal 记录都必须匹配某声明波」的反向审计（无声明而有记录 = 未授权代际推进，拒判）。
+- **gate 轮分支只留结构性准入**：R4-H2 的声明后强制 restart（declared gate trigger 的下一节点必须为 requirement-intake）+ 无声明时的前进/回流判定；证据类校验全部移交逐波校验。
+- **behavior-negative**：+7 例（34→**41/0**）：gate→review 与 review→gate 合法链六维全 MATCH；剥离 review 末波记录、置空 review 波归因、最终代际 3→4 漂移、剥离 review 前波记录全部 DIVERGE。
+
+**验证**：tsc 0；行为负向 **41/0**；产物层 **50/0**；比较器负向 **38/0**；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、**非 dim-9 分歧 0**、超限 4/4；退出码 1 预期）。
+
+剩余（每步先请 Current User 确认）：R6 独立复审（prompt 本会话内交付、按纪律未落文档；范围=R5-H1 闭环 + 全部已 CLOSED 面不回归 + 新注入面：三波/四波有序链、gate/review 交替触发、逐波 attempt 伪造、记录多于声明波、无声明而有记录、observedAt join 重复实测）→ PASS 后：S-CRASH 中断-重入实现 → H4 报告重写 → 全量 serial 回归 → 单 PR 收口（PR #197）。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
