@@ -157,7 +157,8 @@ async function main(): Promise<void> {
         const diverged = behavior.dimensions.filter((d) => d.verdict === "DIVERGE");
         // R1-H2: the crash-reentry assertions — the first invocation actually
         // stopped at the crash boundary, no completed node was re-dispatched,
-        // the catch-up projection is observable, the lost write re-derived
+        // the manifest CAUGHT UP to the journal head (R7-H2: a merely-existing
+        // stale document fails), the lost write OCCURRED and re-derived
         // byte-identically (pre-manifest-write), the second resume a NO_OP
         // (double-resume). Non-crash scenarios carry no facts.
         const crash = run.crashRecovery;
@@ -165,13 +166,13 @@ async function main(): Promise<void> {
           crash === null ||
           (crash.interruptedAtBoundary &&
             crash.duplicateDispatches === 0 &&
-            crash.manifestProjected &&
-            (script.loseManifestWrite !== true || crash.redriveByteIdentical) &&
+            crash.manifestCaughtUp &&
+            (script.loseManifestWrite !== true || (crash.lostWriteOccurred && crash.redriveByteIdentical)) &&
             (script.resumeTwice !== true || crash.doubleResumeNoOp));
         const crashDetail = crash === null
           ? ""
-          : `; crash interrupt@boundary=${crash.interruptedAtBoundary} reDispatch=${crash.duplicateDispatches} manifest=${crash.manifestProjected}` +
-            `${script.loseManifestWrite === true ? ` redrive=${crash.redriveByteIdentical}` : ""}` +
+          : `; crash interrupt@boundary=${crash.interruptedAtBoundary} reDispatch=${crash.duplicateDispatches} manifestCaughtUp=${crash.manifestCaughtUp}` +
+            `${script.loseManifestWrite === true ? ` lostWrite=${crash.lostWriteOccurred} redrive=${crash.redriveByteIdentical}` : ""}` +
             `${script.resumeTwice === true ? ` doubleNoOp=${crash.doubleResumeNoOp}` : ""}`;
         // H1 A′ classification: a dim-9 divergence on a completing script is
         // the known routed production cause ONLY when it carries the exact

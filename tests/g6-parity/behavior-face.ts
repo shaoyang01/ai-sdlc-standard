@@ -91,13 +91,20 @@ export interface BehaviorRunResult {
    * R1-H2: the S-CRASH interrupt-reentry facts (null for non-crash
    * scenarios). The first invocation was interrupted at the crash boundary;
    * the re-entry continued the same run through the real recovery path; the
-   * lost write was re-derived byte-identically; the second resume dispatched
-   * nothing; no completed node was re-dispatched.
+   * lost write occurred and was re-derived byte-identically; the second
+   * resume dispatched nothing; no completed node was re-dispatched.
+   *
+   * R7-H2: none of these pass vacuously — `manifestCaughtUp` compares the
+   * manifest's taken-over cursor with the journal head (a merely-existing
+   * stale document fails), and `lostWriteOccurred` proves the final
+   * projection ran (the document diverged from the window's published
+   * state) before the rollback/rederive branch executes.
    */
   readonly crashRecovery: {
     readonly interruptedAtBoundary: boolean;
-    readonly manifestProjected: boolean;
     readonly duplicateDispatches: number;
+    readonly manifestCaughtUp: boolean;
+    readonly lostWriteOccurred: boolean;
     readonly redriveByteIdentical: boolean;
     readonly doubleResumeNoOp: boolean;
   } | null;
@@ -309,6 +316,25 @@ export async function driveBehaviorLayer(
     writeFileSync(manifestPath, manifestSeedText, "utf8");
   }
   const readManifest = (): string | null => (existsSync(manifestPath) ? readFileSync(manifestPath, "utf8") : null);
+  /**
+   * R7-H2: the manifest's taken-over cursor (numeric projected_through), or
+   * null when the document is not in the taken-over shape. The crash
+   * assertions compare it against the journal head — a manifest that merely
+   * EXISTS while the journal has moved on is a stale document, not evidence
+   * of the catch-up.
+   */
+  const manifestCursor = (): number | null => {
+    const text = readManifest();
+    if (text === null) return null;
+    const match = /^projected_through:\s*(\d+)\s*$/m.exec(text);
+    return match === null ? null : Number(match[1]);
+  };
+  /** The journal head: the highest terminal event sequence of the run. */
+  const journalHead = (): number =>
+    stores.runStore
+      .listCapabilityExecutions(runIdOf(script))
+      .filter((event) => event.status !== "started")
+      .reduce((max, event) => Math.max(max, event.sequence), 0);
   const dispatchCount = (): number =>
     stores.runStore.listCapabilityExecutions(runIdOf(script)).filter((event) => event.status === "started").length;
   /** The dispatch count through the script node at nodeIndex (the dual-role
@@ -469,11 +495,21 @@ export async function driveBehaviorLayer(
   // window's published state and require the re-entry to reproduce the
   // document byte-identically (a crash must not change the result). The
   // second resume must dispatch nothing and leave the document byte-stable.
-  let redriveByteIdentical = true;
-  let doubleResumeNoOp = true;
+  //
+  // R7-H2: none of these may pass vacuously. The lost write must have
+  // OCCURRED (the final projection ran — the manifest diverged from the
+  // window's published state); only then does the rollback/rederive branch
+  // execute and its byte-identity claim mean anything. A manifest that
+  // merely exists while the journal moved on is a stale document, so the
+  // runner additionally requires the manifest's cursor to equal the journal
+  // head (manifestCaughtUp).
+  let redriveByteIdentical = false;
+  let lostWriteOccurred = false;
+  let doubleResumeNoOp = false;
   if (crashMode && script.loseManifestWrite === true) {
     const lostWrite = readManifest();
     if (lostWrite !== null && crashWindowManifest !== null && lostWrite !== crashWindowManifest) {
+      lostWriteOccurred = true;
       writeFileSync(manifestPath, crashWindowManifest, "utf8");
       outcome = await invokeProduction();
       redriveByteIdentical = readManifest() === lostWrite;
@@ -552,14 +588,19 @@ export async function driveBehaviorLayer(
   const generation = stores.runStore.getRunGeneration(runIdOf(script));
   // The crash-recovery facts (the R1-H2 assertions, surfaced for the runner):
   // no completed node re-dispatched (no duplicate terminal), the interrupt
-  // actually fired at the boundary, the catch-up projection is observable,
-  // the lost write re-derived byte-identically, the second resume a NO_OP.
+  // actually fired at the boundary, the manifest CAUGHT UP to the journal
+  // head (R7-H2: a merely-existing stale document fails), the lost write
+  // OCCURRED and was re-derived byte-identically, the second resume a NO_OP.
   const terminalKeys = terminals.map((t) => `${t.capability}:${t.executionRole}:${t.attempt}:${t.status}`);
   const crashRecovery = crashMode
     ? Object.freeze({
         interruptedAtBoundary: boundary !== null && firstInvocationDispatches === boundary,
-        manifestProjected: readManifest() !== null,
         duplicateDispatches: terminalKeys.length - new Set(terminalKeys).size,
+        manifestCaughtUp: (() => {
+          const cursor = manifestCursor();
+          return cursor !== null && cursor === journalHead();
+        })(),
+        lostWriteOccurred,
         redriveByteIdentical,
         doubleResumeNoOp,
       })

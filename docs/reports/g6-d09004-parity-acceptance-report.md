@@ -40,8 +40,8 @@ serial 基准说明：serial runner 为 fail-fast 语义，会在按设计红的
 
 ## 3. 逐场景判定（54 节）
 
-> 每节：唯一 scenario-id / 矩阵坐标 / 剪枝标注 / 两面轨迹摘要 / 九维逐维判定（含判定层）/ 分歧根因。九维编号见 §4；「产物层」= T5 归一化全文档相等，「行为层」= 生产入口轨迹六维。
-> **50 个完成场景的共同行为层形态**：dims 1/2/6/7/8 MATCH、dim 9 DIVERGE——R-G6-01 已路由生产缺陷（§6.5），签名 = handoff BLOCKED + reason∈{两症状} + artifactRef 存在；A′  surfaced。逐节不再重复根因，标「△9-RG6-01」。产物层 50 场景全部归一化全文档相等。
+> 每节：唯一 scenario-id / 矩阵坐标 / 剪枝标注 / 两面轨迹摘要 / 九维逐维判定（含判定层）/ 分歧根因。九维编号见 §4；「产物层」= T5 归一化全文档相等，「行为层」= 生产入口轨迹六维。**54 节 = 54 个唯一 scenario-id 标题，一一可定位**（R7-H1 后无合并标题；程序化提取核对：54 ID ↔ 54 标题）。
+> **50 个完成场景的共同行为层形态**：dims 1/2/6/7/8 MATCH、dim 9 DIVERGE——R-G6-01 已路由生产缺陷（§6.5），签名 = handoff BLOCKED + reason∈{两症状} + artifactRef 存在；A′ surfaced。逐节不再重复根因，标「△9-RG6-01」。产物层 50 场景全部归一化全文档相等。
 
 ### 3.1 S-CORE 首轮（12）
 
@@ -72,13 +72,45 @@ family 形状（depth=LIGHT/STANDARD/DEEP × verdict=PASS/FAIL/PWR/BU，round=fi
 - 轨迹：BU 首裁 → 返工 wave → PASS
 - 九维：1-8 ✓ · 9 △9-RG6-01
 
-#### S-CORE-STANDARD-PASS-first / S-CORE-STANDARD-FAIL-first / S-CORE-STANDARD-PASS_WITH_RISK-first / S-CORE-STANDARD-BLOCKED_UNKNOWN-first
-- 坐标：depth=STANDARD · verdict=PASS/FAIL/PWR/BU · round=first（四条目同 family 形状，深度 STANDARD）
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-CORE-STANDARD-PASS-first
+- 坐标：depth=STANDARD · verdict=PASS · round=first
+- 轨迹：plain 七节链（family PASS 形状），深度 STANDARD
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
-#### S-CORE-DEEP-PASS-first / S-CORE-DEEP-FAIL-first / S-CORE-DEEP-PASS_WITH_RISK-first / S-CORE-DEEP-BLOCKED_UNKNOWN-first
-- 坐标：depth=DEEP · verdict=PASS/FAIL/PWR/BU · round=first
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-CORE-STANDARD-FAIL-first
+- 坐标：depth=STANDARD · verdict=FAIL · round=first
+- 轨迹：d087 返工 wave（family FAIL 形状），深度 STANDARD
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-STANDARD-PASS_WITH_RISK-first
+- 坐标：depth=STANDARD · verdict=PWR · round=first
+- 轨迹：family PWR 形状（scan ledger F01 终态内风险接受），深度 STANDARD
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-STANDARD-BLOCKED_UNKNOWN-first
+- 坐标：depth=STANDARD · verdict=BU · round=first
+- 轨迹：BU 首裁（显式 null depth）→ 返工 wave → PASS，深度 STANDARD
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-DEEP-PASS-first
+- 坐标：depth=DEEP · verdict=PASS · round=first
+- 轨迹：plain 七节链，深度 DEEP
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-DEEP-FAIL-first
+- 坐标：depth=DEEP · verdict=FAIL · round=first
+- 轨迹：d087 返工 wave，深度 DEEP
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-DEEP-PASS_WITH_RISK-first
+- 坐标：depth=DEEP · verdict=PWR · round=first
+- 轨迹：family PWR 形状，深度 DEEP
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-CORE-DEEP-BLOCKED_UNKNOWN-first
+- 坐标：depth=DEEP · verdict=BU · round=first
+- 轨迹：BU 首裁 → 返工 wave → PASS，深度 DEEP
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
 ### 3.2 S-CORE 升档（4）
 
@@ -227,7 +259,7 @@ family 形状（零 finding 的非 finding 路径）：WP-1 `FEEDBACK_DRIVEN_CHA
 
 ### 3.12 S-CRASH（6，R1-H2 中断-重入）
 
-family 形状（2026-09-24 R1-H2 落地）：行为层从「store 级崩溃/恢复语义回放」升级为**经生产入口走真实恢复路径的中断-重入**——首 invocation 以 `maxDispatches` 安全边界在崩溃点 dispatch 边界中断（纯循环边界、不落持久 block），同 runId 重入续跑。manifest 库以手动面中间态清单播种，入口 takeover 后每终态投影点持续 catch-up，journal/manifest 追赶可观测。三崩溃点映射：post-gate-verdict = 首轮 gate verdict 后；post-finding-migration = 闭合窗（fix revision 物化后、finding 于 invocation 间窗口结算）；pre-manifest-write = 倒数第二 dispatch 后（末终态及其投影故意落在重入里，成为可捕获的丢失写）。丢失写模拟：回滚到**中断窗口处捕获的已接管清单**（journal 背书、normal catch-up 路径——两面 digest 覆盖对象按设计不同，对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，故 manual 种子只作 takeover-A 引导），重入必须逐字节重推一致；双恢复第二次重入零 dispatch 且清单字节稳定（NO_OP）。产物层 store 级 digest 对照保留（不代称入口恢复）。六场景共同断言：interruptedAtBoundary=true、duplicateDispatches=0、manifestProjected=true。
+family 形状（2026-09-24 R1-H2 落地）：行为层从「store 级崩溃/恢复语义回放」升级为**经生产入口走真实恢复路径的中断-重入**——首 invocation 以 `maxDispatches` 安全边界在崩溃点 dispatch 边界中断（纯循环边界、不落持久 block），同 runId 重入续跑。manifest 库以手动面中间态清单播种，入口 takeover 后每终态投影点持续 catch-up，journal/manifest 追赶可观测。三崩溃点映射：post-gate-verdict = 首轮 gate verdict 后；post-finding-migration = 闭合窗（fix revision 物化后、finding 于 invocation 间窗口结算）；pre-manifest-write = 倒数第二 dispatch 后（末终态及其投影故意落在重入里，成为可捕获的丢失写）。丢失写模拟：回滚到**中断窗口处捕获的已接管清单**（journal 背书、normal catch-up 路径——两面 digest 覆盖对象按设计不同，对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，故 manual 种子只作 takeover-A 引导），重入必须逐字节重推一致；双恢复第二次重入零 dispatch 且清单字节稳定（NO_OP）。产物层 store 级 digest 对照保留（不代称入口恢复）。六场景共同断言：`interruptedAtBoundary=true`、`duplicateDispatches=0`、**`manifestCaughtUp=true`**（R7-H2 后：清单 taken-over cursor 必须追平 journal head——「文件存在」不再足够，落后即假绿）；pre-manifest-write 两场景另证 `lostWriteOccurred=true`（末次投影确已发生：文档相对中断窗口态发生分化，回滚/重推分支确已执行——非 vacuous pass）+ `redriveByteIdentical=true`；三个 double-resume 场景另证 `doubleResumeNoOp=true`。
 
 #### S-CRASH-STANDARD-post-gate-verdict-resume
 - 坐标：depth=STANDARD · verdict=PASS · round=first · crash=post-gate-verdict（干净 PASS 链：gate verdict 后 journal 尾段未投影）
@@ -262,21 +294,40 @@ family 形状（2026-09-24 R1-H2 落地）：行为层从「store 级崩溃/恢�
 
 family 形状（D-088-01 重基线四类初始化）：类差异在 requirement-intake 节点收敛（intake 携带的 init 材料不同）、其后链同构；每类 × STANDARD × {PASS 首轮, FAIL 回流}。
 
-#### S-INIT-new-project-STANDARD-PASS-first / S-INIT-new-project-STANDARD-FAIL-reflow
-- 坐标：init=new-project（NEW_EMPTY：empty repo + requirement doc）· depth=STANDARD · verdict=PASS / FAIL · round=first
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-INIT-new-project-STANDARD-PASS-first
+- 坐标：init=new-project（NEW_EMPTY）· depth=STANDARD · verdict=PASS · round=first
+- 轨迹：intake（empty repo + requirement doc 材料）→ 其后与 S-CORE STANDARD PASS 首轮同构
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
-#### S-INIT-existing-code-STANDARD-PASS-first / S-INIT-existing-code-STANDARD-FAIL-reflow
-- 坐标：init=existing-code（EXISTING_CODE_NO_KNOWLEDGE）· depth=STANDARD · verdict=PASS / FAIL · round=first
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-INIT-new-project-STANDARD-FAIL-reflow
+- 坐标：init=new-project（NEW_EMPTY）· depth=STANDARD · verdict=FAIL · round=first（回流形状）
+- 轨迹：intake（类特有材料）→ FAIL 首裁 → 返工 wave → PASS
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
-#### S-INIT-original-sdd-STANDARD-PASS-first / S-INIT-original-sdd-STANDARD-FAIL-reflow
-- 坐标：init=original-sdd（LEGACY_SDD：PRESERVE/TRANSFORM/RETIRE disposition）· depth=STANDARD · verdict=PASS / FAIL · round=first
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-INIT-existing-code-STANDARD-PASS-first
+- 坐标：init=existing-code（EXISTING_CODE_NO_KNOWLEDGE）· depth=STANDARD · verdict=PASS · round=first
+- 轨迹：intake（codebase survey + requirement doc）→ 其后同构
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
-#### S-INIT-original-sdlc-sdd-STANDARD-PASS-first / S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow
-- 坐标：init=original-sdlc-sdd（LEGACY_SDLC_SDD）· depth=STANDARD · verdict=PASS / FAIL · round=first
-- 九维：各 1-8 ✓ · 9 △9-RG6-01
+#### S-INIT-existing-code-STANDARD-FAIL-reflow
+- 坐标：init=existing-code · depth=STANDARD · verdict=FAIL · round=first
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-INIT-original-sdd-STANDARD-PASS-first
+- 坐标：init=original-sdd（LEGACY_SDD：PRESERVE/TRANSFORM/RETIRE disposition）· depth=STANDARD · verdict=PASS · round=first
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-INIT-original-sdd-STANDARD-FAIL-reflow
+- 坐标：init=original-sdd · depth=STANDARD · verdict=FAIL · round=first
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-INIT-original-sdlc-sdd-STANDARD-PASS-first
+- 坐标：init=original-sdlc-sdd（LEGACY_SDLC_SDD）· depth=STANDARD · verdict=PASS · round=first
+- 九维：1-8 ✓ · 9 △9-RG6-01
+
+#### S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow
+- 坐标：init=original-sdlc-sdd · depth=STANDARD · verdict=FAIL · round=first
+- 九维：1-8 ✓ · 9 △9-RG6-01
 
 > **规格-实现边界发现（R1-H2 调查结论，如实单列）**：四类初始化在生产入口路径**无行为面**——init 类属 D-088-01 初始化器层概念（Decision-090/091），入口请求 `sourceFiles` 全仓无下游消费者（`loop-production-entry.ts` 仅校验数组、允许空；`loop-intake-manifest.ts` 的非空要求不在 runProduction 路径）。§3「init 类影响入口节点与 readiness preflight」只剩 intake 材料差异被脚本建模。**须区分**：入口已有的 manifest readiness preflight（`resolveManifestReadiness` 三态）≠ 初始化 readiness——后者无法经本入口 parity。处置：本报告如实记录（不伪造覆盖）；路由建议：§3 论证修订，或 init 类 parity 归 D-088-01 验收面。
 
@@ -395,7 +446,7 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 - **驱动器 durable-block 护栏**：预算耗尽后 recovery 仍把 regate 目标报为 next point（非 null）；无护栏会空转重 invoke 至 128 次上限。护栏 = 快照 durable block 存在即诚实停机（对应手动面「人停下不等了」——无 release 决策可 advance）。
 - **比较器 final-handoff（dim 9）重构（R1-H1）**：以入口返回的**真实 handoff 三元组**与声明期望（`FactScript.expectedHandoff`，缺省按脚本终态形状推导）逐字段比对；缺失证据拒判；BLOCKED 永不报 MATCH。
 - **行为层 WP-1 波证据化（R2-H1-A→R3-H1→R4-H1/H2→R5-H1 四轮加固）**：记录证据从 gate 轮分支摘出、归 `verifyDeclaredWaves` 逐波声明校验唯一所有（任意触发类型、按声明序、有序代际、末波锚、重启 attempt、未匹配记录反向审计）；gate 轮分支只留结构性准入。
-- **S-CRASH 中断-重入（R1-H2，2026-09-24）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / manifestProjected / redriveByteIdentical / doubleResumeNoOp）；负向：篡改发布态清单的重入必须 fail-closed（MANIFEST_CORRUPT_STOP）。
+- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2 加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp）——全部事实无 vacuous pass 路径（R7-H2 修复前 `redriveByteIdentical` 预置 true、`manifestProjected` 只查存在性，重入投影被跳过时五项标志全 true 假绿）；负向：篡改发布态清单的重入必须 fail-closed（MANIFEST_CORRUPT_STOP）。
 
 ### 6.3 十条生产语义实证（评审必含）
 
@@ -423,6 +474,7 @@ S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受
 | G6-T2 R4 | FAIL | R4-H1 双代际误拒（固定最终代际锚）/ R4-H2 声明后 forward 掩蔽 | 有序代际绑定 + 声明必须实际 restart（负向 34） |
 | G6-T2 R5 | FAIL | R5-H1 混类 WP-1 波核验盲区（review 触发波无人核验） | 逐波声明校验唯一所有（负向 41） |
 | G6-T2 R6 | **PASS** | R5-H1 CLOSED、无新阻塞、已 CLOSED 面不回归（含三/四波交替、归因歧义、记录审计复攻） | 收口进行中 |
+| G6-T2 R7 | FAIL | R7-H1 报告 §3 未逐场景成节（16 ID 并入 6 共享标题）/ R7-H2 S-CRASH 可于清单未追平时假绿（`redriveByteIdentical` 预置 true、`manifestProjected` 只查存在——重入投影跳过时五标志全 true） | H1 拆分为 54 唯一标题；H2 事实诚实化（manifestCaughtUp 比 cursor=journal head、lostWriteOccurred 证分支已执行、redrive 不再预置）——待 R8 复核 |
 
 ### 6.5 R-G6-01（路由的生产发现，完成门阻塞项）
 
