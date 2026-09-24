@@ -96,6 +96,11 @@ async function main(): Promise<void> {
   // regression, independent of the R-G6-01 bucket — the 0/50 red state must
   // never mask one (the F-family dim-7 regression hid in the red once).
   const nonDim9Divergences: string[] = [];
+  // R8-H3: the crash-instrument counter — the crash scenarios must ALL return
+  // non-null recovery facts. A null-facts crash scenario is an instrument
+  // failure that the A' red state must never mask.
+  let crashScenariosTotal = 0;
+  let crashScenariosWithFacts = 0;
 
   for (const spec of specs) {
     const script = spec.build();
@@ -160,20 +165,36 @@ async function main(): Promise<void> {
         // the manifest CAUGHT UP to the journal head (R7-H2: a merely-existing
         // stale document fails), the lost write OCCURRED and re-derived
         // byte-identically (pre-manifest-write), the second resume a NO_OP
-        // (double-resume). Non-crash scenarios carry no facts.
+        // (double-resume), a manifest-stop refusal never rewritten (R8-H4).
+        // Non-crash scenarios carry no facts.
         const crash = run.crashRecovery;
+        // R8-H3: a crash scenario MUST return its facts — null is only legal
+        // for non-crash scenarios. The A' red state must never stand in for
+        // the assertion (a null-facts crash scenario is an instrument failure
+        // in its own right, counted below and hard-failed).
+        if (script.crashPoint !== undefined) {
+          crashScenariosTotal += 1;
+          if (crash !== null) {
+            crashScenariosWithFacts += 1;
+          } else {
+            ok(false, `${spec.id}: crash scenario returned NO recovery facts — the crash assertions were skipped (R8-H3)`);
+          }
+        }
         const crashOk =
-          crash === null ||
-          (crash.interruptedAtBoundary &&
+          (crash === null && script.crashPoint === undefined) ||
+          (crash !== null &&
+            crash.interruptedAtBoundary &&
             crash.duplicateDispatches === 0 &&
             crash.manifestCaughtUp &&
+            crash.refusedManifestStable &&
             (script.loseManifestWrite !== true || (crash.lostWriteOccurred && crash.redriveByteIdentical)) &&
             (script.resumeTwice !== true || crash.doubleResumeNoOp));
         const crashDetail = crash === null
           ? ""
           : `; crash interrupt@boundary=${crash.interruptedAtBoundary} reDispatch=${crash.duplicateDispatches} manifestCaughtUp=${crash.manifestCaughtUp}` +
             `${script.loseManifestWrite === true ? ` lostWrite=${crash.lostWriteOccurred} redrive=${crash.redriveByteIdentical}` : ""}` +
-            `${script.resumeTwice === true ? ` doubleNoOp=${crash.doubleResumeNoOp}` : ""}`;
+            `${script.resumeTwice === true ? ` doubleNoOp=${crash.doubleResumeNoOp}` : ""}` +
+            ` refusedStable=${crash.refusedManifestStable}`;
         // H1 A′ classification: a dim-9 divergence on a completing script is
         // the known routed production cause ONLY when it carries the exact
         // R-G6-01 signature (BLOCKED / "code review closure review not done"
@@ -229,6 +250,15 @@ async function main(): Promise<void> {
     console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${expectedKnownDim9} known-cause divergences, observed ${knownDim9}`);
   }
 
+  // ── R8-H3: the crash-instrument summary — its own count, its own line ────
+  // The crash facts are an independent assertion surface: the red 0/50 state
+  // must never be the evidence that they were checked.
+  const crashFactsOk = crashScenariosWithFacts === crashScenariosTotal;
+  console.log(`==== g6 crash-recovery facts: ${crashScenariosWithFacts}/${crashScenariosTotal} crash scenarios returned non-null facts (must be equal — R8-H3) ====`);
+  if (!crashFactsOk) {
+    console.error(`  ✗ crash facts missing for ${crashScenariosTotal - crashScenariosWithFacts} crash scenario(s) — the A' red state must not stand in for the assertion`);
+  }
+
   // ── Over-limit pause waves — behavior layer only, single-listed ──────────
   // A FAIL/BLOCKED_UNKNOWN verdict authors no gate revision (WP6), so the
   // pending gate row's triple drifts between the faces — the artifact layer
@@ -272,7 +302,7 @@ async function main(): Promise<void> {
   console.log(`==== g6 parity over-limit pause (behavior layer only): ${pausePassed} passed, ${pauseFailed} failed ====`);
   console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count)`);
 
-  if (failed > 0 || pauseFailed > 0 || !bucketOk || nonDim9Divergences.length > 0) process.exit(1);
+  if (failed > 0 || pauseFailed > 0 || !bucketOk || nonDim9Divergences.length > 0 || !crashFactsOk) process.exit(1);
 }
 
 void main();

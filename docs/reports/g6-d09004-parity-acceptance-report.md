@@ -32,7 +32,7 @@
 
 ### 2.1 全量回归与并行抖动归因
 
-`npm test`（并行，171 文件）：断言数 **1767 passed / 0 failed**；文件级 **1 failed** = `tests/g6-parity-behavior-matrix.test.ts`——即按 A′ 设计红的行为矩阵（退出码 1 是 §1 A′ 声明的预期形态，非失控）。
+`npm test`（并行，171 文件）：**逐文件断言全绿**；文件级失败 2 = ① `tests/g6-parity-behavior-matrix.test.ts`——按 A′ 设计红的行为矩阵（退出码 1 是 §1 A′ 声明的预期形态，非失控）；② `tests/loop-codex-implementation-adapter.test.ts`——已知并行抖动（隔离复跑 220 检查 0 失败，恢复）。**更正说明（R8 复审方指出）**：日志末尾的 `Results: 1767 passed / 0 failed` 是 `system-capability-review.test.ts` 的**单文件内统计**，并行 runner 不打印跨文件断言总数——历史多处「全量 1767」均为该误述，本报告予以更正，后续以「逐文件全绿 + 文件级失败清单」表述。
 
 已知环境抖动（非代码问题，历次在案）：并行满载下间歇 1 文件失败，已两次观察到不同文件——`loop-delivery-checkpoint-store.test.ts`（隔离 268/0 恢复）与 `loop-codex-implementation-adapter.test.ts`（隔离 220 检查 0 失败恢复）；R4/R6 复审方另观察到 `bootstrap` shell 文件因沙箱禁 AF_UNIX socket 的失败（隔离恢复）。形态一致（跨进程资源竞争），抖文件均不 import G6 harness，与本改动面无因果路径；按协议隔离复跑确认恢复。
 
@@ -259,7 +259,7 @@ family 形状（零 finding 的非 finding 路径）：WP-1 `FEEDBACK_DRIVEN_CHA
 
 ### 3.12 S-CRASH（6，R1-H2 中断-重入）
 
-family 形状（2026-09-24 R1-H2 落地）：行为层从「store 级崩溃/恢复语义回放」升级为**经生产入口走真实恢复路径的中断-重入**——首 invocation 以 `maxDispatches` 安全边界在崩溃点 dispatch 边界中断（纯循环边界、不落持久 block），同 runId 重入续跑。manifest 库以手动面中间态清单播种，入口 takeover 后每终态投影点持续 catch-up，journal/manifest 追赶可观测。三崩溃点映射：post-gate-verdict = 首轮 gate verdict 后；post-finding-migration = 闭合窗（fix revision 物化后、finding 于 invocation 间窗口结算）；pre-manifest-write = 倒数第二 dispatch 后（末终态及其投影故意落在重入里，成为可捕获的丢失写）。丢失写模拟：回滚到**中断窗口处捕获的已接管清单**（journal 背书、normal catch-up 路径——两面 digest 覆盖对象按设计不同，对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，故 manual 种子只作 takeover-A 引导），重入必须逐字节重推一致；双恢复第二次重入零 dispatch 且清单字节稳定（NO_OP）。产物层 store 级 digest 对照保留（不代称入口恢复）。六场景共同断言：`interruptedAtBoundary=true`、`duplicateDispatches=0`、**`manifestCaughtUp=true`**（R7-H2 后：清单 taken-over cursor 必须追平 journal head——「文件存在」不再足够，落后即假绿）；pre-manifest-write 两场景另证 `lostWriteOccurred=true`（末次投影确已发生：文档相对中断窗口态发生分化，回滚/重推分支确已执行——非 vacuous pass）+ `redriveByteIdentical=true`；三个 double-resume 场景另证 `doubleResumeNoOp=true`。
+family 形状（2026-09-24 R1-H2 落地）：行为层从「store 级崩溃/恢复语义回放」升级为**经生产入口走真实恢复路径的中断-重入**——首 invocation 以 `maxDispatches` 安全边界在崩溃点 dispatch 边界中断（纯循环边界、不落持久 block），同 runId 重入续跑。manifest 库以手动面中间态清单播种，入口 takeover 后每终态投影点持续 catch-up，journal/manifest 追赶可观测。三崩溃点映射：post-gate-verdict = 首轮 gate verdict 后；post-finding-migration = 闭合窗（fix revision 物化后、finding 于 invocation 间窗口结算）；pre-manifest-write = 倒数第二 dispatch 后（末终态及其投影故意落在重入里，成为可捕获的丢失写）。丢失写模拟：回滚到**中断窗口处捕获的已接管清单**（journal 背书、normal catch-up 路径——两面 digest 覆盖对象按设计不同，对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，故 manual 种子只作 takeover-A 引导），重入必须逐字节重推一致；双恢复第二次重入零 dispatch 且清单字节稳定（NO_OP）。产物层 store 级 digest 对照保留（不代称入口恢复）。六场景共同断言：`interruptedAtBoundary=true`、`duplicateDispatches=0`、**`manifestCaughtUp=true`**（R7-H2 后：清单 taken-over cursor 必须追平 journal head——「文件存在」不再足够，落后即假绿）；pre-manifest-write 两场景另证 `lostWriteOccurred=true`（末次投影确已发生：文档相对中断窗口态发生分化，回滚/重推分支确已执行——非 vacuous pass）+ `redriveByteIdentical=true`；六个 double-resume 场景另证 `doubleResumeNoOp=true`；全部六场景另证 `refusedManifestStable=true`（R8-H4：无 manifest STOP 拒绝时不适用；一旦拒绝，驱动不得改写被拒字节）。runner 独立计数：**6/6 崩溃场景必须全部返回非空事实**（R8-H3）。
 
 #### S-CRASH-STANDARD-post-gate-verdict-resume
 - 坐标：depth=STANDARD · verdict=PASS · round=first · crash=post-gate-verdict（干净 PASS 链：gate verdict 后 journal 尾段未投影）
@@ -446,7 +446,7 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 - **驱动器 durable-block 护栏**：预算耗尽后 recovery 仍把 regate 目标报为 next point（非 null）；无护栏会空转重 invoke 至 128 次上限。护栏 = 快照 durable block 存在即诚实停机（对应手动面「人停下不等了」——无 release 决策可 advance）。
 - **比较器 final-handoff（dim 9）重构（R1-H1）**：以入口返回的**真实 handoff 三元组**与声明期望（`FactScript.expectedHandoff`，缺省按脚本终态形状推导）逐字段比对；缺失证据拒判；BLOCKED 永不报 MATCH。
 - **行为层 WP-1 波证据化（R2-H1-A→R3-H1→R4-H1/H2→R5-H1 四轮加固）**：记录证据从 gate 轮分支摘出、归 `verifyDeclaredWaves` 逐波声明校验唯一所有（任意触发类型、按声明序、有序代际、末波锚、重启 attempt、未匹配记录反向审计）；gate 轮分支只留结构性准入。
-- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2 加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp）——全部事实无 vacuous pass 路径（R7-H2 修复前 `redriveByteIdentical` 预置 true、`manifestProjected` 只查存在性，重入投影被跳过时五项标志全 true 假绿）；负向：篡改发布态清单的重入必须 fail-closed（MANIFEST_CORRUPT_STOP）。
+- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2/R8-H3/R8-H4 加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp / refusedManifestStable）并**独立计数**（崩溃场景 6/6 必须全部返回非空事实——R8-H3：`crashRecovery=null` 曾被无条件放行，A′ 红态不得代替断言）。诚实化历程（每轮一个 vacuous 路径被独立复审闭合）：R7-H2 前 `redriveByteIdentical` 预置 true、`manifestProjected` 只查存在性（重入投影跳过时五标志全 true 假绿）→ R7-H2 改为 cursor=head 比对 + lostWriteOccurred 证分支已执行 → R8-H4 前 STOP 后 epilogue 仍回写被拒清单 → 改为「任何 manifest STOP 即终态：跳过丢失写/双恢复 epilogue + 钉死被拒字节（refusedManifestStable）」。负向：篡改发布态清单（self-digest / entry digest / 合法封印但 cursor 超前三种态）的重入必须 fail-closed 且驱动不得改写被拒字节。**当前不存在已知 vacuous 路径**（R8 负向 48/0 钉死）——该结论以负向矩阵为证，非全称自述。
 
 ### 6.3 十条生产语义实证（评审必含）
 
@@ -463,7 +463,7 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 
 S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受 manual 种子（空 journal 无对账）后每终态投影持续 catch-up；两面 digest 覆盖对象按设计不同（raw content vs 输出 envelope）——对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，崩溃回滚须以 journal 背书的窗口清单为目标；`maxDispatches` 安全边界可作干净中断点（不落持久 block）；重投影确定性（回滚→重推逐字节一致）经 projector 实测成立。
 
-### 6.4 外部独立复审全轮记录（G6T2-R1(M1) + G6-T2-R1..R6(M2)）
+### 6.4 外部独立复审全轮记录（G6T2-R1(M1) + G6-T2-R1..R8(M2)）
 
 | 轮次 | 判定 | 内容 | 闭环 |
 | --- | --- | --- | --- |
@@ -474,7 +474,8 @@ S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受
 | G6-T2 R4 | FAIL | R4-H1 双代际误拒（固定最终代际锚）/ R4-H2 声明后 forward 掩蔽 | 有序代际绑定 + 声明必须实际 restart（负向 34） |
 | G6-T2 R5 | FAIL | R5-H1 混类 WP-1 波核验盲区（review 触发波无人核验） | 逐波声明校验唯一所有（负向 41） |
 | G6-T2 R6 | **PASS** | R5-H1 CLOSED、无新阻塞、已 CLOSED 面不回归（含三/四波交替、归因歧义、记录审计复攻） | 收口进行中 |
-| G6-T2 R7 | FAIL | R7-H1 报告 §3 未逐场景成节（16 ID 并入 6 共享标题）/ R7-H2 S-CRASH 可于清单未追平时假绿（`redriveByteIdentical` 预置 true、`manifestProjected` 只查存在——重入投影跳过时五标志全 true） | H1 拆分为 54 唯一标题；H2 事实诚实化（manifestCaughtUp 比 cursor=journal head、lostWriteOccurred 证分支已执行、redrive 不再预置）——待 R8 复核 |
+| G6-T2 R7 | FAIL | R7-H1 报告 §3 未逐场景成节（16 ID 并入 6 共享标题）/ R7-H2 S-CRASH 可于清单未追平时假绿（`redriveByteIdentical` 预置 true、`manifestProjected` 只查存在——重入投影跳过时五标志全 true） | H1 拆分为 54 唯一标题（双向零差）；H2 事实诚实化（manifestCaughtUp 比 cursor=journal head、lostWriteOccurred 证分支已执行、redrive 不预置） |
+| G6-T2 R8 | FAIL | R8-H3 崩溃事实为 null 被放行（`crash === null ||` 无条件接受，A′ 红态掩盖断言缺失）/ R8-H4 STOP 后 epilogue 改写被拒清单（丢失写分支只凭文本不同即回写窗口清单，未先确认重入成功且清单有效） | H3 runner 按 crashPoint 要求非空事实 + 独立计数（6/6）与硬失败；H4 任何 manifest STOP 即终态——跳过丢失写/双恢复 epilogue + 钉死被拒字节（refusedManifestStable），三态负向（self-digest/entry digest/合法封印 cursor 超前）钉死禁写——待 R9 复核 |
 
 ### 6.5 R-G6-01（路由的生产发现，完成门阻塞项）
 

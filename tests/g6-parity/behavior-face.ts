@@ -107,6 +107,13 @@ export interface BehaviorRunResult {
     readonly lostWriteOccurred: boolean;
     readonly redriveByteIdentical: boolean;
     readonly doubleResumeNoOp: boolean;
+    /**
+     * R8-H4: after a manifest-stop refusal the driver must never rewrite the
+     * refused document — true when the manifest's bytes at the driver's end
+     * equal the state captured at the refusal (and true, as not-applicable,
+     * when no refusal was observed).
+     */
+    readonly refusedManifestStable: boolean;
   } | null;
 }
 
@@ -121,6 +128,7 @@ export async function driveBehaviorLayer(
   script: FactScript,
   workspace: string,
   manifestSeedText?: string,
+  onCrashWindow?: (manifestPath: string) => void | Promise<void>,
 ): Promise<BehaviorRunResult> {
   const queues = new Map<string, EnvelopeSpec[]>();
   const enqueue = (key: string, spec: EnvelopeSpec): void => {
@@ -471,6 +479,12 @@ export async function driveBehaviorLayer(
   let outcome = await invokeProduction(boundary ?? undefined);
   const firstInvocationDispatches = dispatchCount();
   const crashWindowManifest = crashMode ? readManifest() : null;
+  // Test seam (R8-H4 negatives): fires at the crash window with the library
+  // path, so a negative can make the re-entry face a refused (inconsistent)
+  // library and pin that the driver never rewrites it. The matrix runner
+  // passes no hook — the normal scenarios have no tampering. Awaited (an
+  // async seam must complete before the re-entry reads the library).
+  if (crashMode && onCrashWindow !== undefined) await onCrashWindow(manifestPath);
   // The staged resume: after a run that stopped, close whatever is now
   // closable — the manual face publishes its finding-action between
   // declarations; the store's currency rule subsumes the per-stage round
@@ -503,10 +517,27 @@ export async function driveBehaviorLayer(
   // merely exists while the journal moved on is a stale document, so the
   // runner additionally requires the manifest's cursor to equal the journal
   // head (manifestCaughtUp).
+  //
+  // R8-H4: a manifest-stop refusal is TERMINAL for the harness. When the
+  // entry refused the library (MANIFEST_CORRUPT_STOP /
+  // JOURNAL_MANIFEST_MISMATCH_STOP), the driver must not rewrite the refused
+  // document — the lost-write and double-resume epilogues are skipped and the
+  // refused bytes are pinned for the driver's whole lifetime
+  // (refusedManifestStable). A text-difference alone never justifies the
+  // rollback when the run is blocked.
+  const MANIFEST_STOP_CODES: ReadonlySet<string> = new Set([
+    "MANIFEST_CORRUPT_STOP",
+    "JOURNAL_MANIFEST_MISMATCH_STOP",
+  ]);
+  const manifestStopCode = (): string | null => {
+    const code = durableBlockReason();
+    return code !== null && MANIFEST_STOP_CODES.has(code) ? code : null;
+  };
   let redriveByteIdentical = false;
   let lostWriteOccurred = false;
   let doubleResumeNoOp = false;
-  if (crashMode && script.loseManifestWrite === true) {
+  const refusedAtStop = manifestStopCode() === null ? null : readManifest();
+  if (refusedAtStop === null && crashMode && script.loseManifestWrite === true) {
     const lostWrite = readManifest();
     if (lostWrite !== null && crashWindowManifest !== null && lostWrite !== crashWindowManifest) {
       lostWriteOccurred = true;
@@ -515,7 +546,10 @@ export async function driveBehaviorLayer(
       redriveByteIdentical = readManifest() === lostWrite;
     }
   }
-  if (crashMode && script.resumeTwice === true) {
+  // R8-H4: a stop refusal is terminal for BOTH epilogues — the double-resume
+  // NO_OP check is skipped as well (re-invoking against a refused library
+  // would only re-refuse, and must never be used to "prove" stability).
+  if (refusedAtStop === null && crashMode && script.resumeTwice === true) {
     const terminalsBefore = dispatchCount();
     const manifestBefore = readManifest();
     outcome = await invokeProduction();
@@ -603,6 +637,9 @@ export async function driveBehaviorLayer(
         lostWriteOccurred,
         redriveByteIdentical,
         doubleResumeNoOp,
+        // R8-H4: the refused document's bytes must survive the driver's whole
+        // lifetime — the epilogue never rewrites a refused library.
+        refusedManifestStable: refusedAtStop === null ? true : readManifest() === refusedAtStop,
       })
     : null;
   return {

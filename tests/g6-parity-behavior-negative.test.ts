@@ -19,7 +19,7 @@ import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace, typ
 import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FactScript, NodeFact } from "./g6-parity/types";
@@ -529,10 +529,116 @@ async function crashSeedTamperPin(): Promise<void> {
   }
 }
 
+// ── 4g. a refused library is never rewritten (R8-H4) ──────────────────────
+// In the pre-manifest-write re-entry window the library is made inconsistent
+// (three states: self-digest / entry digest / a validly-sealed document whose
+// cursor is ahead of the journal). The production entry must refuse
+// (MANIFEST_CORRUPT_STOP / JOURNAL_MANIFEST_MISMATCH_STOP) AND the driver
+// must never rewrite the refused document: the lost-write/double-resume
+// epilogues are skipped, the refused bytes survive the driver's whole
+// lifetime, and the crash facts honestly report the failure (no vacuous
+// pass). Unsealed content tampering trips the self-digest check first
+// (MANIFEST_CORRUPT_STOP); the cursor-ahead check (JOURNAL_MANIFEST_MISMATCH_
+// STOP) needs a validly sealed document — produced by one normal run's final
+// projection, written into the window so its cursor exceeds the re-entry's
+// journal head.
+async function crashRefusalPin(): Promise<void> {
+  const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-pre-manifest-write-resume")!;
+  const crashScript = crashSpec.build();
+  const flipFirstHex = (digest: string): string => `${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`;
+  const root = mkdtempSync(join(tmpdir(), "g6-neg-crash-refusal-"));
+  // A FRESH manual library per seed (the publisher's init refuses an existing
+  // manifest).
+  const seedFor = async (): Promise<string> => {
+    const libRoot = mkdtempSync(join(root, "lib-"));
+    const manual = driveManualFace(join(libRoot, "lib-manual"), crashScript);
+    const seed = manual.intermediateManifestText;
+    if (seed === undefined) throw new Error("pre-manifest-write scenario carries no manual intermediate manifest");
+    return seed;
+  };
+  // The validly-sealed ahead-of-journal document: one NORMAL crash run's
+  // final projection (its cursor equals the completed journal's head).
+  const sealedAheadText = async (): Promise<string> => {
+    const workspace = makeBehaviorWorkspace();
+    const stores = makeStores("negative-crash-refusal-seal-source");
+    try {
+      await driveBehaviorLayer(stores, crashScript, workspace, await seedFor());
+      const manifestPath = join(stores.root, "repo", "library", crashScript.requirementId, "manifest.md");
+      return readFileSync(manifestPath, "utf8");
+    } finally {
+      stores.runStore.close();
+      rmSync(stores.root, { recursive: true, force: true });
+      removeBehaviorWorkspace(workspace);
+    }
+  };
+  const tamperers: readonly { label: string; expected: string; apply: (text: string) => Promise<string> }[] = [
+    {
+      label: "self-digest",
+      expected: "MANIFEST_CORRUPT_STOP",
+      apply: async (text) =>
+        text.replace(
+          /(manifest_digest:\s*sha256:)([0-9a-f]{64})/,
+          (_match, prefix: string, digest: string) => `${prefix}${flipFirstHex(digest)}`,
+        ),
+    },
+    {
+      label: "entry digest",
+      expected: "MANIFEST_CORRUPT_STOP",
+      apply: async (text) =>
+        text.replace(
+          /^(\s*digest:\s*)([0-9a-f]{64})$/m,
+          (_match, prefix: string, digest: string) => `${prefix}${flipFirstHex(digest)}`,
+        ),
+    },
+    {
+      label: "sealed cursor ahead of the journal",
+      expected: "JOURNAL_MANIFEST_MISMATCH_STOP",
+      apply: async () => sealedAheadText(),
+    },
+  ];
+  try {
+    for (const tamperer of tamperers) {
+      const workspace = makeBehaviorWorkspace();
+      const stores = makeStores(`negative-crash-refusal-${tamperer.label.replace(/\s+/g, "-")}`);
+      try {
+        let tamperedText: string | null = null;
+        const manifestPath = join(stores.root, "repo", "library", crashScript.requirementId, "manifest.md");
+        const run = await driveBehaviorLayer(stores, crashScript, workspace, await seedFor(), async (windowManifestPath) => {
+          tamperedText = await tamperer.apply(readFileSync(windowManifestPath, "utf8"));
+          writeFileSync(windowManifestPath, tamperedText, "utf8");
+        });
+        const finalText = existsSync(manifestPath) ? readFileSync(manifestPath, "utf8") : null;
+        const facts = run.crashRecovery;
+        ok(
+          run.trace.chainStatus === "BLOCKED" &&
+            (run.trace.blockingReasonCode ?? "") === tamperer.expected &&
+            facts !== null &&
+            facts.refusedManifestStable === true &&
+            finalText === tamperedText,
+          `R8-H4: the ${tamperer.label}-tampered library is refused (${tamperer.expected}) and never rewritten — the refused bytes survive the driver`,
+        );
+        ok(
+          facts !== null &&
+            facts.lostWriteOccurred === false &&
+            facts.redriveByteIdentical === false,
+          `R8-H4: the ${tamperer.label} refusal reports no vacuous crash facts (lostWrite/redrive stay false)`,
+        );
+      } finally {
+        stores.runStore.close();
+        rmSync(stores.root, { recursive: true, force: true });
+        removeBehaviorWorkspace(workspace);
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 async function main(): Promise<void> {
   await realRunPin();
   await feedbackRestartPin();
   await crashSeedTamperPin();
+  await crashRefusalPin();
   console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
   if (failed > 0) process.exit(1);
