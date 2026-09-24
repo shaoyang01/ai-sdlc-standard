@@ -385,6 +385,113 @@ const twoWaveRestart = (previousGeneration: number, triggerAttempt: number) => (
   }))?.verdict === "DIVERGE", "R4-H1: the second declared wave with no journal record → DIVERGE");
 }
 
+// ── 4e. mixed-kind WP-1 waves (R5-H1) ─────────────────────────────────────
+// The record check owns EVERY declared wave, whatever its trigger kind: the
+// per-gate-round admission loop cannot see a review-triggered wave, so a
+// gate→review (or review→gate) chain must still verify the review wave's
+// record, attribution, ordered generation and the final-generation anchor.
+const gateThenReviewNodes: NodeFact[] = [
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v1", version: "1.0.0" },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v1", version: "1.0.0" },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v1", version: "1.0.0", gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP", opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v2", version: "2.0.0", attempt: 2, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP" },
+  { node: "task-planning", artifactKind: "task_plan", content: "plan v2", version: "2.0.0", attempt: 2 },
+  { node: "implementation", artifactKind: "implementation_record", content: "impl v2", version: "2.0.0", attempt: 2 },
+  { node: "code-review", artifactKind: "review_summary", content: "review v2", version: "2.0.0", attempt: 2, opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v3", version: "3.0.0", attempt: 3, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP" },
+  { node: "task-planning", artifactKind: "task_plan", content: "plan v3", version: "1.0.0" },
+  { node: "implementation", artifactKind: "implementation_record", content: "impl v3", version: "1.0.0" },
+  { node: "code-review", artifactKind: "review_summary", content: "review v3", version: "1.0.0" },
+  { node: "knowledge-sync", artifactKind: "knowledge_sync_result", content: "knowledge v3", version: "1.0.0" },
+];
+const gateThenReviewScript: FactScript = Object.freeze({
+  requirementId: "20260920-gate-then-review-feedback",
+  requestedDepth: "DEEP",
+  findings: [],
+  nodes: gateThenReviewNodes,
+});
+
+const reviewThenGateNodes: NodeFact[] = [
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v1", version: "1.0.0" },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v1", version: "1.0.0" },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v1", version: "1.0.0", gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP" },
+  { node: "task-planning", artifactKind: "task_plan", content: "plan v1", version: "1.0.0" },
+  { node: "implementation", artifactKind: "implementation_record", content: "impl v1", version: "1.0.0" },
+  { node: "code-review", artifactKind: "review_summary", content: "review v1", version: "1.0.0", opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v2", version: "2.0.0", attempt: 2 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v2", version: "2.0.0", attempt: 2, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP", opensFeedbackChange: true },
+  { node: "requirement-intake", artifactKind: "requirement_summary", content: "intake v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-design", artifactKind: "technical_design", content: "design v3", version: "3.0.0", attempt: 3 },
+  { node: "solution-gate", artifactKind: "solution_review", content: "gate v3", version: "3.0.0", attempt: 3, gateResult: "PASS", decisionStatus: "CONFIRMED", decisionDepth: "DEEP" },
+  { node: "task-planning", artifactKind: "task_plan", content: "plan v3", version: "1.0.0" },
+  { node: "implementation", artifactKind: "implementation_record", content: "impl v3", version: "1.0.0" },
+  { node: "code-review", artifactKind: "review_summary", content: "review v3", version: "1.0.0" },
+  { node: "knowledge-sync", artifactKind: "knowledge_sync_result", content: "knowledge v3", version: "1.0.0" },
+];
+const reviewThenGateScript: FactScript = Object.freeze({
+  requirementId: "20260920-review-then-gate-feedback",
+  requestedDepth: "DEEP",
+  findings: [],
+  nodes: reviewThenGateNodes,
+});
+
+{
+  const dim7GateThenReview = (trace: BehaviorTrace) =>
+    compareBehaviorLayer(gateThenReviewScript, trace).dimensions.find((d) => d.dimension === "next-eligibility");
+  const legalGateThenReview = traceFor(gateThenReviewScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 1, triggerCapability: "solution-gate", triggerAttempt: 1 },
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 2, triggerCapability: "code-review", triggerAttempt: 2 },
+    ],
+    generation: 3,
+  });
+  ok(dim7GateThenReview(legalGateThenReview)?.verdict === "MATCH",
+    "R5-H1: the legal gate→review wave (records gen 1+2, run at gen 3) MATCHes");
+  ok(compareBehaviorLayer(gateThenReviewScript, legalGateThenReview).equal,
+    "R5-H1: the legal gate→review trace passes all six behavior dimensions");
+  ok(dim7GateThenReview(traceFor(gateThenReviewScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 1, triggerCapability: "solution-gate", triggerAttempt: 1 },
+    ],
+    generation: 3,
+  }))?.verdict === "DIVERGE", "R5-H1: the gate→review chain with the REVIEW (last) wave's record stripped → DIVERGE");
+  ok(dim7GateThenReview(traceFor(gateThenReviewScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 1, triggerCapability: "solution-gate", triggerAttempt: 1 },
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 2, triggerCapability: "", triggerAttempt: 2 },
+    ],
+    generation: 3,
+  }))?.verdict === "DIVERGE", "R5-H1: the gate→review chain with the review wave's attribution blanked → DIVERGE");
+  ok(dim7GateThenReview(traceFor(gateThenReviewScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 1, triggerCapability: "solution-gate", triggerAttempt: 1 },
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 2, triggerCapability: "code-review", triggerAttempt: 2 },
+    ],
+    generation: 4,
+  }))?.verdict === "DIVERGE", "R5-H1: the gate→review chain with the final generation drifted 3→4 → DIVERGE");
+
+  const dim7ReviewThenGate = (trace: BehaviorTrace) =>
+    compareBehaviorLayer(reviewThenGateScript, trace).dimensions.find((d) => d.dimension === "next-eligibility");
+  ok(dim7ReviewThenGate(traceFor(reviewThenGateScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 1, triggerCapability: "code-review", triggerAttempt: 1 },
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 2, triggerCapability: "solution-gate", triggerAttempt: 2 },
+    ],
+    generation: 3,
+  }))?.verdict === "MATCH", "R5-H1: the legal review→gate wave (records gen 1+2, run at gen 3) MATCHes");
+  ok(dim7ReviewThenGate(traceFor(reviewThenGateScript, {
+    generationRestarts: [
+      { changeKind: "FEEDBACK_DRIVEN_CHANGE", status: "CLASSIFIED", previousGeneration: 2, triggerCapability: "solution-gate", triggerAttempt: 2 },
+    ],
+    generation: 3,
+  }))?.verdict === "DIVERGE", "R5-H1: the review→gate chain with the REVIEW (first) wave's record stripped → DIVERGE");
+}
+
 async function main(): Promise<void> {
   await realRunPin();
   await feedbackRestartPin();

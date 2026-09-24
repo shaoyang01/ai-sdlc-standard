@@ -68,6 +68,93 @@ function deriveExpectedHandoff(script: FactScript): {
     : { status: "ABSENT", reason: null, requireArtifactRef: false };
 }
 
+/**
+ * R5-H1: the declared-wave check — the WP-1 record evidence for EVERY
+ * declared trigger, in script declaration order, whatever its kind. The
+ * per-gate-round admission loop cannot see review-triggered waves (a review
+ * trigger is not a gate round), so the record evidence for all waves is
+ * verified here, once:
+ *   - exactly one verified journal record attributed to the trigger's round
+ *     (FEEDBACK_DRIVEN_CHANGE / CLASSIFIED; an ambiguous attribution refuses);
+ *   - its previousGeneration equals the wave's ordered index (each WP-1
+ *     advances exactly one generation);
+ *   - the LAST declared wave's index+1 is the run's final generation (an
+ *     undeclared extra record drifts it);
+ *   - the restart dispatch after the trigger terminal is the new
+ *     generation's intake at the script-declared attempt (a fresh attempt-1
+ *     intake is a fabricated restart — R3-H1);
+ *   - every journal record matches a declared wave (an undeclared generation
+ *     advance refuses, and a script with no declared trigger carrying a
+ *     record refuses).
+ */
+function verifyDeclaredWaves(script: FactScript, trace: BehaviorTrace): string[] {
+  const declaredWaves = script.nodes.filter((node) => node.opensFeedbackChange === true);
+  const divergences: string[] = [];
+  if (declaredWaves.length === 0) {
+    if (trace.generationRestarts.length > 0) {
+      divergences.push(`${trace.generationRestarts.length} WP-1 generation-restart record(s) in the journal but no declared trigger in the script`);
+    }
+    return divergences;
+  }
+  const matchedRecords = new Set<number>();
+  declaredWaves.forEach((trigger, index) => {
+    const wave = index + 1;
+    const isLastWave = wave === declaredWaves.length;
+    const triggerAttempt = trigger.attempt ?? 1;
+    const matching = trace.generationRestarts
+      .map((record, recordIndex) => ({ record, recordIndex }))
+      .filter(({ record }) =>
+        record.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
+        record.status === "CLASSIFIED" &&
+        record.triggerCapability === trigger.node &&
+        record.triggerAttempt === triggerAttempt);
+    if (matching.length === 0) {
+      divergences.push(`declared WP-1 wave ${wave} (${trigger.node}@${triggerAttempt}): no matching verified journal record`);
+      return;
+    }
+    if (matching.length > 1) {
+      divergences.push(`declared WP-1 wave ${wave} (${trigger.node}@${triggerAttempt}): ${matching.length} matching journal records — an ambiguous attribution refuses`);
+      return;
+    }
+    const { record, recordIndex } = matching[0]!;
+    matchedRecords.add(recordIndex);
+    if (record.previousGeneration !== wave) {
+      divergences.push(`declared WP-1 wave ${wave} (${trigger.node}@${triggerAttempt}): record generation ${record.previousGeneration ?? "null"} vs the ordered binding ${wave}`);
+      return;
+    }
+    if (isLastWave && trace.generation !== wave + 1) {
+      divergences.push(`declared WP-1 wave ${wave} (the last): run generation ${trace.generation} vs expected ${wave + 1}`);
+    }
+    // The restart trajectory: the dispatch after the trigger terminal must be
+    // the new generation's intake at the declared attempt.
+    const triggerRole = trigger.node === "solution-gate" ? "formal_verdict" : "primary";
+    const triggerTerminalIdx = trace.terminals.findIndex(
+      (terminal) =>
+        terminal.capability === trigger.node &&
+        terminal.attempt === triggerAttempt &&
+        terminal.executionRole === triggerRole &&
+        terminal.status === "succeeded",
+    );
+    if (triggerTerminalIdx < 0) return; // the wave never fired — the sequence dimension owns that
+    const declaredIntake = script.nodes[script.nodes.findIndex((node) => node === trigger) + 1];
+    const expectedIntakeAttempt = declaredIntake?.attempt ?? 1;
+    const restartTerminal = trace.terminals[triggerTerminalIdx + 1];
+    if (
+      restartTerminal?.capability !== "requirement-intake" ||
+      restartTerminal.attempt !== expectedIntakeAttempt ||
+      expectedIntakeAttempt <= 1
+    ) {
+      divergences.push(`declared WP-1 wave ${wave} (${trigger.node}@${triggerAttempt}): the restart dispatch after the trigger is ${restartTerminal?.capability ?? "none"}@${String(restartTerminal?.attempt ?? "-")} vs the declared new-generation intake requirement-intake@${expectedIntakeAttempt}`);
+    }
+  });
+  trace.generationRestarts.forEach((record, recordIndex) => {
+    if (!matchedRecords.has(recordIndex)) {
+      divergences.push(`journal WP-1 record ${record.changeKind ?? "null"}/${record.status} (trigger ${record.triggerCapability || "unattributed"}@${record.triggerAttempt}) matches no declared wave`);
+    }
+  });
+  return divergences;
+}
+
 /** Canonical node order (the reflow direction's basis). */
 const NODE_ORDER = [
   "requirement-intake", "solution-design", "solution-gate", "task-planning",
@@ -135,61 +222,25 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
             // The WP-1 feedback path (the F family): an admitting gate round
             // may OPEN a new generation — the FEEDBACK_DRIVEN_CHANGE record
             // drives a full rebuild from requirement-intake that is a
-            // GENERATION RESTART, not a finding reflow (R2-H1-A). R3-H1: the
-            // restart is legitimate only with the matching verified record
-            // (type / CLASSIFIED status / trigger round) AND the restart
-            // intake's new-generation attempt. R4-H2: a declared restart is
-            // an EXPECTATION — a declared trigger whose next dispatch is a
-            // forward node never restarted and must not ride the forward
-            // admission; the declaration forces the intake branch.
+            // GENERATION RESTART, not a finding reflow (R2-H1-A). R4-H2: a
+            // declared restart is an EXPECTATION — a declared gate trigger
+            // must actually restart; a forward (or non-intake) next dispatch
+            // is an un-happened restart and must not ride the forward
+            // admission. The wave's record evidence, ordered generation and
+            // restart attempt are verified by the declared-wave check below
+            // (every declared wave, any trigger kind — R5-H1).
             const declaredTrigger = script.nodes.find(
               (n) => n.opensFeedbackChange === true && n.node === "solution-gate" && (n.attempt ?? 1) === attempt,
             );
             const forward = actualNext !== null && NODE_ORDER.indexOf(actualNext) > NODE_ORDER.indexOf("solution-gate");
-            let okAdmit = forward;
-            let restartDetail = "";
-            if (declaredTrigger !== undefined && actualNext !== "requirement-intake") {
-              okAdmit = false;
-              restartDetail = `declared WP-1 restart at round ${attempt} but the next dispatch is ${actualNext ?? "none"} (expected the generation restart to requirement-intake)`;
-            } else if (declaredTrigger !== undefined && actualNext === "requirement-intake") {
-              // The declared restart trajectory: the script's next node after
-              // the trigger is the new generation's intake, carrying ITS
-              // attempt — a re-dispatch at the run's continuing attempt, not a
-              // fresh attempt-1 intake (a fabricated restart).
-              const declaredIntake = script.nodes[script.nodes.findIndex((n) => n === declaredTrigger) + 1];
-              const expectedIntakeAttempt = declaredIntake?.attempt ?? 1;
-              const observedIntakeAttempt = trace.terminals[verdictIdx + 1]?.attempt ?? null;
-              // R4-H1: the ORDERED generation binding — the i-th declared
-              // trigger (script declaration order) expects the record whose
-              // previousGeneration is i (each WP-1 advances exactly one
-              // generation); only the LAST declared wave is additionally
-              // anchored to the run's final generation (an undeclared extra
-              // record would drift it).
-              const declaredWaves = script.nodes.filter((n) => n.opensFeedbackChange === true);
-              const waveIndex = declaredWaves.findIndex((n) => n === declaredTrigger) + 1;
-              const isLastWave = waveIndex === declaredWaves.length;
-              const record = trace.generationRestarts.find(
-                (item) =>
-                  item.changeKind === "FEEDBACK_DRIVEN_CHANGE" &&
-                  item.status === "CLASSIFIED" &&
-                  item.triggerCapability === declaredTrigger.node &&
-                  item.triggerAttempt === attempt,
-              );
-              const generationOk =
-                record !== undefined &&
-                record.previousGeneration === waveIndex &&
-                (!isLastWave || trace.generation === waveIndex + 1);
-              const attemptOk = observedIntakeAttempt === expectedIntakeAttempt && expectedIntakeAttempt > 1;
-              okAdmit = generationOk && attemptOk;
-              restartDetail = record === undefined
-                ? "declared WP-1 restart but the journal carries no matching CLASSIFIED FEEDBACK_DRIVEN_CHANGE record for this trigger round"
-                : `declared WP-1 restart (wave ${waveIndex}/${declaredWaves.length}): record ${record.changeKind}/${record.status}/gen ${record.previousGeneration ?? "?"} (trigger ${record.triggerCapability}@${record.triggerAttempt}), run generation ${trace.generation}, next intake attempt ${observedIntakeAttempt ?? "none"} vs expected ${expectedIntakeAttempt}`;
+            if (declaredTrigger === undefined) {
+              if (!forward) {
+                divergences.push(`round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"} (expected forward progress)`);
+              }
+              continue;
             }
-            if (!okAdmit) {
-              divergences.push(
-                `round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} but next dispatch ${actualNext ?? "none"}` +
-                  `${restartDetail === "" ? "" : ` — ${restartDetail}`}`,
-              );
+            if (actualNext !== "requirement-intake") {
+              divergences.push(`round ${attempt}: admitting ${gate.gateResult}/${gate.decisionStatus} with a declared WP-1 restart but the next dispatch is ${actualNext ?? "none"} (expected the generation restart to requirement-intake)`);
             }
             continue;
           }
@@ -209,6 +260,13 @@ export function compareBehaviorLayer(script: FactScript, trace: BehaviorTrace): 
             divergences.push(`round ${attempt}: non-admitting ${gate.gateResult}/${gate.decisionStatus ?? "-"} but next dispatch ${actualNext ?? "none"} (expected reflow to ${NODE_ORDER[earliest]}${budgetDenied ? " or the budget-denied stop" : ""})`);
           }
         }
+        // R5-H1: the declared-wave record check — every declared WP-1
+        // trigger (gate or review, in declaration order) must be backed by
+        // exactly one verified journal record with the ordered generation,
+        // the last wave anchored to the run's final generation, and the
+        // restart intake's new-generation attempt. The per-gate-round loop
+        // above cannot see review-triggered waves.
+        divergences.push(...verifyDeclaredWaves(script, trace));
         const expected = expectedTerminal(script);
         const terminalOk = completed === expected.success;
         const same = divergences.length === 0 && terminalOk;
