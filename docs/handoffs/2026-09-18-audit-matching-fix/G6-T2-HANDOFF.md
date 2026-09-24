@@ -179,6 +179,17 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：全量 serial 回归说明归档 → 单 PR 收口（更新 PR #197，base `feature/loop-runtime-v1`，R1 自证）→ 独立复审（R7，范围 = H4 报告与账目复算 + R1-H2 S-CRASH 实现 + 全部已 CLOSED 面不回归）→ PASS 后请合并授权。
 
+## 2026-09-24 家用机会话：R7 复审 FAIL → R7-H1/H2 修复（@90984c7 已推）
+
+**R7 判定 FAIL**（外部只读副本 @f6ef0e8，两项合并阻塞；其余复算面均 PASS：三本账、D-7/D-17、十条语义、完成门表述、剔除项张力、S-CRASH 边界映射 4/8/9、真实重入、篡改负面、播种建模）：
+
+1. **R7-H1 报告未逐场景成节**：程序化提取 54 ID ↔ 44 标题，16 个 ID 并入 6 个共享标题（STANDARD/DEEP 首轮 ×8 + S-INIT ×8）。修复：拆分为 **54 个唯一 scenario-id 标题**；程序化核对闭合（50 产物层 runner ID + 4 行为层单列 ID ↔ 54 报告标题，双向零差）。
+2. **R7-H2 S-CRASH 可于清单未追平时假绿**（仪器诚实性缺陷）：`redriveByteIdentical` 预置 true——末次投影未发生（清单=中断窗口态）时回滚/重推分支根本不执行，标志 vacuous 为 true；`manifestProjected` 只查文件存在。复审方以「重入阶段跳过清单投影」（不改生产代码）复现：journal head 22 / 清单 cursor 18，五项崩溃标志全 true。修复：**`manifestCaughtUp`**（清单 taken-over cursor 必须 = journal head，落后即假绿）+ **`lostWriteOccurred`**（末次投影确已发生——文档相对窗口态分化，证回滚/重推分支确已执行）+ `redriveByteIdentical` 不再预置（分支未执行即 false）。**闭环探针**（复刻该攻击）：manifestCaughtUp=false、lostWriteOccurred=false——攻击被抓住；正常跑六场景 cursor=head、pre-manifest-write lostWrite+redrive=true、doubleNoOp=true。
+
+**验证**：tsc 0；行为矩阵 A′ 四要素完整（合并 0/50 按设计、桶 50/50 零新因、非 dim-9 = 0、超限 4/4）；行为负向 42/0；比较器负向 38/0；产物 50/0；全量 **1767/0 / 171 文件**（唯一红文件 = 按设计红矩阵）。
+
+剩余（每步先请 Current User 确认）：PR #197 描述同步（R7 轮记录 + 强化事实）→ 独立复审（R8，范围 = R7-H1/H2 闭环 + 已 CLOSED 面不回归 + 复算「攻击-抓住」对）→ PASS 后请 Current User 授权合并。
+
 ## 2026-09-23 公司机会话：R1 独立复审 FAIL → 补救（H3/H1 已落地验证；H2 调查结论+实现待续）
 
 **R1 独立复审判定 FAIL**（外部只读副本 @ d5fe4b2，四项阻塞 R1-H1～H4；对本 harness = 验收仪器本身的缺陷，比场景失败更严重）。Current User 裁决：**H1 用 A′**（surfaced 分歧 + 钉死桶，BLOCKED 永不报 MATCH，门等生产修复）、**H2 授权调查**（含「S-INIT 轴不可经入口驱动」作为可行结论）、生产缺陷 **R-G6-01 单列路由**。
