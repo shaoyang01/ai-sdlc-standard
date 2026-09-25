@@ -19,10 +19,11 @@ import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace, typ
 import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
+import { assertFrozenRegistry, auditFrozenRegistry } from "./g6-parity/registry-guard";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { FactScript, NodeFact } from "./g6-parity/types";
+import type { FactScript, NodeFact, ScenarioSpec } from "./g6-parity/types";
 
 let passed = 0;
 let failed = 0;
@@ -694,6 +695,72 @@ async function crashPostRollbackRefusalPin(): Promise<void> {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+// ── 4i. the frozen-register guard (R10-H1) ────────────────────────────────
+// The matrix denominators come from the frozen registers; a register that
+// lost, duplicated or rescaled an entry must fail with its OWN diagnostic —
+// the A' red exit code (or any tally) is not a scale guard. The guard is
+// unit-pinned here: exact passes; a lost entry, a duplicate entry and a
+// rescaled register each throw with the class named.
+function stubSpec(id: string): ScenarioSpec {
+  return Object.freeze({
+    id,
+    family: "S-CORE" as const,
+    coords: Object.freeze({
+      initClass: "new-project" as const,
+      depth: "STANDARD" as const,
+      verdict: "PASS" as const,
+      round: "first" as const,
+      manifestState: "new" as const,
+      crashResume: "none" as const,
+    }),
+    build: () => Object.freeze({ requirementId: id, requestedDepth: "STANDARD" as const, nodes: [], findings: [] }),
+  });
+}
+
+{
+  const full = [stubSpec("a"), stubSpec("b"), stubSpec("c")];
+  let threw = false;
+  try {
+    assertFrozenRegistry("unit", full, 3);
+  } catch {
+    threw = true;
+  }
+  ok(!threw, "R10-H1: the exact frozen register passes the guard");
+
+  const lost = [stubSpec("a"), stubSpec("b")];
+  let lostMsg = "";
+  try {
+    assertFrozenRegistry("unit", lost, 3);
+  } catch (error) {
+    lostMsg = (error as Error).message;
+  }
+  ok(lostMsg.includes("1 entr") && lostMsg.includes("lost"), "R10-H1: a lost register entry fails with the lost-entry diagnostic");
+
+  let dupMsg = "";
+  try {
+    assertFrozenRegistry("unit", [stubSpec("a"), stubSpec("b"), stubSpec("a")], 3);
+  } catch (error) {
+    dupMsg = (error as Error).message;
+  }
+  ok(dupMsg.includes("duplicated: a"), "R10-H1: a duplicated register entry fails with the duplicate diagnostic");
+
+  let scaleMsg = "";
+  try {
+    assertFrozenRegistry("unit", [stubSpec("a"), stubSpec("b"), stubSpec("c"), stubSpec("d")], 3);
+  } catch (error) {
+    scaleMsg = (error as Error).message;
+  }
+  ok(scaleMsg.includes("expected 3") && scaleMsg.includes("ran 4"), "R10-H1: a rescaled register fails with the scale diagnostic");
+
+  // The real frozen registers pass at their frozen sizes.
+  ok(
+    auditFrozenRegistry("completing", coreFirstRoundScenarios(), 12).ranCount === 12 &&
+      auditFrozenRegistry("over-limit", coreOverLimitPauseScenarios(), 4).ranCount === 4 &&
+      auditFrozenRegistry("crash", coreCrashResumeScenarios(), 6).ranCount === 6,
+    "R10-H1: the real registers audit at their frozen sizes (first-round 12, over-limit 4, crash 6)",
+  );
 }
 
 async function main(): Promise<void> {

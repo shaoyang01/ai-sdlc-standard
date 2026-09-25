@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
+import { assertFrozenRegistry, FROZEN_COMPLETING_SCENARIOS } from "./g6-parity/registry-guard";
 import {
   coreFirstRoundScenarios,
   coreUpgradeScenarios,
@@ -105,8 +106,13 @@ function allScenarios() {
 
 function main(): void {
   const specs = allScenarios();
+  // R10-H1: the register itself is pinned to the frozen ledger (50 unique
+  // completing IDs) BEFORE any scenario runs — a lost or duplicated entry
+  // fails here with its own diagnostic. The per-run failure tally is not a
+  // scale guard: a deleted completing scenario used to report 49/0, exit 0.
+  assertFrozenRegistry("completing matrix", specs, FROZEN_COMPLETING_SCENARIOS);
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned at ${FROZEN_COMPLETING_SCENARIOS} unique IDs)`);
 
   for (const spec of specs) {
     let comparison;

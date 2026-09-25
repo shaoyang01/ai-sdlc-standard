@@ -12,6 +12,13 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer } from "./g6-parity/comparator";
+import {
+  assertFrozenRegistry,
+  auditFrozenRegistry,
+  FROZEN_COMPLETING_SCENARIOS,
+  FROZEN_CRASH_SCENARIOS,
+  FROZEN_OVER_LIMIT_SCENARIOS,
+} from "./g6-parity/registry-guard";
 import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace } from "./g6-parity/behavior-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import {
@@ -69,7 +76,15 @@ function allScenarios() {
 
 async function main(): Promise<void> {
   const specs = allScenarios();
-  console.log(`G6 parity behavior layer: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, production-entry trace + merged judgment)`);
+  // R10-H1: every register is pinned to the frozen ledger BEFORE anything
+  // runs — a lost, duplicated or rescaled register fails with its own
+  // diagnostic. Per-run tallies (and the A' red exit code) are not scale
+  // guards: a deleted completing scenario used to report 49/0, exit 0, and
+  // a deleted over-limit scenario 3/0 or 0/0 with no dedicated error.
+  assertFrozenRegistry("completing matrix", specs, FROZEN_COMPLETING_SCENARIOS);
+  const overLimitAudit = assertFrozenRegistry("over-limit pause", coreOverLimitPauseScenarios(), FROZEN_OVER_LIMIT_SCENARIOS);
+  const crashAudit = assertFrozenRegistry("crash", coreCrashResumeScenarios(), FROZEN_CRASH_SCENARIOS);
+  console.log(`G6 parity behavior layer: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, production-entry trace + merged judgment; registers pinned: ${FROZEN_COMPLETING_SCENARIOS} completing + ${FROZEN_OVER_LIMIT_SCENARIOS} over-limit + ${FROZEN_CRASH_SCENARIOS} crash)`);
 
   // ── H1 A′ bucket: the dim-9 known-cause pin (R-G6-01, routed production
   // finding). Every conforming COMPLETING chain hands off BLOCKED because the
@@ -250,14 +265,20 @@ async function main(): Promise<void> {
   console.log(`(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9 — 6 dims judged by the production-entry trace)`);
 
   // ── H1 A′ bucket summary + pin ──────────────────────────────────────────
-  const bucketOk = knownDim9 === expectedKnownDim9 && newCauseDim9.length === 0;
+  // R10-H1: the bucket's denominator is pinned to the frozen ledger, not to
+  // the scripts that happened to run — a deleted completing scenario must
+  // not shrink the expected bucket.
+  const bucketOk =
+    knownDim9 === expectedKnownDim9 &&
+    expectedKnownDim9 === FROZEN_COMPLETING_SCENARIOS &&
+    newCauseDim9.length === 0;
   console.log(`==== g6 dim-9 known-cause bucket (R-G6-01): ${knownDim9}/${expectedKnownDim9} divergences are the routed production cause; new-cause divergences: ${newCauseDim9.length} ====`);
-  console.log(`(pinned signatures: BLOCKED + reason in {closureReviewDone, pathEntry per-invocation loss} + artifactRef present — the pin fails on a new cause or signature drift)`);
+  console.log(`(pinned signatures: BLOCKED + reason in {closureReviewDone, pathEntry per-invocation loss} + artifactRef present — the pin fails on a new cause or signature drift; denominator pinned at ${FROZEN_COMPLETING_SCENARIOS} completing scenarios)`);
   console.log(`==== g6 non-dim-9 divergences: ${nonDim9Divergences.length} (must be 0 — any non-dim-9 divergence is a regression, independent of the R-G6-01 bucket) ====`);
   for (const item of nonDim9Divergences) console.error(`  ✗ non-dim-9 DIVERGE: ${item}`);
   if (!bucketOk) {
     for (const item of newCauseDim9) console.error(`  ✗ dim-9 NEW CAUSE: ${item}`);
-    console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${expectedKnownDim9} known-cause divergences, observed ${knownDim9}`);
+    console.error(`  ✗ dim-9 bucket pin failed: expected exactly ${FROZEN_COMPLETING_SCENARIOS} known-cause divergences (frozen ledger), observed ${knownDim9}/${expectedKnownDim9}`);
   }
 
   // ── R8-H3/R9-H1: the crash-instrument summary — its own count, its own
@@ -268,8 +289,9 @@ async function main(): Promise<void> {
   // the A' red state.
   const crashFactsOk =
     crashScenariosWithFacts === crashScenariosTotal &&
-    crashScenariosTotal === CRASH_REGISTRY.size &&
-    CRASH_REGISTRY.size === 6 &&
+    crashScenariosTotal === crashAudit.expected &&
+    crashAudit.ranCount === crashAudit.expected &&
+    crashAudit.uniqueCount === crashAudit.expected &&
     crashPointMissing === 0;
   console.log(`==== g6 crash-recovery facts: ${crashScenariosWithFacts}/${crashScenariosTotal} registry scenarios returned non-null facts (must be 6/6 with every crashPoint present — R8-H3/R9-H1) ====`);
   if (!crashFactsOk) {
@@ -279,8 +301,8 @@ async function main(): Promise<void> {
     if (crashScenariosWithFacts < crashScenariosTotal) {
       console.error(`  ✗ crash facts missing for ${crashScenariosTotal - crashScenariosWithFacts} crash scenario(s) — the A' red state must not stand in for the assertion`);
     }
-    if (CRASH_REGISTRY.size !== 6) {
-      console.error(`  ✗ the crash registry is no longer the frozen six-scenario family (${CRASH_REGISTRY.size})`);
+    if (crashAudit.duplicated.length > 0 || crashAudit.uniqueCount !== crashAudit.expected) {
+      console.error(`  ✗ the crash register is no longer the frozen six-scenario family (ran ${crashAudit.ranCount}, unique ${crashAudit.uniqueCount}${crashAudit.duplicated.length > 0 ? `; duplicated: ${crashAudit.duplicated.join(", ")}` : ""})`);
     }
   }
 
@@ -325,9 +347,15 @@ async function main(): Promise<void> {
     }
   }
   console.log(`==== g6 parity over-limit pause (behavior layer only): ${pausePassed} passed, ${pauseFailed} failed ====`);
-  console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count)`);
+  console.log(`(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count; register pinned at ${FROZEN_OVER_LIMIT_SCENARIOS} scenarios — pausePassed must equal it)`);
+  // R10-H1: the over-limit single-listing has its own scale pin — deleting
+  // one used to report 3/0 (or 0/0) with no dedicated error.
+  const pauseScaleOk = pausePassed === FROZEN_OVER_LIMIT_SCENARIOS && overLimitAudit.ranCount === FROZEN_OVER_LIMIT_SCENARIOS && overLimitAudit.duplicated.length === 0;
+  if (!pauseScaleOk) {
+    console.error(`  ✗ over-limit register drifted: ${pausePassed} passed of the frozen ${FROZEN_OVER_LIMIT_SCENARIOS} (ran ${overLimitAudit.ranCount}${overLimitAudit.duplicated.length > 0 ? `; duplicated: ${overLimitAudit.duplicated.join(", ")}` : ""})`);
+  }
 
-  if (failed > 0 || pauseFailed > 0 || !bucketOk || nonDim9Divergences.length > 0 || !crashFactsOk) process.exit(1);
+  if (failed > 0 || pauseFailed > 0 || !bucketOk || nonDim9Divergences.length > 0 || !crashFactsOk || !pauseScaleOk) process.exit(1);
 }
 
 void main();

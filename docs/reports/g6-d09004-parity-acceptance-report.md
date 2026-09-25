@@ -26,7 +26,7 @@
 | 产物层矩阵 | `node --import tsx tests/g6-parity-matrix.test.ts` | **50 passed / 0 failed** |
 | 行为层矩阵（合并判定） | `node --import tsx tests/g6-parity-behavior-matrix.test.ts` | **A′ 红态（按设计）**：合并 0 passed / 50 failed；dim-9 已知原因桶 **50/50、零新因**；**非 dim-9 分歧 0**；超限单列 **4 passed / 0 failed**（durable 终态码 `REGATE_ROUND_BUDGET_EXHAUSTED`）；退出码 1 为预期 |
 | 负向（比较器 fail-open / R2-H3 逐行证明） | `node --import tsx tests/g6-parity-comparator-negative.test.ts` | **38 passed / 0 failed** |
-| 负向（R1-H1 真实 handoff / R2-H1 ABSENT / R3-H1+R4-H1+H2 WP-1 波 / R1-H2 崩溃篡改 / R8-H4 三态禁写 / R9-H2 回滚后拒判） | `node --import tsx tests/g6-parity-behavior-negative.test.ts` | **49 passed / 0 failed** |
+| 负向（R1-H1 真实 handoff / R2-H1 ABSENT / R3-H1+R4-H1+H2 WP-1 波 / R1-H2 崩溃篡改 / R8-H4 三态禁写 / R9-H2 回滚后拒判 / R10-H1 注册表守卫） | `node --import tsx tests/g6-parity-behavior-negative.test.ts` | **54 passed / 0 failed** |
 | 既有投影回归 | loop-manifest-t5-parity / loop-manifest-yaml-parity-matrix | **32/0** · **150/0**（R6 独立复跑核验） |
 | 全量回归 | `npm test`（PATH 前置 ruby@3.3，并行） | 见 §2.1 |
 
@@ -446,8 +446,19 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 - **驱动器 durable-block 护栏**：预算耗尽后 recovery 仍把 regate 目标报为 next point（非 null）；无护栏会空转重 invoke 至 128 次上限。护栏 = 快照 durable block 存在即诚实停机（对应手动面「人停下不等了」——无 release 决策可 advance）。
 - **比较器 final-handoff（dim 9）重构（R1-H1）**：以入口返回的**真实 handoff 三元组**与声明期望（`FactScript.expectedHandoff`，缺省按脚本终态形状推导）逐字段比对；缺失证据拒判；BLOCKED 永不报 MATCH。
 - **行为层 WP-1 波证据化（R2-H1-A→R3-H1→R4-H1/H2→R5-H1 四轮加固）**：记录证据从 gate 轮分支摘出、归 `verifyDeclaredWaves` 逐波声明校验唯一所有（任意触发类型、按声明序、有序代际、末波锚、重启 attempt、未匹配记录反向审计）；gate 轮分支只留结构性准入。
-- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2/R8-H3/R8-H4/R9-H1/R9-H2 五轮加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp / refusedManifestStable）并**独立计数**（分母取自 S-CRASH 注册表、必须 6/6 且 crashPoint 齐全——R8-H3：`crashRecovery=null` 曾被无条件放行；R9-H1：分母曾用待核验的 crashPoint、六场景 crashPoint 全缺失时退化为 0/0 无专属失败）。诚实化历程（每轮一个 vacuous/退化路径被独立复审闭合）：R7-H2 前 `redriveByteIdentical` 预置 true、只查存在性（重入投影跳过时五标志全 true 假绿）→ R7-H2 改 cursor=head 比对 + lostWriteOccurred 证分支已执行 → R8-H4 前 STOP 后 epilogue 回写被拒清单 → 改为「任何 manifest STOP 即终态：跳过丢失写/双恢复 epilogue + 钉死被拒字节」→ R9-H2 前 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 NO_OP）→ 改为每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP。负向：篡改发布态清单（self-digest / entry digest / 合法封印但 cursor 超前）与回滚后拒判共 **8 个崩溃拒绝态**，全部 fail-closed 且驱动不得改写被拒字节、不得记 vacuous 事实。
-  **关于「无已知 vacuous 路径」表述的边界（R9-H3 修订）**：本节的结论形态为「**截至 R9 修复，已闭合并被负向矩阵钉死的 vacuous/退化路径共 5 条（R7-H2 / R8-H3 / R8-H4 / R9-H1 / R9-H2），负向 49/0 对已知路径全拒判」**——历史上该全称断言曾两次被后续复审推翻（R8-H3 推翻「全部事实无 vacuous 路径」、R9-H1/H2 再推翻），故本报告不再作无 vacuuous 路径的全称断言，只陈述已闭合清单与负向覆盖；新路径的发现按阻塞项流程处理。
+- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2/R8-H3/R8-H4/R9-H1/R9-H2 五轮加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp / refusedManifestStable）并**独立计数**（分母取自 S-CRASH 注册表、必须 6/6 且 crashPoint 齐全——R8-H3：`crashRecovery=null` 曾被无条件放行；R9-H1：分母曾用待核验的 crashPoint、六场景 crashPoint 全缺失时退化为 0/0 无专属失败）。诚实化历程（每轮一个 vacuous/退化路径被独立复审闭合）：R7-H2 前 `redriveByteIdentical` 预置 true、只查存在性（重入投影跳过时五标志全 true 假绿）→ R7-H2 改 cursor=head 比对 + lostWriteOccurred 证分支已执行 → R8-H4 前 STOP 后 epilogue 回写被拒清单 → 改为「任何 manifest STOP 即终态：跳过丢失写/双恢复 epilogue + 钉死被拒字节」→ R9-H2 前 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 NO_OP）→ 改为每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP。负向（崩溃拒绝类，共 **5 种注入状态 × 8 条断言**，行为负向 54/0 的组成部分）：① 种子篡改（self-digest，未封印）→ MANIFEST_CORRUPT_STOP；② 窗口篡改三态（self-digest / entry digest / 合法封印但 cursor 超前——后者取一次正常跑的末态投影写入窗口）→ MANIFEST_CORRUPT_STOP ×2 + JOURNAL_MANIFEST_MISMATCH_STOP ×1；③ 回滚后、入口重读前篡改 → MANIFEST_CORRUPT_STOP。每态断言「入口拒判 + 驱动不改写被拒字节 + 不记 vacuous 事实」；后两态另断言双恢复分支不执行、不记 NO_OP。
+  **关于「无已知 vacuous 路径」表述的边界（R9-H3 修订、R10-H2 再修订）**：本报告**不作**无 vacuous 路径的全称断言（该形式已被 R8-H3、R9-H1/H2 两度推翻）；仅陈述**已闭合路径清单 + 逐路径证据归属**（每条路径的闭环证据按真实来源归类，不把未被某测试矩阵覆盖的路径记入该矩阵功劳）：
+
+  | 已闭合路径 | 闭环证据归属（真实来源） |
+  | --- | --- |
+  | R7-H2 重入投影跳过时五标志全 true（redrive 预置 / 只查存在） | **行为负向**（R7 轮加入的剥离/错代际族）+ **runner 的 manifestCaughtUp/lostWriteOccurred 断言** + R8 轮「重入投影跳过」变异推演（已归档）。注：49→54 条负向矩阵中**无**独立的投影跳过用例——该路径由 runner 断言与变异推演闭环 |
+  | R8-H3 崩溃事实为 null 被放行 | **runner 的注册表计数与 null 专属报错**（R9-H1 分母注册表化后同族加强）+ R8/R9 轮 null 变异推演。注：负向矩阵中**无** null 用例——由 runner 守卫闭环 |
+  | R8-H4 STOP 后 epilogue 改写被拒清单 | **行为负向 3 态**（self-digest / entry digest / 合法封印 cursor 超前，窗口注入缝） |
+  | R9-H1 计数退化为 0/0（分母自指） | **runner 的注册表分母 + crashPoint 缺失专属报错** + **registry-guard 单元负向**（丢项/重复/规模/精确四态）+ 本轮变异实证（置空 crashPoint → 0/6 + 六条报错 + 退出 1） |
+  | R9-H2 回滚后拒判仍记 NO_OP | **行为负向 1 态**（onPostRollback 注入缝）+ 拒判逐次重判的 runner/驱动断言 |
+  | R10-H1 完成/超限/崩溃三注册表无规模守卫 | **registry-guard 单元负向 5 例** + **三 runner 的规模硬钉**（50/4/6）+ 变异实证（删完成场景 → 42/50「8 项丢失」退出 1；删超限场景 → 3/4「1 项丢失」退出 1） |
+
+  新路径的发现按阻塞项流程处理；每轮修复的负向/守卫补充随该轮提交落账，本节随之更新。
 
 ### 6.3 十条生产语义实证（评审必含）
 
@@ -507,7 +518,7 @@ S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受
 
 ## 9. 结论（完成门三项逐项判定，§8，按 A′ 现实重述）
 
-1. **全部离线场景通过（归一化后两面等价）**：**BLOCKED（等 R-G6-01 生产修复）**。已达成面：产物层 50 场景九维中 3/4/5 维全等（含 corrupt 单级 fail-closed）；行为层 dims 1/2/6/7/8 全 MATCH、非 dim-9 分歧 0（R6 外部独立复跑核验）；超限单列 4 场景轨迹 + durable 终态全过；九轮外部复审后仪器面（负向 38+49 项、桶 pin、非 dim-9 计数、崩溃事实独立计数）可信。未达成面：**dim-9 final-handoff 在全部 50 个完成场景上 surfaced R-G6-01 分歧**——该判据的完全满足以生产修复为前提（decision record + 生产代码，单独轨道）。故完成门第 1 项状态 = 仪器与产物层全绿、行为层等价性被已路由生产缺陷阻塞，**不得判 PASS，亦不得掩盖**。
+1. **全部离线场景通过（归一化后两面等价）**：**BLOCKED（等 R-G6-01 生产修复）**。已达成面：产物层 50 场景九维中 3/4/5 维全等（含 corrupt 单级 fail-closed）；行为层 dims 1/2/6/7/8 全 MATCH、非 dim-9 分歧 0（R6 外部独立复跑核验）；超限单列 4 场景轨迹 + durable 终态全过；九轮外部复审后仪器面（负向 38+54 项、桶 pin、非 dim-9 计数、崩溃事实独立计数、**注册表规模守卫**——R10-H1）可信。未达成面：**dim-9 final-handoff 在全部 50 个完成场景上 surfaced R-G6-01 分歧**——该判据的完全满足以生产修复为前提（decision record + 生产代码，单独轨道）。故完成门第 1 项状态 = 仪器与产物层全绿、行为层等价性被已路由生产缺陷阻塞，**不得判 PASS，亦不得掩盖**。
 2. **无 shadow executor 替代生产入口**：**PASS**。行为层驱动 = `runProduction` 生产入口本体 + 注入脚本化网关（真实门、真实 store、真实投影器；S-CRASH 走真实恢复路径）；产物层 = T5 store 级同事实驱动 + 真实 publisher。`--capability-source real` 与真实 CLI 全程未用（fixtures/harness/acceptance reports 授权边界内）。
 3. **随后才允许申请真实 CLI run8**：**未申请**（§9：本稿不授权 run8；G6 PASS 后 next_transition 由 Current User 裁决；run8 不自动等于 C03-E/C05）。
 
