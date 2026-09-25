@@ -1,7 +1,7 @@
 # G6 / D-090-04 离线 parity 验收报告
 
 > 规格：`docs/reports/decision-090-g6-parity-acceptance-spec.md`（冻结，D-2/D-3 坐标与 §4.2 两层比较、§7 本报告格式、§8 完成门）。
-> 实施分支：`feat/g6-t2-m2-scenarios` @ `dca0df5`（未上主线；M1 已由 PR #195/#196 合入 `feature/loop-runtime-v1` @ `b8923fc`；M2 收口单 PR #197 已开，base `feature/loop-runtime-v1`）。
+> 实施分支：`feat/g6-t2-m2-scenarios` @ `0259e3c`（未上主线；M1 已由 PR #195/#196 合入 `feature/loop-runtime-v1` @ `b8923fc`；M2 收口单 PR #197 已开，base `feature/loop-runtime-v1`）。b8923fc..HEAD 实算 **49 commits**。
 > 本报告为 G6 gate 的证据包（§7）：逐场景判定 → 汇总表 → 账目对账 → 剔除项清单 → 结论（完成门三项逐项判定）。
 > 改动面纪律：M2 全部工作限于 `tests/`（fixtures/harness）与交接文档，**生产代码零改动**；D-090-04 授权边界（fixtures/harness/acceptance reports；禁真实 CLI、业务仓、shadow、合同变更）全程遵守。
 > **A′ 现实声明**（Current User 2026-09-23 R1 裁决）：路由发现 R-G6-01（生产入口 c2/c3 handoff checklist 证据链双症状，见 §6.5）使**任何 conforming 完成链**的 checklist 恒 BLOCKED；A′ 口径要求该分歧 surfaced、永不报 MATCH。故行为层合并判定当前为 **0/50 按设计红态**（已知原因桶 50/50 零新因、非 dim-9 分歧 0），完成门第 1 项**等 R-G6-01 生产修复**（需 decision record + 生产代码变更，超 D-090-04 授权，单独路由）——本报告如实呈现，不掩盖、不抢跑。
