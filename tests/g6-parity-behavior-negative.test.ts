@@ -20,6 +20,7 @@ import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
 import { assertFrozenRegistry, auditFrozenRegistry } from "./g6-parity/registry-guard";
+import { makeNegativeGuard } from "./g6-parity/negative-guard";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -719,7 +720,7 @@ function stubSpec(id: string): ScenarioSpec {
   });
 }
 
-{
+function registryGuardPin(): void {
   const full = [stubSpec("a"), stubSpec("b"), stubSpec("c")];
   let threw = false;
   try {
@@ -763,13 +764,38 @@ function stubSpec(id: string): ScenarioSpec {
   );
 }
 
+// R11-H1: the negative matrix's own coverage is pinned — every frozen group
+// runs exactly once and the frozen assertion total holds. A deleted
+// assertion (or a deleted group, or an emptied matrix) fails here with its
+// own diagnostic; a 0-failed tally is not coverage.
+const negativeGuard = makeNegativeGuard(
+  "behavior negative",
+  [
+    "real-run-pin",
+    "wp1-feedback",
+    "crash-seed-tamper",
+    "crash-refusal-window",
+    "crash-post-rollback",
+    "registry-guard",
+  ],
+  54,
+);
+
 async function main(): Promise<void> {
+  negativeGuard.group("real-run-pin");
   await realRunPin();
+  negativeGuard.group("wp1-feedback");
   await feedbackRestartPin();
+  negativeGuard.group("crash-seed-tamper");
   await crashSeedTamperPin();
+  negativeGuard.group("crash-refusal-window");
   await crashRefusalPin();
+  negativeGuard.group("crash-post-rollback");
   await crashPostRollbackRefusalPin();
-  console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed ====`);
+  negativeGuard.group("registry-guard");
+  registryGuardPin();
+  negativeGuard.settle(passed);
+  console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed (frozen coverage: ${54} assertions across 6 groups — R11-H1) ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
   if (failed > 0) process.exit(1);
 }

@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer } from "./g6-parity/comparator";
+import { makeNegativeGuard } from "./g6-parity/negative-guard";
 import { coreFirstRoundScenarios, coreManifestStateScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 import { parseRubyYaml, dumpRubyYaml } from "../core/loop-manifest-yaml";
@@ -74,7 +75,15 @@ try {
 const requirementId = script.requirementId;
 console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mutations");
 
+// R11-H1: the negative matrix's own coverage is pinned (frozen groups + frozen total).
+const negativeGuard = makeNegativeGuard(
+  "comparator negative",
+  ["identical", "whitelist-drops", "out-of-drop-set", "catch-up-scoped-exemptions", "d17-real-baseline"],
+  38,
+);
+
 // ── 1. identical manifests ────────────────────────────────────────────────
+negativeGuard.group("identical");
 {
   const result = compareArtifactLayer(manualText, runtimeText, script);
   ok(result.equal && result.diffs.length === 0, "identical manifests compare equal");
@@ -91,6 +100,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
 }
 
 // ── 2. whitelist-dropped fields never fail a comparison ───────────────────
+negativeGuard.group("whitelist-drops");
 {
   const headDrops = [
     "projection_provenance", "declaration_log", "publish_seq", "projected_through",
@@ -112,6 +122,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
 }
 
 // ── 3. any difference outside the drop set fails with the raw diff path ───
+negativeGuard.group("out-of-drop-set");
 {
   const mutateEntry = (node: string, field: string, value: unknown): string => {
     const doc = parse(runtimeText);
@@ -176,6 +187,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
 }
 
 // ── 4. catch-up regime (S-MANIFEST reconcile): the designed exemptions are SCOPED ──
+negativeGuard.group("catch-up-scoped-exemptions");
 {
   const runtimeDoc = parse(runtimeText);
   const manualDoc = parse(manualText);
@@ -228,6 +240,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
   }
 }
 
+negativeGuard.group("d17-real-baseline");
 // ── 5. D-17 on a REAL finding baseline (R1-H3 remediation) ────────────────
 // The reviewer's counterexample: on a closure row, a FORGED runtime finding
 // id compared EQUAL because the catch-up regime rewrote every row's id before
@@ -358,6 +371,7 @@ console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mu
   }
 }
 
-console.log(`\n==== g6 comparator negative summary: ${passed} passed, ${failed} failed ====`);
+negativeGuard.settle(passed);
+console.log(`\n==== g6 comparator negative summary: ${passed} passed, ${failed} failed (frozen coverage: ${38} assertions across 5 groups — R11-H1) ====`);
 console.log(`(drop-set exemptions pinned; ${NINE_DIMENSIONS.length - 6} artifact-layer dimensions judge, 6 behavior-layer NOT_JUDGED)`);
 if (failed > 0) process.exit(1);
