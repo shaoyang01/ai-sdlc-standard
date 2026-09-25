@@ -13,23 +13,12 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer } from "./g6-parity/comparator";
-import { makeNegativeGuard } from "./g6-parity/negative-guard";
+import { loadFrozenLedger, runNegativeSuite } from "./g6-parity/ledger-guard";
 import { coreFirstRoundScenarios, coreManifestStateScenarios } from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 import { parseRubyYaml, dumpRubyYaml } from "../core/loop-manifest-yaml";
 import { extractManifestYaml, wrapManifestYaml } from "../core/loop-manifest-projector";
 
-let passed = 0;
-let failed = 0;
-function ok(condition: boolean, message: string): void {
-  if (condition) {
-    passed += 1;
-    console.log(`  ✓ ${message}`);
-  } else {
-    failed += 1;
-    console.error(`  ✗ ${message}`);
-  }
-}
 
 type Doc = Record<string, unknown>;
 
@@ -75,22 +64,27 @@ try {
 const requirementId = script.requirementId;
 console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mutations");
 
+// R11-H1/R12-H1: the suite runs under the FROZEN LEDGER - the frozen group
+// register and counts are sealed data outside this runner, and the settle is
+// STRUCTURAL (the wrapper performs it; a deleted assertion, a deleted group,
+// a duplicated group or an emptied matrix each fails with its own
+// diagnostic). The summary is generated from the actual execution.
+async function main(): Promise<void> {
+  const ledger = loadFrozenLedger();
+  console.log("G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mutations");
+  const result = await runNegativeSuite("comparator negative", ledger.negatives.comparator, (h) => {
 // R11-H1: the negative matrix's own coverage is pinned (frozen groups + frozen total).
-const negativeGuard = makeNegativeGuard(
-  "comparator negative",
-  ["identical", "whitelist-drops", "out-of-drop-set", "catch-up-scoped-exemptions", "d17-real-baseline"],
-  38,
-);
+
 
 // ── 1. identical manifests ────────────────────────────────────────────────
-negativeGuard.group("identical");
+h.group("identical");
 {
   const result = compareArtifactLayer(manualText, runtimeText, script);
-  ok(result.equal && result.diffs.length === 0, "identical manifests compare equal");
+  h.ok(result.equal && result.diffs.length === 0, "identical manifests compare equal");
   const judged = result.dimensions.filter((d) => d.verdict !== "NOT_JUDGED");
-  ok(judged.length === 3 && judged.every((d) => d.verdict === "MATCH"), "the three artifact-layer dimensions judge MATCH");
+  h.ok(judged.length === 3 && judged.every((d) => d.verdict === "MATCH"), "the three artifact-layer dimensions judge MATCH");
   const notJudged = result.dimensions.filter((d) => d.verdict === "NOT_JUDGED").map((d) => d.dimension);
-  ok(
+  h.ok(
     notJudged.length === 6 &&
       notJudged.includes("node-sequence") && notJudged.includes("gate-roles") &&
       notJudged.includes("decision-depth") && notJudged.includes("next-eligibility") &&
@@ -100,7 +94,7 @@ negativeGuard.group("identical");
 }
 
 // ── 2. whitelist-dropped fields never fail a comparison ───────────────────
-negativeGuard.group("whitelist-drops");
+h.group("whitelist-drops");
 {
   const headDrops = [
     "projection_provenance", "declaration_log", "publish_seq", "projected_through",
@@ -110,19 +104,19 @@ negativeGuard.group("whitelist-drops");
     const doc = parse(runtimeText);
     (doc as Record<string, unknown>)[field] = field === "manifest_digest" ? "0".repeat(64) : [{ injected: true }];
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(result.equal, `dropped head field ${field} mutated → still equal`);
+    h.ok(result.equal, `dropped head field ${field} mutated → still equal`);
   }
   const entryDrops = ["source_event_ref", "updated_at", "execution"];
   for (const field of entryDrops) {
     const doc = parse(runtimeText);
     entry(doc, "requirement-intake")[field] = { injected: true };
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(result.equal, `dropped entry field ${field} mutated → still equal`);
+    h.ok(result.equal, `dropped entry field ${field} mutated → still equal`);
   }
 }
 
 // ── 3. any difference outside the drop set fails with the raw diff path ───
-negativeGuard.group("out-of-drop-set");
+h.group("out-of-drop-set");
 {
   const mutateEntry = (node: string, field: string, value: unknown): string => {
     const doc = parse(runtimeText);
@@ -138,7 +132,7 @@ negativeGuard.group("out-of-drop-set");
   ];
   for (const testCase of cases) {
     const result = compareArtifactLayer(manualText, testCase.text, script);
-    ok(!result.equal && result.diffs.some((d) => testCase.expectPath.test(d)),
+    h.ok(!result.equal && result.diffs.some((d) => testCase.expectPath.test(d)),
       `mutated ${testCase.label} → NOT equal with raw diff path (${result.diffs[0] ?? "none"})`);
   }
 
@@ -152,7 +146,7 @@ negativeGuard.group("out-of-drop-set");
       closed_by: null, closure_evidence_ref: null, closure_evidence_digest: null, closure_bound_revision_id: null,
     });
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(!result.equal && result.diffs.some((d) => /finding_index/.test(d)), "mutated findingIndex → NOT equal with raw diff path");
+    h.ok(!result.equal && result.diffs.some((d) => /finding_index/.test(d)), "mutated findingIndex → NOT equal with raw diff path");
   }
 
   // Non-dropped head field mutation.
@@ -160,7 +154,7 @@ negativeGuard.group("out-of-drop-set");
     const doc = parse(runtimeText);
     doc.title = "forged title";
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(!result.equal && result.diffs.some((d) => /title/.test(d)), "mutated non-dropped head field (title) → NOT equal");
+    h.ok(!result.equal && result.diffs.some((d) => /title/.test(d)), "mutated non-dropped head field (title) → NOT equal");
   }
 
   // Missing / extra entry.
@@ -168,13 +162,13 @@ negativeGuard.group("out-of-drop-set");
     const doc = parse(runtimeText);
     entriesOf(doc).splice(0, 1);
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(!result.equal && result.diffs.some((d) => /entries/.test(d)), "missing entry → NOT equal");
+    h.ok(!result.equal && result.diffs.some((d) => /entries/.test(d)), "missing entry → NOT equal");
   }
   {
     const doc = parse(runtimeText);
     entriesOf(doc).push({ ...entry(doc, "requirement-intake"), node: "forged-extra" });
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(!result.equal, "extra entry → NOT equal");
+    h.ok(!result.equal, "extra entry → NOT equal");
   }
 
   // The reviewer's exact H4 reproduction: a legally re-sealed runtime manifest
@@ -182,12 +176,12 @@ negativeGuard.group("out-of-drop-set");
   {
     const result = compareArtifactLayer(manualText, mutateEntry("requirement-intake", "digest", "a".repeat(64)), script);
     const allMatch = result.dimensions.every((d) => d.verdict === "MATCH");
-    ok(!result.equal && !allMatch, "H4 reproduction (intake digest drift) → NOT all-MATCH");
+    h.ok(!result.equal && !allMatch, "H4 reproduction (intake digest drift) → NOT all-MATCH");
   }
 }
 
 // ── 4. catch-up regime (S-MANIFEST reconcile): the designed exemptions are SCOPED ──
-negativeGuard.group("catch-up-scoped-exemptions");
+h.group("catch-up-scoped-exemptions");
 {
   const runtimeDoc = parse(runtimeText);
   const manualDoc = parse(manualText);
@@ -198,7 +192,7 @@ negativeGuard.group("catch-up-scoped-exemptions");
     const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
     impl["artifact_path"] = "04-实现记录/forged-basename.md";
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
-    ok(result.equal, "catch-up regime: basename-only path difference is the D-7 exemption (still equal)");
+    h.ok(result.equal, "catch-up regime: basename-only path difference is the D-7 exemption (still equal)");
   }
   // (b) A DIRECTORY-segment difference is NOT exempted: must fail.
   {
@@ -206,7 +200,7 @@ negativeGuard.group("catch-up-scoped-exemptions");
     const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
     impl["artifact_path"] = "99-forged-dir/forged-basename.md";
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
-    ok(!result.equal && result.diffs.some((d) => /artifact_path/.test(d)),
+    h.ok(!result.equal && result.diffs.some((d) => /artifact_path/.test(d)),
       "catch-up regime: directory-segment path difference still FAILS (exemption is basename-only)");
   }
   // (c) A digest difference is NOT exempted: must fail.
@@ -215,7 +209,7 @@ negativeGuard.group("catch-up-scoped-exemptions");
     const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
     impl["digest"] = "b".repeat(64);
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
-    ok(!result.equal && result.diffs.some((d) => /digest/.test(d)),
+    h.ok(!result.equal && result.diffs.some((d) => /digest/.test(d)),
       "catch-up regime: digest difference still FAILS");
   }
   // (d) A finding-id difference is the D-17 exemption; a finding EVIDENCE
@@ -226,7 +220,7 @@ negativeGuard.group("catch-up-scoped-exemptions");
     if (rows.length > 0) {
       rows[0]!["evidence_ref"] = "forged-evidence-ref";
       const result = compareArtifactLayer(manualText, render(doc, requirementId), script, regime);
-      ok(!result.equal, "catch-up regime: finding evidence difference still FAILS (only the id is exempted)");
+      h.ok(!result.equal, "catch-up regime: finding evidence difference still FAILS (only the id is exempted)");
     }
   }
   // (e) The takeover regime does NOT carry the exemptions: the same basename
@@ -236,11 +230,11 @@ negativeGuard.group("catch-up-scoped-exemptions");
     const impl = (doc.entries as Record<string, unknown>[]).find((e) => e["node"] === "implementation")!;
     impl["artifact_path"] = "04-实现记录/forged-basename.md";
     const result = compareArtifactLayer(manualText, render(doc, requirementId), script);
-    ok(!result.equal, "takeover regime: the same basename difference FAILS (exemptions are catch-up-only)");
+    h.ok(!result.equal, "takeover regime: the same basename difference FAILS (exemptions are catch-up-only)");
   }
 }
 
-negativeGuard.group("d17-real-baseline");
+h.group("d17-real-baseline");
 // ── 5. D-17 on a REAL finding baseline (R1-H3 remediation) ────────────────
 // The reviewer's counterexample: on a closure row, a FORGED runtime finding
 // id compared EQUAL because the catch-up regime rewrote every row's id before
@@ -281,7 +275,7 @@ negativeGuard.group("d17-real-baseline");
   //     proof forgives exactly that flip.
   {
     const result = compareArtifactLayer(d17Manual, d17Runtime, reconcileScript, regime17);
-    ok(result.equal, "D-17 real baseline: the proven closure-row id flip compares equal");
+    h.ok(result.equal, "D-17 real baseline: the proven closure-row id flip compares equal");
   }
   // (b) The reviewer's counterexample: a forged runtime id on the closure row
   //     (same discovering node + evidence) must FAIL — a forged id is not the
@@ -289,16 +283,16 @@ negativeGuard.group("d17-real-baseline");
   {
     const doc = parse(d17Runtime);
     const rows = doc.finding_index as Record<string, unknown>[];
-    ok(rows.length > 0, "D-17 real baseline: the closure row exists (the old branch was skipped)");
+    h.ok(rows.length > 0, "D-17 real baseline: the closure row exists (the old branch was skipped)");
     rows[0]!["finding_id"] = "forged-unrelated-finding-id";
     const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
-    ok(!result.equal, "D-17: a forged closure-row id FAILS (the exemption requires per-row proof)");
+    h.ok(!result.equal, "D-17: a forged closure-row id FAILS (the exemption requires per-row proof)");
   }
   // (c) The takeover regime carries no exemption: the real flipped id must
   //     FAIL there (literal comparison).
   {
     const result = compareArtifactLayer(d17Manual, d17Runtime, reconcileScript, { catchUpRegime: false });
-    ok(!result.equal, "D-17: the real id flip FAILS under the takeover regime (exemptions are catch-up-only)");
+    h.ok(!result.equal, "D-17: the real id flip FAILS under the takeover regime (exemptions are catch-up-only)");
   }
   // (d) An unpaired row — even carrying a STORE-PROVEN id — must FAIL: the
   //     stable identity has no manual counterpart (the OPEN-row case).
@@ -307,7 +301,7 @@ negativeGuard.group("d17-real-baseline");
     const rows = doc.finding_index as Record<string, unknown>[];
     rows[0]!["discovered_at"] = "implementation";
     const result = compareArtifactLayer(d17Manual, render(doc, reconcileScript.requirementId), reconcileScript, regime17);
-    ok(!result.equal, "D-17: a store-proven id on an unpaired row FAILS (pairing is required)");
+    h.ok(!result.equal, "D-17: a store-proven id on an unpaired row FAILS (pairing is required)");
   }
   // (e) An OPEN row keeps its literal id (R2-H3): flipping an OPEN row's id
   //     fails even when the journal proves the finding — only closure rows
@@ -325,7 +319,7 @@ negativeGuard.group("d17-real-baseline");
       reconcileScript,
       regime17,
     );
-    ok(!result.equal, "D-17: an OPEN row's id flip FAILS (closure rows only)");
+    h.ok(!result.equal, "D-17: an OPEN row's id flip FAILS (closure rows only)");
   }
   // (f) Per-row proof (R2-H3): a closure row's id must be the journal id bound
   //     to THAT row's identity — a sibling finding's id in the same run is not
@@ -360,18 +354,21 @@ negativeGuard.group("d17-real-baseline");
     const duplicated: Doc = { entries: [], finding_index: [row(`${k1}-store`, k1, "RESOLVED"), row(`${k1}-store`, k1, "RESOLVED")] };
     const manualOpen: Doc = { entries: [], finding_index: [row(`${k1}-declared`, k1, "OPEN")] };
     const runtimeOpen: Doc = { entries: [], finding_index: [row(`${k1}-store`, k1, "OPEN")] };
-    ok(compareArtifactLayer(render(manualDoc, requirementId), render(legit, requirementId), script, opts).equal,
+    h.ok(compareArtifactLayer(render(manualDoc, requirementId), render(legit, requirementId), script, opts).equal,
       "D-17: two proven closure rows (distinct per-row ids) compare equal");
-    ok(!compareArtifactLayer(render(manualDoc, requirementId), render(swapped, requirementId), script, opts).equal,
+    h.ok(!compareArtifactLayer(render(manualDoc, requirementId), render(swapped, requirementId), script, opts).equal,
       "D-17: a row carrying a SIBLING finding's store id FAILS (per-row proof)");
-    ok(!compareArtifactLayer(render(manualDoc, requirementId), render(duplicated, requirementId), script, opts).equal,
+    h.ok(!compareArtifactLayer(render(manualDoc, requirementId), render(duplicated, requirementId), script, opts).equal,
       "D-17: a duplicated pairing (two rows on one identity) FAILS (one-to-one)");
-    ok(!compareArtifactLayer(render(manualOpen, requirementId), render(runtimeOpen, requirementId), script, opts).equal,
+    h.ok(!compareArtifactLayer(render(manualOpen, requirementId), render(runtimeOpen, requirementId), script, opts).equal,
       "D-17: an OPEN row's id flip FAILS (closure rows only)");
   }
 }
+  });
+  console.log(`\n==== g6 comparator negative summary: ${result.summary} ====`);
+  console.log(`(drop-set exemptions pinned; ${NINE_DIMENSIONS.length - 6} artifact-layer dimensions judge, 6 behavior-layer NOT_JUDGED)`);
+  if (result.failed > 0) process.exit(1);
+}
 
-negativeGuard.settle(passed);
-console.log(`\n==== g6 comparator negative summary: ${passed} passed, ${failed} failed (frozen coverage: ${38} assertions across 5 groups — R11-H1) ====`);
-console.log(`(drop-set exemptions pinned; ${NINE_DIMENSIONS.length - 6} artifact-layer dimensions judge, 6 behavior-layer NOT_JUDGED)`);
-if (failed > 0) process.exit(1);
+void main();
+

@@ -1,0 +1,98 @@
+{
+  "scenarios": {
+    "completing": [
+      "S-CORE-LIGHT-PASS-first",
+      "S-CORE-LIGHT-FAIL-first",
+      "S-CORE-LIGHT-PASS_WITH_RISK-first",
+      "S-CORE-LIGHT-BLOCKED_UNKNOWN-first",
+      "S-CORE-STANDARD-PASS-first",
+      "S-CORE-STANDARD-FAIL-first",
+      "S-CORE-STANDARD-PASS_WITH_RISK-first",
+      "S-CORE-STANDARD-BLOCKED_UNKNOWN-first",
+      "S-CORE-DEEP-PASS-first",
+      "S-CORE-DEEP-FAIL-first",
+      "S-CORE-DEEP-PASS_WITH_RISK-first",
+      "S-CORE-DEEP-BLOCKED_UNKNOWN-first",
+      "S-CORE-LIGHT-PASS-upgrade",
+      "S-CORE-LIGHT-PASS_WITH_RISK-upgrade",
+      "S-CORE-STANDARD-PASS-upgrade",
+      "S-CORE-STANDARD-PASS_WITH_RISK-upgrade",
+      "S-CORE-LIGHT-FAIL-multiround",
+      "S-CORE-STANDARD-FAIL-multiround",
+      "S-CORE-DEEP-FAIL-multiround",
+      "S-CORE-LIGHT-PASS-reviewwave",
+      "S-CORE-STANDARD-PASS-reviewwave",
+      "S-CORE-DEEP-PASS-reviewwave",
+      "S-CORE-LIGHT-PASS-review-regate",
+      "S-CORE-STANDARD-PASS-review-regate",
+      "S-CORE-DEEP-PASS-review-regate",
+      "S-CORE-LIGHT-PASS_WITH_RISK-review-regate",
+      "S-CORE-STANDARD-PASS_WITH_RISK-review-regate",
+      "S-CORE-DEEP-PASS_WITH_RISK-review-regate",
+      "S-CORE-DEEP-FAIL-requirement-reflow",
+      "S-CORE-DEEP-PASS-requirement-reflow",
+      "S-CORE-DEEP-PASS-feedback-regate-post-review",
+      "S-CORE-DEEP-PASS-feedback-regate-post-gate",
+      "S-CORE-LIGHT-FAIL-upgrade",
+      "S-CORE-STANDARD-FAIL-upgrade",
+      "S-MANIFEST-STANDARD-reconcile",
+      "S-MANIFEST-STANDARD-corrupt",
+      "S-CRASH-STANDARD-post-gate-verdict-resume",
+      "S-CRASH-STANDARD-post-gate-verdict-double-resume",
+      "S-CRASH-STANDARD-post-finding-migration-resume",
+      "S-CRASH-STANDARD-post-finding-migration-double-resume",
+      "S-CRASH-STANDARD-pre-manifest-write-resume",
+      "S-CRASH-STANDARD-pre-manifest-write-double-resume",
+      "S-INIT-new-project-STANDARD-PASS-first",
+      "S-INIT-new-project-STANDARD-FAIL-reflow",
+      "S-INIT-existing-code-STANDARD-PASS-first",
+      "S-INIT-existing-code-STANDARD-FAIL-reflow",
+      "S-INIT-original-sdd-STANDARD-PASS-first",
+      "S-INIT-original-sdd-STANDARD-FAIL-reflow",
+      "S-INIT-original-sdlc-sdd-STANDARD-PASS-first",
+      "S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow"
+    ],
+    "overLimit": [
+      "S-CORE-LIGHT-FAIL-overlimit-pause",
+      "S-CORE-STANDARD-FAIL-overlimit-pause",
+      "S-CORE-DEEP-FAIL-overlimit-pause",
+      "S-CORE-STANDARD-BU-overlimit-pause"
+    ],
+    "crash": [
+      "S-CRASH-STANDARD-post-gate-verdict-resume",
+      "S-CRASH-STANDARD-post-gate-verdict-double-resume",
+      "S-CRASH-STANDARD-post-finding-migration-resume",
+      "S-CRASH-STANDARD-post-finding-migration-double-resume",
+      "S-CRASH-STANDARD-pre-manifest-write-resume",
+      "S-CRASH-STANDARD-pre-manifest-write-double-resume"
+    ]
+  },
+  "negatives": {
+    "behavior": {
+      "groups": {
+        "r1h1-core": 9,
+        "absent-triple": 3,
+        "real-run-pin": 2,
+        "wp1-feedback": 14,
+        "two-generation": 6,
+        "mixed-kind": 7,
+        "crash-seed-tamper": 1,
+        "crash-refusal-window": 6,
+        "crash-post-rollback": 1,
+        "registry-guard": 5
+      },
+      "total": 54
+    },
+    "comparator": {
+      "groups": {
+        "identical": 3,
+        "whitelist-drops": 11,
+        "out-of-drop-set": 10,
+        "catch-up-scoped-exemptions": 4,
+        "d17-real-baseline": 10
+      },
+      "total": 38
+    }
+  },
+  "ledger_digest": "sha256:5bc9326000b1b1730c0f68ff3398b837eeb830a45318df990a1639a062ae8315"
+}

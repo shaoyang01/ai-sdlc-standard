@@ -20,23 +20,12 @@ import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
 import { assertFrozenRegistry, auditFrozenRegistry } from "./g6-parity/registry-guard";
-import { makeNegativeGuard } from "./g6-parity/negative-guard";
+import { loadFrozenLedger, runNegativeSuite } from "./g6-parity/ledger-guard";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FactScript, NodeFact, ScenarioSpec } from "./g6-parity/types";
 
-let passed = 0;
-let failed = 0;
-function ok(condition: boolean, message: string): void {
-  if (condition) {
-    passed += 1;
-    console.log(`  ✓ ${message}`);
-  } else {
-    failed += 1;
-    console.error(`  ✗ ${message}`);
-  }
-}
 
 const NODE_ORDER = [
   "requirement-intake", "solution-design", "solution-gate", "task-planning",
@@ -103,8 +92,11 @@ const passSpec = coreFirstRoundScenarios().find((s) => s.id === "S-CORE-STANDARD
 const failSpec = coreFirstRoundScenarios().find((s) => s.id === "S-CORE-LIGHT-FAIL-first")!;
 const passScript = passSpec.build();
 const failScript = failSpec.build();
-console.log("G6 behavior negative matrix (R1-H1): real handoff triple, bindings, admission");
-
+// ── 7. the real-scenario pin: the production entry's ACTUAL handoff ───────
+// Drive S-CORE-STANDARD-PASS-first through the production entry and assert
+// the observed handoff triple IS the routed production finding — the
+// reviewer's counterexample as a permanent regression.
+function r1h1CorePins(ok: (condition: boolean, message: string) => void): void {
 // ── 1. the conforming positive control ────────────────────────────────────
 {
   const result = compareBehaviorLayer(passScript, traceFor(passScript));
@@ -190,12 +182,9 @@ console.log("G6 behavior negative matrix (R1-H1): real handoff triple, bindings,
   const dim7 = compareBehaviorLayer(failScript, traceFor(failScript, { terminals })).dimensions.find((d) => d.dimension === "next-eligibility");
   ok(dim7?.verdict === "DIVERGE", "dim 7: the reflow jumping to the wrong node → DIVERGE");
 }
+}
 
-// ── 7. the real-scenario pin: the production entry's ACTUAL handoff ───────
-// Drive S-CORE-STANDARD-PASS-first through the production entry and assert
-// the observed handoff triple IS the routed production finding — the
-// reviewer's counterexample as a permanent regression.
-async function realRunPin(): Promise<void> {
+async function realRunPin(ok: (condition: boolean, message: string) => void): Promise<void> {
   const workspace = makeBehaviorWorkspace();
   const stores = makeStores("negative-handoff");
   try {
@@ -217,6 +206,15 @@ async function realRunPin(): Promise<void> {
   }
 }
 
+// ── 4c. the WP-1 generation restart (R2-H1-A / R3-H1) ─────────────────────
+// The F family's feedback path legitimately returns to requirement-intake
+// after an ADMITTING gate verdict — a declared new-generation restart, not a
+// finding reflow. R3-H1: the admission is grounded in the JOURNAL evidence,
+// not the declaration: the verified WP-1 record (FEEDBACK_DRIVEN_CHANGE /
+// CLASSIFIED / generation 1→2 / the trigger round) AND the restart intake's
+// new-generation attempt. The real run must pass; every stripped, forged or
+// misattempted variant of the same trajectory must DIVERGE.
+function absentPin(ok: (condition: boolean, message: string) => void): void {
 // ── 4b. ABSENT means ALL-NULL (R2-H1-B) ──────────────────────────────────
 // The chain never completed, so the entry builds no handoff artifact: a
 // non-null reason or artifactRef on a null status is fabricated evidence.
@@ -233,16 +231,9 @@ async function realRunPin(): Promise<void> {
   const clean = compareBehaviorLayer(overScript, traceFor(overScript)).dimensions.find((d) => d.dimension === "final-handoff");
   ok(clean?.verdict === "MATCH", "dim 9: the over-limit ABSENT triple (all null) MATCHes");
 }
+}
 
-// ── 4c. the WP-1 generation restart (R2-H1-A / R3-H1) ─────────────────────
-// The F family's feedback path legitimately returns to requirement-intake
-// after an ADMITTING gate verdict — a declared new-generation restart, not a
-// finding reflow. R3-H1: the admission is grounded in the JOURNAL evidence,
-// not the declaration: the verified WP-1 record (FEEDBACK_DRIVEN_CHANGE /
-// CLASSIFIED / generation 1→2 / the trigger round) AND the restart intake's
-// new-generation attempt. The real run must pass; every stripped, forged or
-// misattempted variant of the same trajectory must DIVERGE.
-async function feedbackRestartPin(): Promise<void> {
+async function feedbackRestartPin(ok: (condition: boolean, message: string) => void): Promise<void> {
   const fSpec = coreFeedbackRegateScenarios().find((s) => s.id === "S-CORE-DEEP-PASS-feedback-regate-post-gate")!;
   const fScript = fSpec.build();
   const workspace = makeBehaviorWorkspace();
@@ -324,6 +315,7 @@ async function feedbackRestartPin(): Promise<void> {
   }
 }
 
+function twoGenerationPin(ok: (condition: boolean, message: string) => void): void {
 // ── 4d. the two-generation feedback wave (R4-H1) ───────────────────────────
 // The store accepts consecutive CLASSIFIED WP-1 records (generations
 // 1→2→3): the ordered generation binding must admit the legal dual-restart
@@ -387,7 +379,14 @@ const twoWaveRestart = (previousGeneration: number, triggerAttempt: number) => (
     generation: 2,
   }))?.verdict === "DIVERGE", "R4-H1: the second declared wave with no journal record → DIVERGE");
 }
+}
 
+// ── 4f. the S-CRASH recovery fails closed on an inconsistent state ─────────
+// The interrupt-reentry resume must never silently continue: a re-entry
+// against a TAMPERED published manifest (the self-digest corrupted) is
+// refused by the entry preflight's level-1 discrimination
+// (MANIFEST_CORRUPT_STOP) — the durable block, not a fabricated progress.
+function mixedWavePin(ok: (condition: boolean, message: string) => void): void {
 // ── 4e. mixed-kind WP-1 waves (R5-H1) ─────────────────────────────────────
 // The record check owns EVERY declared wave, whatever its trigger kind: the
 // per-gate-round admission loop cannot see a review-triggered wave, so a
@@ -494,13 +493,9 @@ const reviewThenGateScript: FactScript = Object.freeze({
     generation: 3,
   }))?.verdict === "DIVERGE", "R5-H1: the review→gate chain with the REVIEW (first) wave's record stripped → DIVERGE");
 }
+}
 
-// ── 4f. the S-CRASH recovery fails closed on an inconsistent state ─────────
-// The interrupt-reentry resume must never silently continue: a re-entry
-// against a TAMPERED published manifest (the self-digest corrupted) is
-// refused by the entry preflight's level-1 discrimination
-// (MANIFEST_CORRUPT_STOP) — the durable block, not a fabricated progress.
-async function crashSeedTamperPin(): Promise<void> {
+async function crashSeedTamperPin(ok: (condition: boolean, message: string) => void): Promise<void> {
   const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-post-gate-verdict-resume")!;
   const crashScript = crashSpec.build();
   const workspace = makeBehaviorWorkspace();
@@ -544,7 +539,7 @@ async function crashSeedTamperPin(): Promise<void> {
 // STOP) needs a validly sealed document — produced by one normal run's final
 // projection, written into the window so its cursor exceeds the re-entry's
 // journal head.
-async function crashRefusalPin(): Promise<void> {
+async function crashRefusalPin(ok: (condition: boolean, message: string) => void): Promise<void> {
   const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-pre-manifest-write-resume")!;
   const crashScript = crashSpec.build();
   const flipFirstHex = (digest: string): string => `${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`;
@@ -642,7 +637,7 @@ async function crashRefusalPin(): Promise<void> {
 // terminal: the double-resume branch does NOT run, doubleResumeNoOp is never
 // recorded on a refusal, the refused bytes are pinned, and the crash facts
 // honestly report the failure.
-async function crashPostRollbackRefusalPin(): Promise<void> {
+async function crashPostRollbackRefusalPin(ok: (condition: boolean, message: string) => void): Promise<void> {
   const crashSpec = coreCrashResumeScenarios().find((s) => s.id === "S-CRASH-STANDARD-pre-manifest-write-double-resume")!;
   const crashScript = crashSpec.build();
   const flipFirstHex = (digest: string): string => `${digest.startsWith("0") ? "1" : "0"}${digest.slice(1)}`;
@@ -720,7 +715,7 @@ function stubSpec(id: string): ScenarioSpec {
   });
 }
 
-function registryGuardPin(): void {
+function registryGuardPin(ok: (condition: boolean, message: string) => void): void {
   const full = [stubSpec("a"), stubSpec("b"), stubSpec("c")];
   let threw = false;
   try {
@@ -764,40 +759,33 @@ function registryGuardPin(): void {
   );
 }
 
-// R11-H1: the negative matrix's own coverage is pinned — every frozen group
-// runs exactly once and the frozen assertion total holds. A deleted
-// assertion (or a deleted group, or an emptied matrix) fails here with its
-// own diagnostic; a 0-failed tally is not coverage.
-const negativeGuard = makeNegativeGuard(
-  "behavior negative",
-  [
-    "real-run-pin",
-    "wp1-feedback",
-    "crash-seed-tamper",
-    "crash-refusal-window",
-    "crash-post-rollback",
-    "registry-guard",
-  ],
-  54,
-);
-
 async function main(): Promise<void> {
-  negativeGuard.group("real-run-pin");
-  await realRunPin();
-  negativeGuard.group("wp1-feedback");
-  await feedbackRestartPin();
-  negativeGuard.group("crash-seed-tamper");
-  await crashSeedTamperPin();
-  negativeGuard.group("crash-refusal-window");
-  await crashRefusalPin();
-  negativeGuard.group("crash-post-rollback");
-  await crashPostRollbackRefusalPin();
-  negativeGuard.group("registry-guard");
-  registryGuardPin();
-  negativeGuard.settle(passed);
-  console.log(`\n==== g6 behavior negative summary: ${passed} passed, ${failed} failed (frozen coverage: ${54} assertions across 6 groups — R11-H1) ====`);
+  const ledger = loadFrozenLedger();
+  const result = await runNegativeSuite("behavior negative", ledger.negatives.behavior, async (h) => {
+    h.group("r1h1-core");
+    r1h1CorePins(h.ok);
+    h.group("absent-triple");
+    absentPin(h.ok);
+    h.group("real-run-pin");
+    await realRunPin(h.ok);
+    h.group("wp1-feedback");
+    await feedbackRestartPin(h.ok);
+    h.group("two-generation");
+    twoGenerationPin(h.ok);
+    h.group("mixed-kind");
+    mixedWavePin(h.ok);
+    h.group("crash-seed-tamper");
+    await crashSeedTamperPin(h.ok);
+    h.group("crash-refusal-window");
+    await crashRefusalPin(h.ok);
+    h.group("crash-post-rollback");
+    await crashPostRollbackRefusalPin(h.ok);
+    h.group("registry-guard");
+    registryGuardPin(h.ok);
+  });
+  console.log(`\n==== g6 behavior negative summary: ${result.summary} ====`);
   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
-  if (failed > 0) process.exit(1);
+  if (result.failed > 0) process.exit(1);
 }
 
 void main();

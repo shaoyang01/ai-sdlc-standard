@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
-import { assertFrozenRegistry, FROZEN_COMPLETING_SCENARIOS } from "./g6-parity/registry-guard";
+import { assertScenarioLedger, loadFrozenLedger } from "./g6-parity/ledger-guard";
 import {
   coreFirstRoundScenarios,
   coreUpgradeScenarios,
@@ -106,13 +106,14 @@ function allScenarios() {
 
 function main(): void {
   const specs = allScenarios();
-  // R10-H1: the register itself is pinned to the frozen ledger (50 unique
-  // completing IDs) BEFORE any scenario runs — a lost or duplicated entry
-  // fails here with its own diagnostic. The per-run failure tally is not a
-  // scale guard: a deleted completing scenario used to report 49/0, exit 0.
-  assertFrozenRegistry("completing matrix", specs, FROZEN_COMPLETING_SCENARIOS);
+  // R10-H1/R12-H1: the register is pinned bidirectionally against the FROZEN
+  // LEDGER (sealed data outside the runner) BEFORE any scenario runs — a
+  // lost, duplicated or substituted entry fails here with its own
+  // diagnostic. The per-run failure tally is not a scale guard: a deleted
+  // completing scenario used to report 49/0, exit 0.
+  assertScenarioLedger("completing matrix", specs, loadFrozenLedger().scenarios.completing);
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned at ${FROZEN_COMPLETING_SCENARIOS} unique IDs)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's ${loadFrozenLedger().scenarios.completing.length} unique IDs)`);
 
   for (const spec of specs) {
     let comparison;
