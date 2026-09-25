@@ -1,7 +1,7 @@
 # G6 / D-090-04 离线 parity 验收报告
 
 > 规格：`docs/reports/decision-090-g6-parity-acceptance-spec.md`（冻结，D-2/D-3 坐标与 §4.2 两层比较、§7 本报告格式、§8 完成门）。
-> 实施分支：`feat/g6-t2-m2-scenarios` @ `0259e3c`（未上主线；M1 已由 PR #195/#196 合入 `feature/loop-runtime-v1` @ `b8923fc`；M2 收口单 PR #197 已开，base `feature/loop-runtime-v1`）。b8923fc..HEAD 实算 **49 commits**。
+> 实施分支：`feat/g6-t2-m2-scenarios`（未上主线；M1 已由 PR #195/#196 合入 `feature/loop-runtime-v1` @ `b8923fc`；M2 收口单 PR #197 已开，base `feature/loop-runtime-v1`）。**数据基线约定（R11-H2 确立）**：本报告全部实测数字以「数据基线 commit」为准——即报告实测当时的最后一个代码提交；其后的 docs 同步提交只改文档，不改数字。当前数据基线 = `ed71783`（b8923fc..ed71783 实算 **51 commits**，本行所在 docs 提交为其后的同步提交）。
 > 本报告为 G6 gate 的证据包（§7）：逐场景判定 → 汇总表 → 账目对账 → 剔除项清单 → 结论（完成门三项逐项判定）。
 > 改动面纪律：M2 全部工作限于 `tests/`（fixtures/harness）与交接文档，**生产代码零改动**；D-090-04 授权边界（fixtures/harness/acceptance reports；禁真实 CLI、业务仓、shadow、合同变更）全程遵守。
 > **A′ 现实声明**（Current User 2026-09-23 R1 裁决）：路由发现 R-G6-01（生产入口 c2/c3 handoff checklist 证据链双症状，见 §6.5）使**任何 conforming 完成链**的 checklist 恒 BLOCKED；A′ 口径要求该分歧 surfaced、永不报 MATCH。故行为层合并判定当前为 **0/50 按设计红态**（已知原因桶 50/50 零新因、非 dim-9 分歧 0），完成门第 1 项**等 R-G6-01 生产修复**（需 decision record + 生产代码变更，超 D-090-04 授权，单独路由）——本报告如实呈现，不掩盖、不抢跑。
@@ -14,7 +14,7 @@
   - **行为层**（维度 1/2/6/7/8/9：node-sequence、gate-roles、decision-depth、next-eligibility、earliest-reroute、final-handoff）：生产入口 `runProduction` 真实门 + 注入脚本化网关的决策轨迹；参照物是两面共用的事实脚本（与脚本一致即两面一致）。dim 9 以入口返回的**真实 handoff 三元组**（status/reason/artifact ref）与声明期望逐字段比对，缺失证据拒判（R1-H1）；BLOCKED 永不报 MATCH（A′）。
   - **合并判定**：场景 PASS = 产物层全等 且 行为层六维全 MATCH；行为层维度不谎报 MATCH（NOT_JUDGED 即不判），产物层只判 3 维（R2 约束①④）。
 - **无 shadow**（§8 门 2）：harness 只用真实生产入口（publisher / `runProduction` 真实门 + 注入网关）；`--capability-source real` 全程未用；真实 CLI 未调用。
-- **诚实性仪器**（R1/R2 加固）：runner 输出 ① dim-9 已知原因桶 pin（必须恰等于完成场景数且签名精确，否则硬失败）；② **非 dim-9 分歧计数必须为零**（任何非 dim-9 分歧即回归，独立于桶）；③ 负向矩阵（比较器 38 项 + 行为 **49** 项）钉死 fail-closed 面。
+- **诚实性仪器**（R1/R2/R10/R11 加固）：runner 输出 ① dim-9 已知原因桶 pin（必须恰等于完成场景数且签名精确，否则硬失败）；② **非 dim-9 分歧计数必须为零**（任何非 dim-9 分歧即回归，独立于桶）；③ 负向矩阵（比较器 38 项 + 行为 **54** 项）钉死 fail-closed 面，且两套矩阵自身有**冻结覆盖登记**（组级 label + 冻结断言总数，R11-H1：删项/空集/重复均专属硬失败）。
 
 ## 2. 验证记录
 
@@ -446,17 +446,18 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 - **驱动器 durable-block 护栏**：预算耗尽后 recovery 仍把 regate 目标报为 next point（非 null）；无护栏会空转重 invoke 至 128 次上限。护栏 = 快照 durable block 存在即诚实停机（对应手动面「人停下不等了」——无 release 决策可 advance）。
 - **比较器 final-handoff（dim 9）重构（R1-H1）**：以入口返回的**真实 handoff 三元组**与声明期望（`FactScript.expectedHandoff`，缺省按脚本终态形状推导）逐字段比对；缺失证据拒判；BLOCKED 永不报 MATCH。
 - **行为层 WP-1 波证据化（R2-H1-A→R3-H1→R4-H1/H2→R5-H1 四轮加固）**：记录证据从 gate 轮分支摘出、归 `verifyDeclaredWaves` 逐波声明校验唯一所有（任意触发类型、按声明序、有序代际、末波锚、重启 attempt、未匹配记录反向审计）；gate 轮分支只留结构性准入。
-- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2/R8-H3/R8-H4/R9-H1/R9-H2 五轮加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp / refusedManifestStable）并**独立计数**（分母取自 S-CRASH 注册表、必须 6/6 且 crashPoint 齐全——R8-H3：`crashRecovery=null` 曾被无条件放行；R9-H1：分母曾用待核验的 crashPoint、六场景 crashPoint 全缺失时退化为 0/0 无专属失败）。诚实化历程（每轮一个 vacuous/退化路径被独立复审闭合）：R7-H2 前 `redriveByteIdentical` 预置 true、只查存在性（重入投影跳过时五标志全 true 假绿）→ R7-H2 改 cursor=head 比对 + lostWriteOccurred 证分支已执行 → R8-H4 前 STOP 后 epilogue 回写被拒清单 → 改为「任何 manifest STOP 即终态：跳过丢失写/双恢复 epilogue + 钉死被拒字节」→ R9-H2 前 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 NO_OP）→ 改为每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP。负向（崩溃拒绝类，共 **5 种注入状态 × 8 条断言**，行为负向 54/0 的组成部分）：① 种子篡改（self-digest，未封印）→ MANIFEST_CORRUPT_STOP；② 窗口篡改三态（self-digest / entry digest / 合法封印但 cursor 超前——后者取一次正常跑的末态投影写入窗口）→ MANIFEST_CORRUPT_STOP ×2 + JOURNAL_MANIFEST_MISMATCH_STOP ×1；③ 回滚后、入口重读前篡改 → MANIFEST_CORRUPT_STOP。每态断言「入口拒判 + 驱动不改写被拒字节 + 不记 vacuous 事实」；后两态另断言双恢复分支不执行、不记 NO_OP。
+- **S-CRASH 中断-重入（R1-H2，2026-09-24；R7-H2/R8-H3/R8-H4/R9-H1/R9-H2 五轮加固）**：见 §3.12 family 形状。runner 断言崩溃事实（interruptedAtBoundary / 零重派 / **manifestCaughtUp（cursor=journal head）** / lostWriteOccurred+redriveByteIdentical / doubleResumeNoOp / refusedManifestStable）并**独立计数**（分母取自 S-CRASH 注册表、必须 6/6 且 crashPoint 齐全——R8-H3：`crashRecovery=null` 曾被无条件放行；R9-H1：分母曾用待核验的 crashPoint、六场景 crashPoint 全缺失时退化为 0/0 无专属失败）。诚实化历程（每轮一个 vacuous/退化路径被独立复审闭合）：R7-H2 前 `redriveByteIdentical` 预置 true、只查存在性（重入投影跳过时五标志全 true 假绿）→ R7-H2 改 cursor=head 比对 + lostWriteOccurred 证分支已执行 → R8-H4 前 STOP 后 epilogue 回写被拒清单 → 改为「任何 manifest STOP 即终态：跳过丢失写/双恢复 epilogue + 钉死被拒字节」→ R9-H2 前 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 NO_OP）→ 改为每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP。负向（崩溃拒绝类，共 **5 种注入状态 × 8 条断言**，行为负向 54/0 的组成部分）：① 种子篡改（self-digest，未封印）→ MANIFEST_CORRUPT_STOP；② 窗口篡改三态（self-digest / entry digest / 合法封印但 cursor 超前——后者取一次正常跑的末态投影写入窗口）→ MANIFEST_CORRUPT_STOP ×2 + JOURNAL_MANIFEST_MISMATCH_STOP ×1；③ 回滚后、入口重读前篡改 → MANIFEST_CORRUPT_STOP。每态断言按实际来源分别表述：种子态断言**入口拒判与原因**；窗口三态各断言**入口拒判码 + 驱动不改写被拒字节 + 不记 vacuous 事实**；回滚后态另断言**双恢复分支不执行、不记 NO_OP + 被拒字节钉死**。
   **关于「无已知 vacuous 路径」表述的边界（R9-H3 修订、R10-H2 再修订）**：本报告**不作**无 vacuous 路径的全称断言（该形式已被 R8-H3、R9-H1/H2 两度推翻）；仅陈述**已闭合路径清单 + 逐路径证据归属**（每条路径的闭环证据按真实来源归类，不把未被某测试矩阵覆盖的路径记入该矩阵功劳）：
 
   | 已闭合路径 | 闭环证据归属（真实来源） |
   | --- | --- |
-  | R7-H2 重入投影跳过时五标志全 true（redrive 预置 / 只查存在） | **行为负向**（R7 轮加入的剥离/错代际族）+ **runner 的 manifestCaughtUp/lostWriteOccurred 断言** + R8 轮「重入投影跳过」变异推演（已归档）。注：49→54 条负向矩阵中**无**独立的投影跳过用例——该路径由 runner 断言与变异推演闭环 |
+  | R7-H2 重入投影跳过时五标志全 true（redrive 预置 / 只查存在） | **runner 的 manifestCaughtUp/lostWriteOccurred 断言** + R8 轮「重入投影跳过」变异推演（已归档）。注：行为负向矩阵中**无**独立的投影跳过用例——**不得**把相邻 WP-1 负向（R3/R4/R5 轮加入）记为该路径的证据；该路径由 runner 断言与变异推演闭环 |
   | R8-H3 崩溃事实为 null 被放行 | **runner 的注册表计数与 null 专属报错**（R9-H1 分母注册表化后同族加强）+ R8/R9 轮 null 变异推演。注：负向矩阵中**无** null 用例——由 runner 守卫闭环 |
   | R8-H4 STOP 后 epilogue 改写被拒清单 | **行为负向 3 态**（self-digest / entry digest / 合法封印 cursor 超前，窗口注入缝） |
   | R9-H1 计数退化为 0/0（分母自指） | **runner 的注册表分母 + crashPoint 缺失专属报错** + **registry-guard 单元负向**（丢项/重复/规模/精确四态）+ 本轮变异实证（置空 crashPoint → 0/6 + 六条报错 + 退出 1） |
   | R9-H2 回滚后拒判仍记 NO_OP | **行为负向 1 态**（onPostRollback 注入缝）+ 拒判逐次重判的 runner/驱动断言 |
-  | R10-H1 完成/超限/崩溃三注册表无规模守卫 | **registry-guard 单元负向 5 例** + **三 runner 的规模硬钉**（50/4/6）+ 变异实证（删完成场景 → 42/50「8 项丢失」退出 1；删超限场景 → 3/4「1 项丢失」退出 1） |
+  | R10-H1 完成/超限/崩溃三注册表无规模守卫 | **registry-guard 单元负向 5 例** + **两套矩阵 runner、三类注册守卫**（50 完成 / 4 超限 / 6 崩溃）+ 变异实证（删完成场景 → 42/50「8 项丢失」退出 1；删超限场景 → 3/4「1 项丢失」退出 1） |
+  | R11-H1 负向矩阵覆盖数可自减为绿（删 5 条 → 49/0 退出 0；删 1 条 D-17 → 37/0 退出 0） | **negative-guard 冻结覆盖登记**（行为负向 6 组 / 54 条；比较器负向 5 组 / 38 条）+ 删项变异实证（两套各删 → 「executed 49, frozen 54（5 项丢失）」「executed 37, frozen 38（1 项丢失）」均退出 1） |
 
   新路径的发现按阻塞项流程处理；每轮修复的负向/守卫补充随该轮提交落账，本节随之更新。
 
@@ -475,7 +476,7 @@ R1-H4 负向回归（38 项，含 R2-H3 新增 5 项）维持 fail-closed 钉死
 
 S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受 manual 种子（空 journal 无对账）后每终态投影持续 catch-up；两面 digest 覆盖对象按设计不同（raw content vs 输出 envelope）——对 populated journal 重新 takeover manual 种子必在 B2 digest 检查漂移，崩溃回滚须以 journal 背书的窗口清单为目标；`maxDispatches` 安全边界可作干净中断点（不落持久 block）；重投影确定性（回滚→重推逐字节一致）经 projector 实测成立。
 
-### 6.4 外部独立复审全轮记录（G6T2-R1(M1) + G6-T2-R1..R9(M2)）
+### 6.4 外部独立复审全轮记录（G6T2-R1(M1) + G6-T2-R1..R11(M2)）
 
 | 轮次 | 判定 | 内容 | 闭环 |
 | --- | --- | --- | --- |
@@ -488,7 +489,9 @@ S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受
 | G6-T2 R6 | **PASS** | R5-H1 CLOSED、无新阻塞、已 CLOSED 面不回归（含三/四波交替、归因歧义、记录审计复攻） | 收口进行中 |
 | G6-T2 R7 | FAIL | R7-H1 报告 §3 未逐场景成节（16 ID 并入 6 共享标题）/ R7-H2 S-CRASH 可于清单未追平时假绿（`redriveByteIdentical` 预置 true、`manifestProjected` 只查存在——重入投影跳过时五标志全 true） | H1 拆分为 54 唯一标题（双向零差）；H2 事实诚实化（manifestCaughtUp 比 cursor=journal head、lostWriteOccurred 证分支已执行、redrive 不预置） |
 | G6-T2 R8 | FAIL | R8-H3 崩溃事实为 null 被放行（`crash === null ||` 无条件接受，A′ 红态掩盖断言缺失）/ R8-H4 STOP 后 epilogue 改写被拒清单（丢失写分支只凭文本不同即回写窗口清单，未先确认重入成功且清单有效） | H3 非空事实 + 独立计数；H4 任何 manifest STOP 即终态——跳过丢失写/双恢复 epilogue + 钉死被拒字节（refusedManifestStable），三态负向钉死禁写（R9 判原路径 CLOSED） |
-| G6-T2 R9 | FAIL | R9-H1 崩溃计数分母用待核验的 crashPoint（六场景 crashPoint 全缺失时退化为 0/0 无专属失败）/ R9-H2 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 doubleResumeNoOp=true）/ R9-H3 报告事实与实测不符（负向 42 vs 48、double-resume 6 vs 3、§6.2 全称断言被 H1/H2 推翻） | H1 分母改由 S-CRASH 注册表固定 + crashPoint 缺失专属报错 + 硬断言 6/6；H2 每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP + onPostRollback 负向；H3 报告 49/3 + §6.2 改为「已闭合清单 + 负向覆盖」表述——待 R10 复核 |
+| G6-T2 R9 | FAIL | R9-H1 崩溃计数分母用待核验的 crashPoint（六场景 crashPoint 全缺失时退化为 0/0 无专属失败）/ R9-H2 STOP 只在回滚前捕获一次（回滚后重入再遭拒仍进双恢复、凭零 dispatch 记 doubleResumeNoOp=true）/ R9-H3 报告事实与实测不符 | H1 分母改由 S-CRASH 注册表固定 + crashPoint 缺失专属报错 + 硬断言 6/6；H2 每次重入后重判 STOP + 拒判终止 epilogue + 拒判不记 NO_OP + onPostRollback 负向；H3 报告逐处对账（R10 判 PASS） |
+| G6-T2 R10 | FAIL | R10-H1 完成/超限场景缺独立规模守卫（删 1 个完成场景产物 runner 49/0 退出 0；删超限场景 3/0 无专属错误；桶分母随已运行脚本计数）/ R10-H2 报告 §6.2 覆盖归属夸大（「8 个拒绝态」实为 5 态×8 断言；三条路径误记负向功劳） | H1 registry-guard + 两套矩阵 runner、三类注册守卫（50/4/6）+ 桶分母钉冻结 50 + guard 单元负向 5 例；H2 §6.2 逐路径证据归属表（R11 判 H1 CLOSED、H2 需修订） |
+| G6-T2 R11 | FAIL | R11-H1 负向矩阵覆盖数可自减为绿（删 5 条行为负向 → 49/0 退出 0；删 1 条 D-17 → 37/0 退出 0——R10-H1 未覆盖负向登记）/ R11-H2 报告页首 HEAD/提交数、§1 计数、R7-H2 负向功劳误记、「每态」范围、§6.4 缺 R10、§9 轮次过期 | H1 negative-guard 冻结覆盖登记（6 组/54 与 5 组/38，删项/空集/重复专属硬失败）+ 两种删项变异实证；H2 本报告逐处对账（页首数据基线约定、§1=54、R7-H2 去误记、每态范围收窄、§6.4 补 R10/R11、§9 十一轮）——待 R12 复核 |
 
 ### 6.5 R-G6-01（路由的生产发现，完成门阻塞项）
 
@@ -518,7 +521,7 @@ S-CRASH 恢复路径新实证（R1-H2，2026-09-24）：入口 takeover-A 接受
 
 ## 9. 结论（完成门三项逐项判定，§8，按 A′ 现实重述）
 
-1. **全部离线场景通过（归一化后两面等价）**：**BLOCKED（等 R-G6-01 生产修复）**。已达成面：产物层 50 场景九维中 3/4/5 维全等（含 corrupt 单级 fail-closed）；行为层 dims 1/2/6/7/8 全 MATCH、非 dim-9 分歧 0（R6 外部独立复跑核验）；超限单列 4 场景轨迹 + durable 终态全过；九轮外部复审后仪器面（负向 38+54 项、桶 pin、非 dim-9 计数、崩溃事实独立计数、**注册表规模守卫**——R10-H1）可信。未达成面：**dim-9 final-handoff 在全部 50 个完成场景上 surfaced R-G6-01 分歧**——该判据的完全满足以生产修复为前提（decision record + 生产代码，单独轨道）。故完成门第 1 项状态 = 仪器与产物层全绿、行为层等价性被已路由生产缺陷阻塞，**不得判 PASS，亦不得掩盖**。
+1. **全部离线场景通过（归一化后两面等价）**：**BLOCKED（等 R-G6-01 生产修复）**。已达成面：产物层 50 场景九维中 3/4/5 维全等（含 corrupt 单级 fail-closed）；行为层 dims 1/2/6/7/8 全 MATCH、非 dim-9 分歧 0（R6 外部独立复跑核验）；超限单列 4 场景轨迹 + durable 终态全过；十一轮外部复审后仪器面（负向 38+54 项、桶 pin、非 dim-9 计数、崩溃事实独立计数、**场景注册表规模守卫（R10-H1）**、**负向矩阵冻结覆盖登记（R11-H1）**）可信。未达成面：**dim-9 final-handoff 在全部 50 个完成场景上 surfaced R-G6-01 分歧**——该判据的完全满足以生产修复为前提（decision record + 生产代码，单独轨道）。故完成门第 1 项状态 = 仪器与产物层全绿、行为层等价性被已路由生产缺陷阻塞，**不得判 PASS，亦不得掩盖**。
 2. **无 shadow executor 替代生产入口**：**PASS**。行为层驱动 = `runProduction` 生产入口本体 + 注入脚本化网关（真实门、真实 store、真实投影器；S-CRASH 走真实恢复路径）；产物层 = T5 store 级同事实驱动 + 真实 publisher。`--capability-source real` 与真实 CLI 全程未用（fixtures/harness/acceptance reports 授权边界内）。
 3. **随后才允许申请真实 CLI run8**：**未申请**（§9：本稿不授权 run8；G6 PASS 后 next_transition 由 Current User 裁决；run8 不自动等于 C03-E/C05）。
 
