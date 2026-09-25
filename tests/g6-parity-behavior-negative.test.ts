@@ -19,8 +19,7 @@ import { driveBehaviorLayer, makeBehaviorWorkspace, removeBehaviorWorkspace, typ
 import { driveManualFace } from "./g6-parity/manual-face";
 import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
 import { makeStores } from "./g6-parity/runtime-face";
-import { assertFrozenRegistry, auditFrozenRegistry } from "./g6-parity/registry-guard";
-import { loadFrozenLedger, runNegativeSuite } from "./g6-parity/ledger-guard";
+import { assertScenarioLedger, loadFrozenLedger, runNegativeSuite } from "./g6-parity/ledger-guard";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -716,46 +715,30 @@ function stubSpec(id: string): ScenarioSpec {
 }
 
 function registryGuardPin(ok: (condition: boolean, message: string) => void): void {
-  const full = [stubSpec("a"), stubSpec("b"), stubSpec("c")];
-  let threw = false;
-  try {
-    assertFrozenRegistry("unit", full, 3);
-  } catch {
-    threw = true;
-  }
-  ok(!threw, "R10-H1: the exact frozen register passes the guard");
+  const frozen = ["a", "b", "c"];
+  // The register under test (the specs) vs the frozen ledger list.
+  const guarded = (register: readonly string[]): string => {
+    try {
+      assertScenarioLedger("unit", register.map((id) => stubSpec(id)), frozen);
+      return "";
+    } catch (error) {
+      return (error as Error).message;
+    }
+  };
+  ok(guarded(["a", "b", "c"]) === "", "R12-H1: the exact frozen register passes the ledger guard");
+  ok(guarded(["a", "b"]).includes("missing"), "R12-H1: a register that LOST an entry fails with the missing-ID diagnostic");
+  ok(guarded(["a", "b", "a"]).includes("duplicated"), "R12-H1: a register with a DUPLICATED entry fails with the duplicate diagnostic");
+  ok(guarded(["a", "b", "c", "d"]).includes("unexpected"), "R12-H1: a register with an EXTRA entry fails with the unexpected-ID diagnostic");
 
-  const lost = [stubSpec("a"), stubSpec("b")];
-  let lostMsg = "";
-  try {
-    assertFrozenRegistry("unit", lost, 3);
-  } catch (error) {
-    lostMsg = (error as Error).message;
-  }
-  ok(lostMsg.includes("1 entr") && lostMsg.includes("lost"), "R10-H1: a lost register entry fails with the lost-entry diagnostic");
-
-  let dupMsg = "";
-  try {
-    assertFrozenRegistry("unit", [stubSpec("a"), stubSpec("b"), stubSpec("a")], 3);
-  } catch (error) {
-    dupMsg = (error as Error).message;
-  }
-  ok(dupMsg.includes("duplicated: a"), "R10-H1: a duplicated register entry fails with the duplicate diagnostic");
-
-  let scaleMsg = "";
-  try {
-    assertFrozenRegistry("unit", [stubSpec("a"), stubSpec("b"), stubSpec("c"), stubSpec("d")], 3);
-  } catch (error) {
-    scaleMsg = (error as Error).message;
-  }
-  ok(scaleMsg.includes("expected 3") && scaleMsg.includes("ran 4"), "R10-H1: a rescaled register fails with the scale diagnostic");
-
-  // The real frozen registers pass at their frozen sizes.
-  ok(
-    auditFrozenRegistry("completing", coreFirstRoundScenarios(), 12).ranCount === 12 &&
-      auditFrozenRegistry("over-limit", coreOverLimitPauseScenarios(), 4).ranCount === 4 &&
-      auditFrozenRegistry("crash", coreCrashResumeScenarios(), 6).ranCount === 6,
-    "R10-H1: the real registers audit at their frozen sizes (first-round 12, over-limit 4, crash 6)",
+  // The sealed ledger itself: the digest verifies and the frozen sizes hold
+  // (the matrix runners assert the registers against these lists per-ID).
+  const ledger = loadFrozenLedger();
+  ok(ledger.scenarios.completing.length === 50 &&
+    ledger.scenarios.overLimit.length === 4 &&
+    ledger.scenarios.crash.length === 6 &&
+    ledger.negatives.behavior.total === 54 &&
+    ledger.negatives.comparator.total === 38,
+    "R12-H1: the sealed ledger loads with the frozen sizes (50/4/6 scenarios, 54/38 negative assertions)",
   );
 }
 
