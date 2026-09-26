@@ -23,14 +23,24 @@
 // captured on success and failure. The guard's handle is closed at settle,
 // so a post-settle assertion throws instead of silently counting.
 //
+// R16-H6/R16-H7 closed the last two holes in that version: the success path
+// still returned stdout only (a red line on stderr with exit 0 was
+// invisible), the parser silently dropped corrupt event lines, and the
+// printed lines were compared to events by COUNT only (one altered line —
+// same count, different ID — passed). Now: spawnSync captures both streams
+// on success and failure; a corrupt or foreign event line fails the audit
+// with its line number; and every printed assertion line must correspond
+// ONE BY ONE to an event (exact message text; the matrices' scenario events
+// carry id AND message).
+//
 // Honest boundary (single repository): events are still emitted by audited
-// code — tamper-EVIDENT, not tamper-PROOF. Fabricating a coherent stream
-// means forging structured execution records at the evaluation points AND
-// keeping every printed line consistent with them, which is far more visible
-// than the R13/R14 bypasses; the review process re-runs the false-green
-// probes each round.
+// code — tamper-EVIDENT, not tamper-PROOF. Within the declared same-repo
+// boundary, appending a few consistent event records and matching printed
+// lines is possible (the reviewer's event-forge probe passed by design);
+// what each round raises is the cost and the visibility of that edit. The
+// review process re-runs the false-green probes each round.
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -151,59 +161,79 @@ interface RunTrace {
   readonly code: number;
   readonly output: string;
   readonly events: readonly ExecutionEvent[];
+  /** Non-empty when the stream holds a line that is not a valid event. */
+  readonly corruptLines: readonly string[];
 }
 
 /**
  * Runs one entry as a subprocess with a FRESH event stream (the path is the
  * auditor's, in a temp dir the audited code never sees), and returns the
- * exit code, the MERGED output (stdout and stderr — the ok() handle writes
- * failing lines to stderr, and the R15-H5 late-red probe wrote its red line
- * there while exiting 0), and the parsed events.
+ * exit code, the MERGED output (spawnSync captures stdout AND stderr on the
+ * SUCCESS path too — the R16-H6 form wrote its red assertion to stderr while
+ * exiting 0, and a stdout-only capture never saw it), and the parsed events.
  */
 const runEntry = (suite: string, file: string, eventDir: string): RunTrace => {
   const eventPath = join(eventDir, `${suite}.ndjson`);
-  try {
-    const output = execFileSync("node", ["--import", "tsx", file], {
-      cwd: ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, G6_EVENT_STREAM: eventPath },
-      timeout: 1_800_000,
-    });
-    return { code: 0, output, events: parseEvents(eventPath) };
-  } catch (error) {
-    const err = error as { status?: number; stdout?: string | Buffer; stderr?: string | Buffer };
-    const merge = (value: string | Buffer | undefined): string => (typeof value === "string" ? value : String(value ?? ""));
-    return {
-      code: err.status ?? -1,
-      output: `${merge(err.stdout)}\n${merge(err.stderr)}`,
-      events: parseEvents(eventPath),
-    };
-  }
+  const result = spawnSync("node", ["--import", "tsx", file], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, G6_EVENT_STREAM: eventPath },
+    timeout: 1_800_000,
+  });
+  return {
+    code: result.status ?? -1,
+    output: `${String(result.stdout ?? "")}\n${String(result.stderr ?? "")}`,
+    ...parseEvents(eventPath),
+  };
 };
 
-const parseEvents = (path: string): readonly ExecutionEvent[] => {
+interface ParsedStream {
+  readonly events: readonly ExecutionEvent[];
+  readonly corruptLines: readonly string[];
+}
+
+/**
+ * Strict event-stream parse: every line must be a JSON object carrying the
+ * event tag `t`. A corrupt or foreign line is REPORTED, not silently dropped
+ * (R16-H7: a valid settle followed by one appended garbled record used to
+ * pass the audit 11/0 because the parser discarded it).
+ */
+const parseEvents = (path: string): ParsedStream => {
   let text: string;
   try {
     text = readFileSync(path, "utf8");
   } catch {
-    return [];
+    return { events: [], corruptLines: ["<event stream missing>"] };
   }
   const events: ExecutionEvent[] = [];
+  const corruptLines: string[] = [];
+  let lineNo = 0;
   for (const line of text.split("\n")) {
+    lineNo += 1;
     if (line.trim() === "") continue;
+    let parsed: unknown;
     try {
-      events.push(JSON.parse(line) as ExecutionEvent);
+      parsed = JSON.parse(line);
     } catch {
-      // a corrupt line is not an event — the count/consistency checks catch the drift
+      corruptLines.push(`line ${lineNo}: not valid JSON (${line.slice(0, 60)})`);
+      continue;
     }
+    if (typeof parsed !== "object" || parsed === null || typeof (parsed as { t?: unknown }).t !== "string") {
+      corruptLines.push(`line ${lineNo}: not an event object (${line.slice(0, 60)})`);
+      continue;
+    }
+    events.push(parsed as ExecutionEvent);
   }
-  return events;
+  return { events, corruptLines };
 };
 
 /** The assertion-shaped lines an entry actually printed (any stream). */
 const printedLines = (trace: RunTrace, mark: "✓" | "✗"): readonly string[] =>
   trace.output.split("\n").filter((line) => line.startsWith(`  ${mark} `));
+
+/** The message text of those printed lines (the part after the mark). */
+const printedTexts = (trace: RunTrace, mark: "✓" | "✗"): readonly string[] =>
+  printedLines(trace, mark).map((line) => line.slice(4));
 
 const scenarioIds = (events: readonly ExecutionEvent[]): readonly string[] =>
   events.filter((event) => event.t === "scenario").map((event) => String(event.id ?? ""));
@@ -215,6 +245,26 @@ const sameSet = (a: readonly string[], b: readonly string[]): boolean => {
 };
 
 const noDuplicates = (ids: readonly string[]): boolean => new Set(ids).size === ids.length;
+
+/** Multiset equality on sorted arrays (same length, same elements). */
+const sameMultiset = (a: readonly string[], b: readonly string[]): boolean => {
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.length === sortedB.length && sortedA.every((value, index) => value === sortedB[index]);
+};
+
+/**
+ * R16-H7: the printed lines must CORRESPOND to the events one by one — by
+ * exact message text for the negative suites (assert events carry the
+ * message) and by message text for the matrices' scenario events. Comparing
+ * only COUNTS let a run that printed one altered line (same count, different
+ * ID/text) pass while the events recorded the original execution.
+ */
+const printedMatchEvents = (trace: RunTrace, events: readonly ExecutionEvent[]): boolean => {
+  const green = events.filter((event) => event.t === "assert" || event.t === "scenario").filter((event) => event.ok === true).map((event) => String(event.msg ?? ""));
+  const red = events.filter((event) => event.t === "assert" || event.t === "scenario").filter((event) => event.ok === false).map((event) => String(event.msg ?? ""));
+  return sameMultiset(printedTexts(trace, "✓"), green) && sameMultiset(printedTexts(trace, "✗"), red);
+};
 
 // ── the audit itself (async: the wrapper probe awaits the guard's settle) ───
 void (async (): Promise<void> => {
@@ -245,15 +295,19 @@ void (async (): Promise<void> => {
       const printedRed = printedLines(trace, "✗").length;
       ok(
         trace.code === 0 &&
+          trace.corruptLines.length === 0 &&
           settled.length === 1 &&
           groupsExact &&
           asserts.length === frozen.total &&
           asserts.every((event) => event.ok === true) &&
-          printedGreen === frozen.total &&
-          printedRed === 0,
+          printedMatchEvents(trace, asserts),
         `${entry.label}: under audit — exit ${trace.code}, ${asserts.length} assertion EVENTS across ${Object.keys(frozen.groups).length} groups ` +
-          `(frozen ${frozen.total}), ${settled.length} settle event(s), printed green ${printedGreen} / red ${printedRed} (must equal the events)`,
+          `(frozen ${frozen.total}), ${settled.length} settle event(s), corrupt stream lines ${trace.corruptLines.length}, ` +
+          `printed vs events: ${printedMatchEvents(trace, asserts) ? "one-to-one" : "MISMATCH"}`,
       );
+      if (trace.corruptLines.length > 0) {
+        console.error(`    corrupt event stream: ${trace.corruptLines.slice(0, 3).join(" | ")}`);
+      }
     }
 
     // ── 4. the artifact matrix: scenario events ID-verified + register pin ──
@@ -267,16 +321,21 @@ void (async (): Promise<void> => {
     const artifactPrintedRed = printedLines(artifactTrace, "✗").length;
     ok(
       artifactTrace.code === 0 &&
+        artifactTrace.corruptLines.length === 0 &&
         artifactRegisterPin !== undefined && artifactRegisterPin.ok === true &&
         noDuplicates(artifactIds) &&
         sameSet(artifactIds, ledger.scenarios.completing) &&
         artifactScenarioEvents.every((event) => event.ok === true) &&
-        artifactPrintedGreen === artifactIds.length &&
-        artifactPrintedRed === 0,
+        printedMatchEvents(artifactTrace, artifactScenarioEvents),
       `artifact matrix: exit ${artifactTrace.code}, register pin ${artifactRegisterPin === undefined ? "event MISSING (the pin did not run)" : "ran (event from the guard)"}, ` +
         `${artifactIds.length} scenario EVENTS (all passed) vs the ledger's ${ledger.scenarios.completing.length}; ` +
-        `printed green ${artifactPrintedGreen} / red ${artifactPrintedRed} (must equal the events)`,
+        `corrupt stream lines ${artifactTrace.corruptLines.length}; printed vs events: ` +
+        `${printedMatchEvents(artifactTrace, artifactScenarioEvents) ? "one-to-one" : "MISMATCH"} ` +
+        `(printed green ${artifactPrintedGreen} / red ${artifactPrintedRed})`,
     );
+    if (artifactTrace.corruptLines.length > 0) {
+      console.error(`    corrupt event stream: ${artifactTrace.corruptLines.slice(0, 3).join(" | ")}`);
+    }
 
     // ── 5. the behavior matrix: scenario events + the A′ pin events, values
     //       cross-checked against the sealed ledger ─────────────────────────
@@ -301,11 +360,11 @@ void (async (): Promise<void> => {
     const behaviorPrintedRed = printedLines(behaviorTrace, "✗").length;
     ok(
       behaviorTrace.code === 1 &&
+        behaviorTrace.corruptLines.length === 0 &&
         noDuplicates([...behaviorFailedIds, ...behaviorPauseIds]) &&
         sameSet(behaviorFailedIds, ledger.scenarios.completing) &&
         sameSet(behaviorPauseIds, ledger.scenarios.overLimit) &&
-        behaviorPrintedGreen === behaviorPauseIds.length &&
-        behaviorPrintedRed === behaviorFailedIds.length &&
+        printedMatchEvents(behaviorTrace, behaviorScenarioEvents) &&
         registerPinsOk &&
         bucketPin !== undefined && bucketPin.ok === true &&
         bucketPin.known === 50 && bucketPin.expected === 50 && bucketPin.newCause === 0 &&
@@ -317,8 +376,13 @@ void (async (): Promise<void> => {
       `behavior matrix: exit ${behaviorTrace.code} (A' red by design), ${behaviorFailedIds.length} failing scenario EVENTS vs ledger completing ${ledger.scenarios.completing.length}, ` +
         `${behaviorPauseIds.length} passing vs ledger over-limit ${ledger.scenarios.overLimit.length}; register pins ${registerPins.length}/3 ran (events from the guard); ` +
         `pins: bucket 50/50 zero new cause, non-dim-9 0, crash 6/6, over-limit 4/0 — ` +
-        `printed green ${behaviorPrintedGreen} / red ${behaviorPrintedRed} (must equal the events)`,
+        `corrupt stream lines ${behaviorTrace.corruptLines.length}; printed vs events: ` +
+        `${printedMatchEvents(behaviorTrace, behaviorScenarioEvents) ? "one-to-one" : "MISMATCH"} ` +
+        `(printed green ${behaviorPrintedGreen} / red ${behaviorPrintedRed})`,
     );
+    if (behaviorTrace.corruptLines.length > 0) {
+      console.error(`    corrupt event stream: ${behaviorTrace.corruptLines.slice(0, 3).join(" | ")}`);
+    }
   } finally {
     rmSync(eventDir, { recursive: true, force: true });
   }

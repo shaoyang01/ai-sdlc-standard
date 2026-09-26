@@ -17,11 +17,12 @@
 //
 // Honest boundary (single repository): events are still emitted by audited
 // code, so this is tamper-EVIDENT, not tamper-PROOF — a deliberate editor
-// can fabricate events. What changed is the cost and the shape: fabricating
-// a coherent event stream requires forging structured execution records at
-// the evaluation points AND keeping every printed line consistent with them,
-// which is a much more visible edit than appending one green line. The
-// review process re-runs the false-green probes each round.
+// can append consistent records (the reviewer's event-forge probe passed by
+// design: a 49-scenario run plus one appended scenario event, one register-
+// pin event and one matching printed line reads as a coherent 50/50). What
+// this layer buys is that every fabricated record must stay consistent with
+// the printed lines and the sealed ledger, line by line. The review process
+// re-runs the false-green probes each round.
 
 import { appendFileSync } from "node:fs";
 

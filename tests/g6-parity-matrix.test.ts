@@ -44,9 +44,10 @@ function ok(condition: boolean, message: string, tally: Tally): void {
     tally.failed += 1;
     console.error(`  ✗ ${message}`);
   }
-  // R15-H5: the scenario judge is the evaluation point — emit the structured
-  // event here (a printed line alone is not execution evidence).
-  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition });
+  // R15-H5/R16-H7: the scenario judge is the evaluation point — emit the
+  // structured event here (id AND message), so the auditor can match the
+  // printed lines to events one by one, not merely count them.
+  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition, msg: message });
 }
 
 function runScenario(specId: string): ComparisonResult {

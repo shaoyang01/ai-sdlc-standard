@@ -371,4 +371,3 @@ h.group("d17-real-baseline");
 }
 
 void main();
-

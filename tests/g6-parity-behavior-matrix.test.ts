@@ -44,9 +44,9 @@ function ok(condition: boolean, message: string): void {
     failed += 1;
     console.error(`  ✗ ${message}`);
   }
-  // R15-H5: the scenario judge is the evaluation point — emit the structured
-  // event here (a printed line alone is not execution evidence).
-  emitEvent({ t: "scenario", suite: "behavior-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition });
+  // R15-H5/R16-H7: the scenario judge is the evaluation point — emit the
+  // structured event here (id AND message) for one-by-one line matching.
+  emitEvent({ t: "scenario", suite: "behavior-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition, msg: message });
 }
 
 function allScenarios() {
@@ -344,14 +344,15 @@ async function main(): Promise<void> {
         const overLimit = run.trace.blockingReasonCode === "REGATE_ROUND_BUDGET_EXHAUSTED";
         if (diverged.length === 0 && overLimit) {
           pausePassed += 1;
-          console.log(`  ✓ ${spec.id}: behavior 6/6 MATCH; durable over-limit terminal ${run.trace.blockingReasonCode}`);
-          emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: true });
+          const message = `${spec.id}: behavior 6/6 MATCH; durable over-limit terminal ${run.trace.blockingReasonCode}`;
+          console.log(`  ✓ ${message}`);
+          emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: true, msg: message });
         } else {
           pauseFailed += 1;
-          console.error(
-            `  ✗ ${spec.id}: behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}; over-limit terminal ${run.trace.blockingReasonCode ?? "none"}`,
-          );
-          emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: false });
+          const message =
+            `${spec.id}: behavior ${diverged.length === 0 ? "6/6 MATCH" : diverged.map((d) => `${d.dimension}(${d.detail})`).join(" | ")}; over-limit terminal ${run.trace.blockingReasonCode ?? "none"}`;
+          console.error(`  ✗ ${message}`);
+          emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: false, msg: message });
         }
       } finally {
         behaviorStores.runStore.close();
@@ -359,8 +360,9 @@ async function main(): Promise<void> {
       }
     } catch (error) {
       pauseFailed += 1;
-      console.error(`  ✗ ${spec.id}: harness error ${(error as Error).message}`);
-      emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: false });
+      const message = `${spec.id}: harness error ${(error as Error).message}`;
+      console.error(`  ✗ ${message}`);
+      emitEvent({ t: "scenario", suite: "behavior-matrix", id: spec.id, ok: false, msg: message });
     } finally {
       removeBehaviorWorkspace(workspace);
     }
