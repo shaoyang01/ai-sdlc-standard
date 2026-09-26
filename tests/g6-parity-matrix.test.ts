@@ -12,7 +12,23 @@ import { join } from "node:path";
 import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
-import { coreFirstRoundScenarios } from "./g6-parity/fact-scripts";
+import { assertScenarioLedger, loadFrozenLedger } from "./g6-parity/ledger-guard";
+import { emitEvent } from "./g6-parity/event-stream";
+import {
+  coreFirstRoundScenarios,
+  coreUpgradeScenarios,
+  coreMultiRoundScenarios,
+  coreReviewReworkScenarios,
+  coreReviewRegateScenarios,
+  corePwrRegateScenarios,
+  coreGateRequirementReflowScenarios,
+  coreReviewRequirementReflowScenarios,
+  coreFeedbackRegateScenarios,
+  coreEscalationFailScenarios,
+  coreManifestStateScenarios,
+  coreCrashResumeScenarios,
+  coreInitClassScenarios,
+} from "./g6-parity/fact-scripts";
 import { NINE_DIMENSIONS } from "./g6-parity/types";
 
 interface Tally {
@@ -28,10 +44,14 @@ function ok(condition: boolean, message: string, tally: Tally): void {
     tally.failed += 1;
     console.error(`  ✗ ${message}`);
   }
+  // R15-H5/R16-H7: the scenario judge is the evaluation point — emit the
+  // structured event here (id AND message), so the auditor can match the
+  // printed lines to events one by one, not merely count them.
+  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition, msg: message });
 }
 
 function runScenario(specId: string): ComparisonResult {
-  const spec = coreFirstRoundScenarios().find((s) => s.id === specId);
+  const spec = allScenarios().find((s) => s.id === specId);
   if (spec === undefined) throw new Error(`unknown scenario ${specId}`);
   const script = spec.build();
 
@@ -42,8 +62,21 @@ function runScenario(specId: string): ComparisonResult {
     const manual = driveManualFace(libManual, script);
     const stores = makeStores(spec.id);
     try {
-      const runtime = driveRuntimeStoreLevel(stores, script, libRuntime, manual.manifestText);
-      return compareArtifactLayer(manual.manifestText, runtime.manifestText, script);
+      const runtime = driveRuntimeStoreLevel(
+        stores,
+        script,
+        libRuntime,
+        manual.manifestText,
+        manual.intermediateManifestText,
+      );
+      // The catch-up regime carries the projector's designed face exemptions
+      // (D-7 basename / D-17 finding-id); the takeover regime compares byte-exact.
+      // The D-17 closure-row id flip is forgiven only against the run's
+      // journal finding proof (R2-H3): no proof, no exemption.
+      return compareArtifactLayer(manual.manifestText, runtime.manifestText, script, {
+        catchUpRegime: script.midTakeoverAfter !== undefined,
+        findingProof: runtime.findingProof,
+      });
     } finally {
       stores.runStore.close();
       rmSync(stores.root, { recursive: true, force: true });
@@ -53,16 +86,52 @@ function runScenario(specId: string): ComparisonResult {
   }
 }
 
+function allScenarios() {
+  // The multi-round wave registers ONE finding per round: same-round findings
+  // sharing a scan-ledger blob are indistinguishable to the takeover pairing
+  // (ambiguity refuses), and the provenance map requires unique closure
+  // revision refs — so the per-round registration stays on the per-finding
+  // path (settle-then-register at the scan terminal), not the fused batch API.
+  return [
+    ...coreFirstRoundScenarios(),
+    ...coreUpgradeScenarios(),
+    ...coreMultiRoundScenarios(),
+    ...coreReviewReworkScenarios(),
+    ...coreReviewRegateScenarios(),
+    ...corePwrRegateScenarios(),
+    ...coreGateRequirementReflowScenarios(),
+    ...coreReviewRequirementReflowScenarios(),
+    ...coreFeedbackRegateScenarios(),
+    ...coreEscalationFailScenarios(),
+    ...coreManifestStateScenarios(),
+    ...coreCrashResumeScenarios(),
+    ...coreInitClassScenarios(),
+  ];
+}
+
 function main(): void {
-  const specs = coreFirstRoundScenarios();
+  const specs = allScenarios();
+  // R10-H1/R12-H1: the register is pinned bidirectionally against the FROZEN
+  // LEDGER (sealed data outside the runner) BEFORE any scenario runs — a
+  // lost, duplicated or substituted entry fails here with its own
+  // diagnostic. The per-run failure tally is not a scale guard: a deleted
+  // completing scenario used to report 49/0, exit 0.
+  assertScenarioLedger("completing matrix", specs, loadFrozenLedger().scenarios.completing);
+  // (the pin's execution event is emitted inside assertScenarioLedger — R15-H5)
   const tally: Tally = { passed: 0, failed: 0 };
-  console.log(`G6 parity matrix M1: ${specs.length} scenarios (S-CORE first-round, artifact layer)`);
+  console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's ${loadFrozenLedger().scenarios.completing.length} unique IDs)`);
 
   for (const spec of specs) {
     let comparison;
     try {
       comparison = runScenario(spec.id);
     } catch (error) {
+      // A fail-closed scenario asserts a STOP code instead of a comparison.
+      const expected = spec.expectStop;
+      if (expected !== undefined && (error as Error).message.includes(expected)) {
+        ok(true, `${spec.id}: fail-closed ${expected} as required`, tally);
+        continue;
+      }
       ok(false, `${spec.id}: harness error ${(error as Error).message}`, tally);
       continue;
     }

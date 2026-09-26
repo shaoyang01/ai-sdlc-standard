@@ -109,6 +109,7 @@ function waveWithRework(
   requirementId: string,
   depth: "LIGHT" | "STANDARD" | "DEEP",
   verdict: "FAIL" | "BLOCKED_UNKNOWN",
+  intakeText?: string,
 ): { nodes: NodeFact[]; findings: FindingFact[] } {
   const runId = runtimeRunId(requirementId);
   const designV1 = nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0");
@@ -120,7 +121,7 @@ function waveWithRework(
       ? { gateResult: "FAIL", decisionStatus: "CONFIRMED", decisionDepth: depth }
       : { gateResult: "FAIL", decisionStatus: "BLOCKED_UNKNOWN" };
   const nodes: NodeFact[] = [
-    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("requirement-intake", "requirement_summary", intakeText ?? `# ${requirementId} intake\n`, "1.0.0"),
     designV1,
     nodeFact("solution-gate", "solution_review", gateV1Content, "1.0.0", failedExtra),
     designV2,
@@ -209,6 +210,1412 @@ export function coreFirstRoundScenarios(): ScenarioSpec[] {
           family: "S-CORE" as const,
           coords: coords({ depth, verdict, round: "first" }),
           build: () => buildFirstRoundScript(depth, verdict, `20260920-${id}`),
+        }),
+      );
+    }
+  }
+  return specs;
+}
+
+/**
+ * The escalation wave (d087 scenario shape, verified at
+ * tests/loop-d087-six-scenario-matrix.test.ts:398-399): the first-round
+ * verdict is PASS + ESCALATED at the requested depth (the gate passes but
+ * mandates deeper analysis; required_depth rises in the SAME publish on the
+ * manual face — G3-R1-H4 — and via foldDepth on the runtime face), the design
+ * is rebuilt at the escalated depth, and the re-adjudication is
+ * PASS + CONFIRMED at the escalated depth. The reflow carries the same
+ * finding pattern as the FAIL wave: a FAIL/ESCALATED verdict reflowing to
+ * solution-design owes the chain the §5.4 reflow fact (store synthesizes it —
+ * loop-run-store.ts registerReflowFinding; category SOLUTION ⇒ earliest
+ * solution-design), which authorizes the design-v2 restart. Registered after
+ * the first gate round, resolved by the re-adjudicating round.
+ */
+function waveWithUpgrade(
+  requirementId: string,
+  requestedDepth: "LIGHT" | "STANDARD" | "DEEP",
+  escalatedDepth: "STANDARD" | "DEEP",
+  finalVerdict: "PASS" | "PASS_WITH_RISK",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    // ESCALATED carries the NEW required depth (publisher: required_depth =
+    // DDEPTH in the same publish; projector: foldDepth returns it) — the depth
+    // the rework round must run at, not the requested one.
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      attempt: 1,
+      gateResult: "PASS",
+      decisionStatus: "ESCALATED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2 (${escalatedDepth})\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: finalVerdict,
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-F01`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runtimeRunId(requirementId)}:revision:solution-design:1`,
+      evidenceKind: "technical_design",
+      evidenceContent: `# ${requirementId} design\n`,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      // Closes at the confirming re-gate round (gate stage round 2), binding
+      // that round's design revision (the revision that fixed it).
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v2\n`,
+        boundRevisionId: `${runtimeRunId(requirementId)}:revision:solution-design:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+const ESCALATION_LADDER: Readonly<Record<string, "STANDARD" | "DEEP">> = Object.freeze({
+  LIGHT: "STANDARD",
+  STANDARD: "DEEP",
+});
+
+/** S-CORE upgrade-round scenarios: depth × final verdict (6). */
+export function coreUpgradeScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD"] as const) {
+    for (const finalVerdict of ["PASS", "PASS_WITH_RISK"] as const) {
+      const id = `S-CORE-${depth}-${finalVerdict}-upgrade`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-CORE" as const,
+          coords: coords({ depth, verdict: finalVerdict, round: "upgrade" }),
+          prunes: "DEEP has no escalation target (hard ceiling); ESCALATED first verdict + deeper rework + CONFIRMED final (d087 shape)",
+          build: () => {
+            const wave = waveWithUpgrade(`20260920-${id}`, depth, ESCALATION_LADDER[depth], finalVerdict);
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: depth,
+              nodes: wave.nodes,
+              findings: wave.findings,
+            });
+          },
+        }),
+      );
+    }
+  }
+  return specs;
+}
+
+/**
+ * The multi-round rework wave (settled model — Current User's real manual
+ * review flow): findings are a PERSISTENT SET with statuses, not wave-owned.
+ * Each round is a full re-review: it closes what its re-examination confirms,
+ * leaves unfixed findings OPEN (the protocol has no partial state — "partially
+ * closed" simply stays open), and registers newly discovered findings. The
+ * backward restart each round needs is authorized by the OPEN set (every
+ * round lands new findings on the journal). A finding closes at ITS
+ * confirming round, binding the revision that fixed it (that round's design
+ * revision — the store enforces existence, currency and earliest-node
+ * ordering; verdict outcome does not participate) with that round's verdict
+ * blob as evidence. The wave ends at a full PASS with an empty OPEN set.
+ *
+ * Canonical shape (FAIL→FAIL→FAIL→PASS, ONE discovery per round):
+ *   R1 scan registers Fa (examines design v1) → FAIL            | design v2
+ *   R2 scan closes Fa (binds design v2), registers Fb → FAIL    | design v3
+ *   R3 scan closes Fb (binds design v3), registers Fc → FAIL    | design v4
+ *   R4 scan closes Fc (binds design v4) → PASS                  | downstream
+ *
+ * ONE finding per round is FORCED by two independent engine constraints:
+ * (1) the takeover pairing matches findings by evidence, so same-round
+ * findings sharing one scan-ledger blob are indistinguishable — the pairing
+ * refuses on ambiguity (and the manual face cannot cite a shared blob N
+ * times unambiguously; cf. the real ledger#F0n per-finding refs);
+ * (2) the projection provenance requires unique closure revision refs, so
+ * two findings closing on the same round's revision are a duplicate-closures
+ * MANIFEST_CORRUPT_STOP. The persistent-SET model itself is untouched.
+ */
+function waveWithMultiRound(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({
+      schema: "loop-capability-findings:v1",
+      findings: [{ finding_id: `${requirementId}-${key}` }],
+    })}\n`;
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
+  const failGate = (v: number, ledger: string): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      ledgerContent: ledger,
+      // The round's new finding invalidates the examined design current.
+      staleNodes: ["solution-design"],
+    });
+  const passGate = (v: number): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    });
+  const finding = (
+    key: string,
+    registeredRound: number,
+    examinedDesign: number,
+    closedAtRound: number,
+  ): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${examinedDesign}`,
+      // The finding's evidence IS its round's scan ledger blob (the manual
+      // face cites the same ref, so the takeover pairing is 1:1 per round).
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
+      gateRound: registeredRound,
+      closedAtRound,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        // The confirming round's verdict blob is the closure evidence; the
+        // revision that fixed it (that round's design) is the binding.
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${closedAtRound}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${closedAtRound}`,
+      }),
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    failGate(1, ledgerFor("Fa")),
+    design(2),
+    failGate(2, ledgerFor("Fb")),
+    design(3),
+    failGate(3, ledgerFor("Fc")),
+    design(4),
+    passGate(4),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [finding("Fa", 1, 1, 2), finding("Fb", 2, 2, 3), finding("Fc", 3, 3, 4)];
+  return { nodes, findings };
+}
+
+/** S-CORE multi-round Re-Gate scenarios: the settled persistent-set model × depth (3). */
+export function coreMultiRoundScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-FAIL-multiround`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "FAIL", round: "re-gate" }),
+        prunes: "persistent-set model, one finding per round: Fa closes R2 (design v2), Fb R3 (design v3), Fc R4 (design v4); PASS with empty OPEN set",
+        build: () => {
+          const wave = waveWithMultiRound(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * The over-limit pause wave (behavior-layer only — the runtime's answer to a
+ * spent round budget; the manual flow answers the same moment with "the
+ * person stops waiting"). Two non-passing adjudications at one depth
+ * (FAIL×2 or BU×2); the second failing verdict's reflow jump is the budget's
+ * denial point. A FAIL/BLOCKED_UNKNOWN verdict authors no gate revision
+ * (WP6), so the pending gate row's triple drifts between the faces — the
+ * artifact layer cannot parity this wave (the D-7/D-17 analysis) and the
+ * runner lists it as a trajectory assertion only.
+ *
+ * The finding model is the multi-round wave's persistent set truncated: F01
+ * registers at round 1's scan (the FAIL verdict's synthesized SOLUTION
+ * reflow row — semantics ⑩) and closes at round 2's design revision; F02
+ * registers at round 2's scan and never closes (no confirming round exists),
+ * so the run parks with the OPEN set that authorizes the restart the budget
+ * refuses. That OPEN set is the manual face's stop shape: the human stopped,
+ * repair pending.
+ */
+function waveWithOverLimitPause(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+  verdict: "FAIL" | "BLOCKED_UNKNOWN",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({
+      schema: "loop-capability-findings:v1",
+      findings: [{ finding_id: `${requirementId}-${key}` }],
+    })}\n`;
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, { attempt: v });
+  const failedGate = (v: number, ledger: string): NodeFact =>
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v${v}\n`, `${v}.0.0`, {
+      attempt: v,
+      gateResult: "FAIL",
+      // BLOCKED_UNKNOWN carries no depth (the envelope's explicit null);
+      // FAIL carries the requested depth.
+      ...(verdict === "FAIL"
+        ? { decisionStatus: "CONFIRMED" as const, decisionDepth: depth }
+        : { decisionStatus: "BLOCKED_UNKNOWN" as const }),
+      ledgerContent: ledger,
+      // The round's finding invalidates the examined design current.
+      staleNodes: ["solution-design"],
+    });
+  const finding = (key: string, registeredRound: number): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${registeredRound}`,
+      // The finding's evidence IS its round's scan ledger blob (the manual
+      // face cites the same ref, so the takeover pairing is 1:1 per round).
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
+      gateRound: registeredRound,
+      closedAtRound: registeredRound + 1,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${registeredRound + 1}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${registeredRound + 1}`,
+      }),
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    failedGate(1, ledgerFor("F01")),
+    design(2),
+    failedGate(2, ledgerFor("F02")),
+  ];
+  const findings: FindingFact[] = [finding("F01", 1), finding("F02", 2)];
+  return { nodes, findings };
+}
+
+/**
+ * S-CORE over-limit pause scenarios (4, behavior-layer only): the round
+ * budget (maxDesignRounds 2 — one restart authorized, the second denied)
+ * spends itself on two non-passing adjudications and the runtime parks
+ * durably; the manual face's person simply stops. FAIL spans all three
+ * depths; BLOCKED_UNKNOWN once at STANDARD.
+ */
+export function coreOverLimitPauseScenarios(): ScenarioSpec[] {
+  const waves: readonly { depth: "LIGHT" | "STANDARD" | "DEEP"; verdict: "FAIL" | "BLOCKED_UNKNOWN"; tag: string }[] = [
+    { depth: "LIGHT", verdict: "FAIL", tag: "FAIL" },
+    { depth: "STANDARD", verdict: "FAIL", tag: "FAIL" },
+    { depth: "DEEP", verdict: "FAIL", tag: "FAIL" },
+    { depth: "STANDARD", verdict: "BLOCKED_UNKNOWN", tag: "BU" },
+  ];
+  const specs: ScenarioSpec[] = [];
+  for (const wave of waves) {
+    const id = `S-CORE-${wave.depth}-${wave.tag}-overlimit-pause`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: wave.depth, verdict: wave.verdict, round: "re-gate" }),
+        prunes:
+          "behavior layer only: a FAIL/BLOCKED_UNKNOWN verdict authors no gate revision, so the pending gate row's triple drifts between faces (D-7/D-17 analysis) — trajectory assertion, NOT counted in the artifact-layer pass count. Round budget maxDesignRounds 2: one restart authorized, the second denied → REGATE_ROUND_BUDGET_EXHAUSTED",
+        build: () => {
+          const built = waveWithOverLimitPause(`20260920-${id}`, wave.depth, wave.verdict);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: wave.depth,
+            nodes: built.nodes,
+            findings: built.findings,
+            // The entry's own budget knob (ProductionRunDeps.maxRegateRounds):
+            // one persisted backward jump authorized, the second denied.
+            maxRegateRounds: 1,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * B — the review-local rework wave (wms-monitor production sample: 22 of 25
+ * code-review findings in lifecycle-actions + all 4 in config-page-usability).
+ * An IMPLEMENTATION-class finding discovered at the code-review round: its
+ * invalidation stales the examined implementation (authorizing the restart),
+ * the reworked implementation lands v2, and the re-review closes it binding
+ * that revision with the RE-REVIEW artifact as evidence (the real closure
+ * evidence for implementation-class findings). The gate itself passed on the
+ * first round — this wave never re-gates (re-gate is the gate's own
+ * mechanism, unrelated to the review stage).
+ */
+function waveWithReviewRework(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const reviewV2 = `# ${requirementId} review v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", { staleNodes: ["implementation"] }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", reviewV2, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "IMPLEMENTATION",
+      earliest: "implementation",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review that confirms the fix.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        // The re-review artifact is the closure evidence; the reworked
+        // implementation is the binding.
+        evidenceKind: "review_summary",
+        evidenceContent: reviewV2,
+        boundRevisionId: `${runId}:revision:implementation:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/**
+ * C — the review-discovered design-level finding reflowing to re-gate
+ * (wms-monitor lifecycle-actions CR-F12: discovered at code-review,
+ * earliest=solution-design, closed_by=code-review, closure evidence = the
+ * DESIGN artifact, bound = the design revision; CR-F08/F25 stayed OPEN). The
+ * finding's fix needs a design change, so the flow reflows to solution-design,
+ * the gate re-adjudicates (its own multi-round mechanism — re-gate is re-gate,
+ * not part of the review stage), and the confirming gate round closes the
+ * finding binding that round's design revision. The downstream chain then
+ * re-runs (canonical order) and the second review passes clean.
+ */
+function waveWithReviewRegate(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const designV2 = `# ${requirementId} design v2\n`;
+  const gateV2 = `# ${requirementId} gate v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v1\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      // The design-class finding's invalidation stales the whole downstream
+      // scope (design, gate, planning, implementation, review).
+      staleNodes: ["solution-design", "solution-gate", "task-planning", "implementation"],
+    }),
+    // Reflow to solution-design (the finding authorizes the restart); the
+    // re-gate round closes it binding this design revision.
+    nodeFact("solution-design", "technical_design", designV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", gateV2, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      // Design-class: its fix needs a design change, hence the re-gate reflow.
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review after the re-gate reflow; the
+      // review stage's round counter is independent of the gate's.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        // The design artifact is the closure evidence (production shape:
+        // CR-F12); the re-gate round's design revision is the binding.
+        evidenceKind: "technical_design",
+        evidenceContent: designV2,
+        boundRevisionId: `${runId}:revision:solution-design:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** B — review-local rework scenarios × depth (3): gate PASS + one implementation-class review finding. */
+export function coreReviewReworkScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-PASS-reviewwave`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "PASS", round: "first" }),
+        prunes: "review-local rework (no re-gate): one IMPLEMENTATION finding at the code-review round → implementation v2 → re-review closes it binding implementation v2; production sample wms-monitor 20260916-config-page-usability F08-F11 / 20260915-exception-lifecycle-actions 22 CR findings",
+        build: () => {
+          const wave = waveWithReviewRework(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/** C — review-discovered design-level finding reflowing to re-gate × depth (3). */
+export function coreReviewRegateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-PASS-review-regate`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "PASS", round: "re-gate" }),
+        prunes: "review-discovered design-class finding → reflow solution-design → re-gate (the gate's own mechanism) closes it binding design v2 with the design artifact as evidence (production sample lifecycle-actions CR-F12); downstream re-runs then passes",
+        build: () => {
+          const wave = waveWithReviewRegate(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * PWR × Re-Gate — the frozen matrix's re-gate rows whose round-1 verdict is
+ * PASS_WITH_RISK. The 2026-09-23 accounting found these rows uncovered with
+ * NO sanctioned pruning (a planning gap, not a design exclusion), so they are
+ * built here. Shape: the C-family re-gate authorization (a review-discovered
+ * design-class finding reflows to solution-design; the re-gate closes it
+ * binding design v2) on top of a PWR first round (the scan-source finding
+ * risk-accepted under the PWR ruling — §3's defining fact, the first-round
+ * PWR convention unchanged).
+ */
+function waveWithPwrRegate(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerContent = `${JSON.stringify({
+    schema: "loop-capability-findings:v1",
+    findings: [{ finding_id: `${requirementId}-scan-1` }],
+  })}\n`;
+  const gateV1Content = `# ${requirementId} gate v1\n`;
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const designV2 = `# ${requirementId} design v2\n`;
+  const gateV2Content = `# ${requirementId} gate v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", gateV1Content, "1.0.0", {
+      gateResult: "PASS_WITH_RISK",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      // The scan round's Finding Ledger: one member, the finding the PWR
+      // ruling risk-accepts (the store cross-checks the membership count).
+      ledgerContent,
+      // The scan finding invalidates the examined design current — the
+      // manual face mirrors that truth on the gate entry-update (T5
+      // ACCEPTED pattern: a current design row would be a real B2 drift).
+      staleNodes: ["solution-design"],
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v1\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      // The design-class finding's invalidation stales the whole downstream
+      // scope (design, gate, planning, implementation, review).
+      staleNodes: ["solution-design", "solution-gate", "task-planning", "implementation"],
+    }),
+    // Reflow to solution-design (the finding authorizes the restart); the
+    // re-gate round closes it binding this design revision.
+    nodeFact("solution-design", "technical_design", designV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", gateV2Content, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    // The scan-source finding: risk-accepted by the PWR ruling (the accept
+    // action's bound id is the verdict artifact version, per the publisher's
+    // accept rule — the first-round PWR convention, unchanged).
+    Object.freeze({
+      findingId: `${requirementId}-F01`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:1`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerContent,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "accept" as const,
+        closedBy: "formal_verdict",
+        evidenceKind: "solution_review",
+        evidenceContent: gateV1Content,
+        boundRevisionId: "1.0.0",
+      }),
+    }),
+    // The review-discovered design-class finding: the re-gate authorization
+    // (the C-family shape); closed by the re-gate round binding design v2,
+    // the design artifact as evidence (production shape CR-F12). Anchored to
+    // the reviewed implementation v1 — NOT the design: the PWR round's scan
+    // finding already invalidated the examined design at the gate scan
+    // terminal (the M1-evidenced staleness), and a finding may only bind an
+    // ACTIVE revision (loop-run-store.ts appendFinding). The earliest node
+    // (solution-design) is unchanged — it drives the reflow and the scope.
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review after the re-gate reflow; the
+      // review stage's round counter is independent of the gate's.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "technical_design",
+        evidenceContent: designV2,
+        boundRevisionId: `${runId}:revision:solution-design:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** PWR × Re-Gate scenarios × depth (3): the frozen matrix's PWR re-gate rows. */
+export function corePwrRegateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const depth of ["LIGHT", "STANDARD", "DEEP"] as const) {
+    const id = `S-CORE-${depth}-PASS_WITH_RISK-review-regate`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth, verdict: "PASS_WITH_RISK", round: "re-gate" }),
+        prunes: "PWR first-round verdict (scan finding risk-accepted under the PWR ruling) + review-discovered design-class finding → reflow → re-gate PASS closes it binding design v2; closes the frozen matrix's PWR×Re-Gate rows — the 2026-09-23 accounting found them uncovered with no sanctioned pruning (planning gap, now built)",
+        build: () => {
+          const wave = waveWithPwrRegate(`20260920-${id}`, depth);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * D — a gate-discovered REQUIREMENT-level finding reflowing to requirement
+ * normalization (production sample: wms-monitor 20260916-config-page-usability
+ * F07 — discovered at the solution-gate, earliest=requirement-intake, closed
+ * by the gate binding requirement-summary@1.5.0). The requirement-class
+ * invalidation stales the whole examined scope, so the reflow lands on
+ * requirement-intake and the ENTIRE chain re-runs from intake; the confirming
+ * re-gate round (gate stage round 2) closes the finding binding that round's
+ * intake revision.
+ */
+function waveWithGateRequirementReflow(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const ledgerV1 = `${JSON.stringify({
+    schema: "loop-capability-findings:v1",
+    findings: [{ finding_id: `${requirementId}-G01` }],
+  })}\n`;
+  const intakeV2 = `# ${requirementId} intake v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake v1\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+      ledgerContent: ledgerV1,
+      // The requirement-class invalidation stales the whole examined scope.
+      staleNodes: ["requirement-intake", "solution-design"],
+    }),
+    // Reflow to requirement normalization; the whole chain re-runs.
+    nodeFact("requirement-intake", "requirement_summary", intakeV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-G01`,
+      discoveredAt: "solution-gate",
+      category: "REQUIREMENT",
+      earliest: "requirement-intake",
+      // Anchored to the examined requirement revision (the production shape:
+      // source_revision = requirement-summary@…).
+      sourceRevisionId: `${runId}:revision:requirement-intake:1`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerV1,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      // Gate stage round 2 — the re-gate that confirms the requirement fix.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v2\n`,
+        // A requirement-class finding binds the INTAKE revision that fixed
+        // it (production: closure_bound_revision_id = requirement-summary@…).
+        boundRevisionId: `${runId}:revision:requirement-intake:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/**
+ * E — a review-discovered REQUIREMENT-level finding (a requirement addition
+ * found during the process) reflowing to requirement normalization: the whole
+ * chain re-runs from intake and the re-gate re-adjudicates the rebuilt
+ * design. Closes at the re-review (review stage round 2) binding the new
+ * intake revision. The Current User's flow ruling: only a design/requirement-
+ * level problem reflows to normalization/design — that is when re-gate fires.
+ */
+function waveWithReviewRequirementReflow(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const intakeV2 = `# ${requirementId} intake v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake v1\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v1\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v1\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      staleNodes: ["requirement-intake", "solution-design", "solution-gate", "task-planning", "implementation"],
+    }),
+    // Reflow to requirement normalization; the whole chain re-runs and the
+    // re-gate re-adjudicates.
+    nodeFact("requirement-intake", "requirement_summary", intakeV2, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "REQUIREMENT",
+      earliest: "requirement-intake",
+      sourceRevisionId: `${runId}:revision:requirement-intake:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      // Review stage round 2 — the re-review after the full re-run.
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        // The updated requirement summary is the closure evidence and the
+        // binding is the new intake revision.
+        evidenceKind: "requirement_summary",
+        evidenceContent: intakeV2,
+        boundRevisionId: `${runId}:revision:requirement-intake:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** D — gate-discovered requirement-level reflow (DEEP, production sample config-page-usability F07). */
+export function coreGateRequirementReflowScenarios(): ScenarioSpec[] {
+  const id = "S-CORE-DEEP-FAIL-requirement-reflow";
+  return [
+    Object.freeze({
+      id,
+      family: "S-CORE" as const,
+      coords: coords({ depth: "DEEP", verdict: "FAIL", round: "re-gate" }),
+      prunes: "requirement-level reflow: REQUIREMENT finding at the gate anchors the examined intake revision, stales the whole scope, reflows to requirement-intake; the whole chain re-runs and the confirming re-gate (gate stage round 2) closes it binding the new intake revision; production sample wms-monitor 20260916-config-page-usability F07",
+      build: () => {
+        const wave = waveWithGateRequirementReflow(`20260920-${id}`, "DEEP");
+        return Object.freeze({
+          requirementId: `20260920-${id}`,
+          requestedDepth: "DEEP" as const,
+          nodes: wave.nodes,
+          findings: wave.findings,
+        });
+      },
+    }),
+  ];
+}
+
+/** E — review-discovered requirement-level reflow (DEEP; the requirement-addition path). */
+export function coreReviewRequirementReflowScenarios(): ScenarioSpec[] {
+  const id = "S-CORE-DEEP-PASS-requirement-reflow";
+  return [
+    Object.freeze({
+      id,
+      family: "S-CORE" as const,
+      coords: coords({ depth: "DEEP", verdict: "PASS", round: "re-gate" }),
+      prunes: "requirement-addition reflow: a requirement-level finding at the review stage reflows to requirement-intake, the whole chain re-runs (re-gate included), the re-review (review stage round 2) closes it binding the new intake revision",
+      build: () => {
+        const wave = waveWithReviewRequirementReflow(`20260920-${id}`, "DEEP");
+        return Object.freeze({
+          requirementId: `20260920-${id}`,
+          requestedDepth: "DEEP" as const,
+          nodes: wave.nodes,
+          findings: wave.findings,
+        });
+      },
+    }),
+  ];
+}
+
+/**
+ * F — the feedback-driven re-gate (the non-finding re-gate path): a
+ * FEEDBACK_DRIVEN_CHANGE record (WP-1) closes the current generation and
+ * opens the next; the feedback wave restarts at the first lagging node —
+ * a FULL rebuild from requirement-intake that subsumes any finding-driven
+ * scope — and the re-run re-adjudicates at the gate (the re-gate) without
+ * any finding ever being registered. Two firing points: after a plain node
+ * (the first pass completed) and after the gate verdict (mid-flight).
+ */
+function waveWithFeedbackRegate(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+  fireAfter: "review" | "gate",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const v1 = (node: string, kind: string, label: string): NodeFact =>
+    nodeFact(node, kind, `# ${requirementId} ${label} v1\n`, "1.0.0");
+  const v2 = (node: string, kind: string, label: string): NodeFact =>
+    nodeFact(node, kind, `# ${requirementId} ${label} v2\n`, "2.0.0", { attempt: 2 });
+  const gateV1 = nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+    gateResult: "PASS",
+    decisionStatus: "CONFIRMED",
+    decisionDepth: depth,
+  });
+  const gateV2 = nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+    attempt: 2,
+    gateResult: "PASS",
+    decisionStatus: "CONFIRMED",
+    decisionDepth: depth,
+  });
+  const firstPass: NodeFact[] =
+    fireAfter === "gate"
+      ? [
+          v1("requirement-intake", "requirement_summary", "intake"),
+          v1("solution-design", "technical_design", "design"),
+          Object.freeze({ ...gateV1, opensFeedbackChange: true }),
+        ]
+      : [
+          v1("requirement-intake", "requirement_summary", "intake"),
+          v1("solution-design", "technical_design", "design"),
+          gateV1,
+          v1("task-planning", "task_plan", "plan"),
+          v1("implementation", "implementation_record", "impl"),
+          Object.freeze({ ...v1("code-review", "review_summary", "review"), opensFeedbackChange: true }),
+        ];
+  // The feedback wave: the whole chain re-runs from requirement-intake in the
+  // new generation; the re-run re-adjudicates at the gate (the re-gate).
+  const rerun: NodeFact[] = [
+    v2("requirement-intake", "requirement_summary", "intake"),
+    v2("solution-design", "technical_design", "design"),
+    gateV2,
+  ];
+  if (fireAfter === "review") {
+    rerun.push(v2("task-planning", "task_plan", "plan"), v2("implementation", "implementation_record", "impl"), v2("code-review", "review_summary", "review"));
+  } else {
+    rerun.push(v1("task-planning", "task_plan", "plan"), v1("implementation", "implementation_record", "impl"), v1("code-review", "review_summary", "review"));
+  }
+  rerun.push(nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"));
+  return { nodes: [...firstPass, ...rerun], findings: [] };
+}
+
+/** F — feedback-driven re-gate scenarios (2): fired after the review vs after the gate verdict. */
+export function coreFeedbackRegateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const cases: readonly { depth: "LIGHT" | "STANDARD" | "DEEP"; fireAfter: "review" | "gate"; suffix: string }[] = [
+    { depth: "DEEP", fireAfter: "review", suffix: "post-review" },
+    { depth: "DEEP", fireAfter: "gate", suffix: "post-gate" },
+  ];
+  for (const testCase of cases) {
+    const id = `S-CORE-${testCase.depth}-PASS-feedback-regate-${testCase.suffix}`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: testCase.depth, verdict: "PASS", round: "re-gate" }),
+        prunes: `feedback-driven re-gate (no finding): a FEEDBACK_DRIVEN_CHANGE record fired ${testCase.fireAfter === "review" ? "after the completed first pass" : "after the gate verdict (mid-flight)"} opens generation 2; the feedback wave is a full rebuild from requirement-intake (subsumes any finding-driven scope) and the re-run re-adjudicates at the gate`,
+        build: () => {
+          const wave = waveWithFeedbackRegate(`20260920-${id}`, testCase.depth, testCase.fireAfter);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: testCase.depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * G — escalation with a FAIL round (spec coordinate 升档 × FAIL): the
+ * escalation verdict (ESCALATED) drives the deeper rework; the re-gate at the
+ * deeper level FAILs once (one finding), and the following round passes. Gate
+ * stage rounds: R1 ESCALATED (registers Fa), R2 closes Fa (design v2) and
+ * registers Fb but FAILs, R3 closes Fb (design v3) and PASSes.
+ */
+function waveWithEscalationFail(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD",
+  escalatedDepth: "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const design = (v: number): NodeFact =>
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design v${v}\n`, `${v}.0.0`, v === 1 ? {} : { attempt: v });
+  const ledgerFor = (key: string): string =>
+    `${JSON.stringify({ schema: "loop-capability-findings:v1", findings: [{ finding_id: `${requirementId}-${key}` }] })}\n`;
+  const finding = (key: string, registeredRound: number, examinedDesign: number, closedAtRound: number): FindingFact =>
+    Object.freeze({
+      findingId: `${requirementId}-${key}`,
+      discoveredAt: "solution-gate",
+      category: "SOLUTION",
+      earliest: "solution-design",
+      sourceRevisionId: `${runId}:revision:solution-design:${examinedDesign}`,
+      evidenceKind: "capability_findings",
+      evidenceContent: ledgerFor(key),
+      gateRound: registeredRound,
+      closedAtRound,
+      registerAfter: "solution-gate",
+      resolveAfter: "solution-gate",
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "solution-gate",
+        evidenceKind: "solution_review",
+        evidenceContent: `# ${requirementId} gate v${closedAtRound}\n`,
+        boundRevisionId: `${runId}:revision:solution-design:${closedAtRound}`,
+      }),
+    });
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    design(1),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v1\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "ESCALATED",
+      decisionDepth: escalatedDepth,
+      ledgerContent: ledgerFor("Fa"),
+      staleNodes: ["solution-design"],
+    }),
+    design(2),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v2\n`, "2.0.0", {
+      attempt: 2,
+      gateResult: "FAIL",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+      ledgerContent: ledgerFor("Fb"),
+      staleNodes: ["solution-design"],
+    }),
+    design(3),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate v3\n`, "3.0.0", {
+      attempt: 3,
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: escalatedDepth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [finding("Fa", 1, 1, 2), finding("Fb", 2, 2, 3)];
+  return { nodes, findings };
+}
+
+/** G — escalation-with-FAIL scenarios (2): LIGHT→STANDARD and STANDARD→DEEP. */
+export function coreEscalationFailScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const cases: readonly { depth: "LIGHT" | "STANDARD"; escalated: "STANDARD" | "DEEP" }[] = [
+    { depth: "LIGHT", escalated: "STANDARD" },
+    { depth: "STANDARD", escalated: "DEEP" },
+  ];
+  for (const testCase of cases) {
+    const id = `S-CORE-${testCase.depth}-FAIL-upgrade`;
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-CORE" as const,
+        coords: coords({ depth: testCase.depth, verdict: "FAIL", round: "upgrade" }),
+        prunes: `escalation × FAIL: R1 ESCALATED (${testCase.depth}→${testCase.escalated}) registers Fa; R2 closes Fa (design v2), registers Fb and FAILs; R3 closes Fb (design v3) and PASSes; gate stage rounds counted independently of the review stage`,
+        build: () => {
+          const wave = waveWithEscalationFail(`20260920-${id}`, testCase.depth, testCase.escalated);
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: testCase.depth,
+            nodes: wave.nodes,
+            findings: wave.findings,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * S-MANIFEST-1 — reconcile (V9 semantics): the runtime takes over at an
+ * INTERMEDIATE manifest (the finding still OPEN), then the journal tail (the
+ * reworked implementation + the re-review) and the finding's closure land in
+ * ONE catch-up publish. Both faces snapshot at the same node.
+ */
+function waveWithReconcile(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const reviewV2 = `# ${requirementId} review v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    // The mid-takeover checkpoint: the finding is OPEN here. Its invalidation
+    // stales the implementation AND the just-materialized code-review current
+    // (the scope covers the discovering node itself) — the manual face mirrors
+    // both, otherwise the intermediate takeover drifts.
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", {
+      staleNodes: ["implementation", "code-review"],
+    }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", reviewV2, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "IMPLEMENTATION",
+      earliest: "implementation",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "review_summary",
+        evidenceContent: reviewV2,
+        boundRevisionId: `${runId}:revision:implementation:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** S-MANIFEST-2 — corrupt: the takeover baseline's self-digest is tampered; the level-1 corruption discrimination must fail closed on both faces. */
+function waveWithCorrupt(
+  requirementId: string,
+  depth: "LIGHT" | "STANDARD" | "DEEP",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: depth,
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  return { nodes, findings: [] };
+}
+
+/** S-MANIFEST scenarios (2): reconcile (V9 mixed catch-up) + corrupt (fail-closed level-1 discrimination). */
+export function coreManifestStateScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  {
+    const id = "S-MANIFEST-STANDARD-reconcile";
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-MANIFEST" as const,
+        coords: coords({ depth: "STANDARD", verdict: "PASS", round: "first", manifestState: "reconcile" }),
+        prunes: "reconcile: the runtime takes over at the INTERMEDIATE manual manifest (the review finding still OPEN); the journal tail (implementation v2 + re-review) and the finding closure land in ONE catch-up publish (V9 mixed); both faces snapshot at the code-review round",
+        build: () => {
+          const wave = waveWithReconcile(`20260920-${id}`, "STANDARD");
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: "STANDARD" as const,
+            nodes: wave.nodes,
+            findings: wave.findings,
+            midTakeoverAfter: "code-review",
+          });
+        },
+      }),
+    );
+  }
+  {
+    const id = "S-MANIFEST-STANDARD-corrupt";
+    specs.push(
+      Object.freeze({
+        id,
+        family: "S-MANIFEST" as const,
+        coords: coords({ depth: "STANDARD", verdict: "PASS", round: "first", manifestState: "corrupt" }),
+        prunes: "corrupt: the takeover baseline's self-digest is tampered (first hex digit flipped); the projector must STOP with MANIFEST_CORRUPT_STOP — level-1 discrimination, single-level per the frozen spec (no cross-face comparison); the manual publisher's self-consistency check refuses on the same manifest",
+        expectStop: "MANIFEST_CORRUPT_STOP",
+        build: () => {
+          const wave = waveWithCorrupt(`20260920-${id}`, "STANDARD");
+          return Object.freeze({
+            requirementId: `20260920-${id}`,
+            requestedDepth: "STANDARD" as const,
+            nodes: wave.nodes,
+            findings: wave.findings,
+            tamperTakeoverBaseline: true,
+          });
+        },
+      }),
+    );
+  }
+  return specs;
+}
+
+/**
+ * S-CRASH waves (6): the review-local rework chain (a PASS gate, one
+ * implementation-class review finding, the rework, the re-review) observed
+ * at three crash points × two resume variants. The runtime face's journal
+ * runs ahead of its manifest at the crash point; the resume projection must
+ * bring the manifest to the journal head (a catch-up, or a fresh takeover
+ * after the lost write), and the manual face's same-input publisher replay
+ * must stay byte-idempotent.
+ */
+function waveWithCrashResume(
+  requirementId: string,
+  crashPoint: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write",
+): { nodes: NodeFact[]; findings: FindingFact[] } {
+  const runId = runtimeRunId(requirementId);
+  const reviewV1 = `# ${requirementId} review v1\n`;
+  const reviewV2 = `# ${requirementId} review v2\n`;
+  const nodes: NodeFact[] = [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: "STANDARD",
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v1\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", reviewV1, "1.0.0", { staleNodes: ["implementation", "code-review"] }),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl v2\n`, "2.0.0", { attempt: 2 }),
+    nodeFact("code-review", "review_summary", reviewV2, "2.0.0", { attempt: 2 }),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+  const findings: FindingFact[] = [
+    Object.freeze({
+      findingId: `${requirementId}-CR-F01`,
+      discoveredAt: "code-review",
+      category: "IMPLEMENTATION",
+      earliest: "implementation",
+      sourceRevisionId: `${runId}:revision:implementation:1`,
+      evidenceKind: "review_summary",
+      evidenceContent: reviewV1,
+      registerAfter: "code-review",
+      resolveAfter: "code-review",
+      closedAtRound: 2,
+      action: Object.freeze({
+        action: "resolve" as const,
+        closedBy: "code-review",
+        evidenceKind: "review_summary",
+        evidenceContent: reviewV2,
+        boundRevisionId: `${runId}:revision:implementation:2`,
+      }),
+    }),
+  ];
+  return { nodes, findings };
+}
+
+/** A clean seven-node PASS chain (the post-gate-verdict crash wave). */
+function plainPassChain(requirementId: string): NodeFact[] {
+  return [
+    nodeFact("requirement-intake", "requirement_summary", `# ${requirementId} intake\n`, "1.0.0"),
+    nodeFact("solution-design", "technical_design", `# ${requirementId} design\n`, "1.0.0"),
+    nodeFact("solution-gate", "solution_review", `# ${requirementId} gate\n`, "1.0.0", {
+      gateResult: "PASS",
+      decisionStatus: "CONFIRMED",
+      decisionDepth: "STANDARD",
+    }),
+    nodeFact("task-planning", "task_plan", `# ${requirementId} plan\n`, "1.0.0"),
+    nodeFact("implementation", "implementation_record", `# ${requirementId} impl\n`, "1.0.0"),
+    nodeFact("code-review", "review_summary", `# ${requirementId} review\n`, "1.0.0"),
+    nodeFact("knowledge-sync", "knowledge_sync_result", `# ${requirementId} knowledge\n`, "1.0.0"),
+  ];
+}
+
+/** S-CRASH scenarios (6): three crash points × {single resume, double resume}. */
+export function coreCrashResumeScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  const crashPoints: readonly {
+    point: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write";
+    checkpoint: string;
+    manifestState: "new" | "reconcile" | "corrupt";
+    lostWrite: boolean;
+  }[] = [
+    { point: "post-gate-verdict", checkpoint: "solution-gate", manifestState: "new", lostWrite: false },
+    { point: "post-finding-migration", checkpoint: "code-review", manifestState: "reconcile", lostWrite: false },
+    { point: "pre-manifest-write", checkpoint: "code-review", manifestState: "reconcile", lostWrite: true },
+  ];
+  for (const crash of crashPoints) {
+    for (const resumeTwice of [false, true]) {
+      const id = `S-CRASH-STANDARD-${crash.point}${resumeTwice ? "-double-resume" : "-resume"}`;
+      const withFinding = crash.point !== "post-gate-verdict";
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-CRASH" as const,
+          coords: coords({
+            depth: "STANDARD",
+            verdict: "PASS",
+            round: "first",
+            crashResume: "crash-resume",
+            manifestState: crash.manifestState,
+          }),
+          prunes: withFinding
+            ? `crash point ${crash.point} (checkpoint after ${crash.checkpoint}); runtime resume = ${crash.lostWrite ? "the catch-up re-derived after the lost manifest write (rollback to the taken-over state)" : "the catch-up"}; ${resumeTwice ? "double resume must be a byte-identical NO_OP" : "single resume"}; manual face asserts the publisher's same-input replay is byte-idempotent`
+            : `crash point post-gate-verdict (checkpoint after the gate verdict): the journal tail (planning/implementation/review/knowledge) is unprojected; a clean PASS chain carries no finding — a finding registered only later in the journal could not pair against a manual manifest already carrying it; ${resumeTwice ? "double resume must be a byte-identical NO_OP" : "single resume"}; manual face asserts the publisher's same-input replay is byte-idempotent`,
+          build: () => {
+            const wave = withFinding
+              ? waveWithCrashResume(`20260920-${id}`, crash.point)
+              : { nodes: plainPassChain(`20260920-${id}`), findings: [] };
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: wave.nodes,
+              findings: wave.findings,
+              // The crash-point fact for the behavior layer's
+              // interrupt-reentry mode (the artifact layer reads the
+              // checkpoint / lost-write / resume flags below).
+              crashPoint: crash.point,
+              midTakeoverAfter: crash.checkpoint,
+              ...(crash.lostWrite ? { loseManifestWrite: true } : {}),
+              ...(resumeTwice ? { resumeTwice: true } : {}),
+              assertPublisherReplayIdempotent: true,
+            });
+          },
+        }),
+      );
+    }
+  }
+  return specs;
+}
+
+/**
+ * S-INIT scenario waves (8): four project-initialization classes (D-088-01
+ * re-baseline, Decision-090: NEW_EMPTY / EXISTING_CODE_NO_KNOWLEDGE /
+ * LEGACY_SDD / LEGACY_SDLC_SDD — the legacy classes execute the
+ * PRESERVE / TRANSFORM / RETIRE disposition and must not let the legacy
+ * SDD/SDLC-SDD workflow remain an active authority) × two key verdicts
+ * (STANDARD × PASS × first-round, STANDARD × FAIL × reflow). The class
+ * difference converges at the requirement-intake node (the init material the
+ * intake carries); the rest of the chain is isomorphic — the frozen spec's
+ * argument, proven here by running all four classes through both shapes.
+ */
+const INIT_CLASSES: readonly { id: "new-project" | "existing-code" | "original-sdd" | "original-sdlc-sdd"; label: string; material: string }[] = [
+  { id: "new-project", label: "NEW_EMPTY", material: "empty repo + requirement doc" },
+  { id: "existing-code", label: "EXISTING_CODE_NO_KNOWLEDGE", material: "codebase survey + requirement doc (no knowledge sink)" },
+  { id: "original-sdd", label: "LEGACY_SDD", material: "PRESERVE/TRANSFORM/RETIRE disposition + requirement doc" },
+  { id: "original-sdlc-sdd", label: "LEGACY_SDLC_SDD", material: "PRESERVE/TRANSFORM/RETIRE disposition + requirement doc" },
+];
+
+function initIntakeText(requirementId: string, material: string): string {
+  return `# ${requirementId} intake (${material})\n`;
+}
+
+/** S-INIT scenarios (8): four init classes × {PASS first-round, FAIL reflow}. */
+export function coreInitClassScenarios(): ScenarioSpec[] {
+  const specs: ScenarioSpec[] = [];
+  for (const init of INIT_CLASSES) {
+    const intakeText = initIntakeText(`20260920-S-INIT-${init.id}`, init.material);
+    {
+      const id = `S-INIT-${init.id}-STANDARD-PASS-first`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-INIT" as const,
+          coords: coords({ initClass: init.id, depth: "STANDARD", verdict: "PASS", round: "first" }),
+          prunes: `init class ${init.label} (D-088-01): ${init.material}; the class difference converges at requirement-intake and the rest of the chain is isomorphic (spec §3)`,
+          build: () => {
+            const head = nodeFact("requirement-intake", "requirement_summary", intakeText, "1.0.0");
+            const chain: NodeFact[] = [
+              head,
+              nodeFact("solution-design", "technical_design", `# 20260920-${id} design\n`, "1.0.0"),
+              nodeFact("solution-gate", "solution_review", `# 20260920-${id} gate\n`, "1.0.0", {
+                gateResult: "PASS",
+                decisionStatus: "CONFIRMED",
+                decisionDepth: "STANDARD",
+              }),
+              nodeFact("task-planning", "task_plan", `# 20260920-${id} plan\n`, "1.0.0"),
+              nodeFact("implementation", "implementation_record", `# 20260920-${id} impl\n`, "1.0.0"),
+              nodeFact("code-review", "review_summary", `# 20260920-${id} review\n`, "1.0.0"),
+              nodeFact("knowledge-sync", "knowledge_sync_result", `# 20260920-${id} knowledge\n`, "1.0.0"),
+            ];
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: chain,
+              findings: [],
+            });
+          },
+        }),
+      );
+    }
+    {
+      const id = `S-INIT-${init.id}-STANDARD-FAIL-reflow`;
+      specs.push(
+        Object.freeze({
+          id,
+          family: "S-INIT" as const,
+          coords: coords({ initClass: init.id, depth: "STANDARD", verdict: "FAIL", round: "first" }),
+          prunes: `init class ${init.label} with a FAIL first-round verdict: the gate finding reflows to design v2 and the re-gate PASSes; the class difference converges at requirement-intake`,
+          build: () => {
+            const wave = waveWithRework(`20260920-${id}`, "STANDARD", "FAIL", intakeText);
+            return Object.freeze({
+              requirementId: `20260920-${id}`,
+              requestedDepth: "STANDARD" as const,
+              nodes: wave.nodes,
+              findings: wave.findings,
+            });
+          },
         }),
       );
     }

@@ -59,6 +59,14 @@ export interface NodeFact {
    * a gate-round finding registers (its earliest-affected scope goes STALE).
    */
   readonly staleNodes?: readonly string[];
+  /**
+   * When set, a WP-1 FEEDBACK_DRIVEN_CHANGE record is appended after this
+   * node's completion: external feedback opens the next generation and the
+   * feedback wave restarts at the first lagging node (a full rebuild from
+   * requirement-intake subsumes any finding-driven scope). This is the
+   * re-gate path that needs NO finding — a design/requirement change.
+   */
+  readonly opensFeedbackChange?: boolean;
 }
 
 /** One finding fact (register + optional lifecycle action). */
@@ -80,6 +88,14 @@ export interface FindingFact {
    */
   readonly registerAfter?: string;
   readonly resolveAfter?: string;
+  /** 1-based gate round whose scan terminal registers this finding (default 1).
+   *  Multi-round waves register findings per round as the full re-review
+   *  discovers them. */
+  readonly gateRound?: number;
+  /** 1-based gate round whose verdict terminal settles this finding (the
+   *  re-review that confirmed its repair). Findings are a persistent set:
+   *  they close at THEIR confirming round, not at a wave-final PASS. */
+  readonly closedAtRound?: number;
   readonly action?: {
     readonly action: "resolve" | "accept";
     readonly closedBy: string;
@@ -95,6 +111,81 @@ export interface FactScript {
   readonly requestedDepth: "LIGHT" | "STANDARD" | "DEEP";
   readonly nodes: readonly NodeFact[];
   readonly findings: readonly FindingFact[];
+  /**
+   * S-MANIFEST reconcile: the node after whose completion BOTH faces take an
+   * intermediate snapshot — the runtime runs its takeover projection there
+   * (the journal prefix vs the manual prefix) and the remaining nodes are
+   * caught up by the final projection (V9: the journal tail and a finding
+   * delta land in ONE publish).
+   */
+  readonly midTakeoverAfter?: string;
+  /**
+   * S-CRASH: the crash point (frozen spec §3). post-gate-verdict — the
+   * journal tail after the gate verdict is unprojected;
+   * post-finding-migration — the finding lifecycle delta is unprojected;
+   * pre-manifest-write — the projection ran but its manifest write was lost
+   * (the driver restores the baseline before the resume).
+   */
+  readonly crashPoint?: "post-gate-verdict" | "post-finding-migration" | "pre-manifest-write";
+  /**
+   * S-CRASH: simulate the lost manifest write of the pre-manifest-write
+   * crash point — the checkpoint projection's write is rolled back before
+   * the resume, which must re-derive the identical document.
+   */
+  readonly loseManifestWrite?: boolean;
+  /**
+   * S-CRASH: after the resume, project once more and require a NO_OP,
+   * byte-identical result (crash-then-double-resume idempotence).
+   */
+  readonly resumeTwice?: boolean;
+  /**
+   * S-CRASH manual-face assertion: re-run the last entry-update with
+   * identical input — the publisher's NO-OP REPLAY must leave the manifest
+   * byte-identical (same-input replay idempotence).
+   */
+  readonly assertPublisherReplayIdempotent?: boolean;
+  /**
+   * S-MANIFEST corrupt: tamper the takeover baseline's self-digest before
+   * projecting — the level-1 corruption discrimination must fail closed
+   * (MANIFEST_CORRUPT_STOP on the runtime face; the manual publisher's
+   * self-consistency check refuses on the same manifest).
+   */
+  readonly tamperTakeoverBaseline?: boolean;
+  /**
+   * Behavior-layer only: the chain kernel's persisted backward-jump budget
+   * (the runtime entry's own `maxRegateRounds` option, forwarded verbatim).
+   * Set on the over-limit pause waves so the entry's budget bites once the
+   * scripted rounds are spent — the knob belongs to the entry itself (the
+   * same class as maxDispatches), never a shadow substitution.
+   */
+  readonly maxRegateRounds?: number;
+  /**
+   * H1-remediation: the declared final-handoff expectation — the production
+   * entry's REAL c2/c3 handoff triple, compared field-for-field by the
+   * behavior comparator's dim 9 (never derived from a success proxy).
+   *
+   * R-G6-01 (routed production finding, two observed symptoms — the c2/c3
+   * evidence chain reads the wrong sources): (a) closureReviewDone reads the
+   * code-review event's gateResult, which the event contract pins to
+   * NOT_APPLICABLE for non-formal_verdict executions → "code review closure
+   * review not done"; (b) pathEntry reads the PER-INVOCATION c1-guard
+   * variable, which a staged/resumed (bounded) wave loses in its completing
+   * invocation → "development path entry not allowed: no formal_verdict
+   * event with materialized depth found". A completing script therefore
+   * declares the SPEC-semantic expectation (READY_FOR_MANUAL_GIT_HANDOFF) and
+   * the divergence is surfaced, bucketed, and routed — never reported as
+   * MATCH.
+   *
+   * When absent, the comparator derives it from the script's own terminal
+   * shape (last node knowledge-sync ⇒ completing ⇒ READY_FOR_MANUAL_GIT_HANDOFF
+   * with a required artifact ref; otherwise ABSENT — the chain never
+   * completed, so the entry builds no handoff artifact).
+   */
+  readonly expectedHandoff?: {
+    readonly status: "READY_FOR_MANUAL_GIT_HANDOFF" | "BLOCKED" | "FAILED" | "ABSENT";
+    readonly reason: string | null;
+    readonly requireArtifactRef: boolean;
+  };
 }
 
 /** Matrix coordinates (frozen spec §3). */
@@ -113,6 +204,13 @@ export interface ScenarioSpec {
   readonly coords: ScenarioCoords;
   /** Pruning/degeneracy annotation (frozen spec §3), if this scenario replaces a pruned combo. */
   readonly prunes?: string;
+  /**
+   * When set, the scenario asserts a fail-closed terminal instead of a
+   * manifest comparison: the runtime projection must STOP with this code
+   * (S-MANIFEST corrupt: MANIFEST_CORRUPT_STOP — single-level discrimination,
+   * no cross-face comparison per the frozen spec).
+   */
+  readonly expectStop?: string;
   build(): FactScript;
 }
 
