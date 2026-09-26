@@ -13,6 +13,7 @@ import { driveManualFace } from "./g6-parity/manual-face";
 import { driveRuntimeStoreLevel, makeStores } from "./g6-parity/runtime-face";
 import { compareArtifactLayer, type ComparisonResult } from "./g6-parity/comparator";
 import { assertScenarioLedger, loadFrozenLedger } from "./g6-parity/ledger-guard";
+import { emitEvent } from "./g6-parity/event-stream";
 import {
   coreFirstRoundScenarios,
   coreUpgradeScenarios,
@@ -43,6 +44,9 @@ function ok(condition: boolean, message: string, tally: Tally): void {
     tally.failed += 1;
     console.error(`  ✗ ${message}`);
   }
+  // R15-H5: the scenario judge is the evaluation point — emit the structured
+  // event here (a printed line alone is not execution evidence).
+  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition });
 }
 
 function runScenario(specId: string): ComparisonResult {
@@ -112,6 +116,7 @@ function main(): void {
   // diagnostic. The per-run failure tally is not a scale guard: a deleted
   // completing scenario used to report 49/0, exit 0.
   assertScenarioLedger("completing matrix", specs, loadFrozenLedger().scenarios.completing);
+  // (the pin's execution event is emitted inside assertScenarioLedger — R15-H5)
   const tally: Tally = { passed: 0, failed: 0 };
   console.log(`G6 parity matrix M2: ${specs.length} scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's ${loadFrozenLedger().scenarios.completing.length} unique IDs)`);
 

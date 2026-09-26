@@ -17,6 +17,7 @@ import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { ScenarioSpec } from "./types";
+import { emitEvent } from "./event-stream";
 
 const LEDGER_PATH = join(process.cwd(), "tests", "g6-parity", "frozen-ledger.json");
 
@@ -75,6 +76,10 @@ export function assertScenarioLedger(label: string, specs: readonly ScenarioSpec
         `${extra.length > 0 ? ` — unexpected (in the register, not in the ledger): ${extra.join(", ")}` : ""}`,
     );
   }
+  // R15-H5: the pin IS the evaluation — its event is emitted here, so a
+  // commented-out or bypassed pin leaves no event at all (a separate emit
+  // statement after the call could survive neutralizing the call itself).
+  emitEvent({ t: "pin", suite: "scenario-ledger", name: "register", label, ok: true, size: ids.length, frozen: expectedIds.length });
 }
 
 export interface NegativeSuiteHandle {
@@ -95,6 +100,11 @@ export interface NegativeSuiteResult {
  * group must run exactly once at exactly its frozen count, and the total
  * must match; each failure class has its own diagnostic, and the summary
  * line is generated from the actual execution, never hardcoded.
+ *
+ * R15-H5: every evaluation point emits a structured event (assert / group /
+ * settle) for the auditor's execution-trace check, and the handle is CLOSED
+ * at settle — a captured handle used afterwards throws (an assertion outside
+ * the settle window does not count as execution).
  */
 export async function runNegativeSuite(
   suite: string,
@@ -106,8 +116,14 @@ export async function runNegativeSuite(
   const executed = new Map<string, number>();
   const order: string[] = [];
   let current: string | null = null;
+  let settled = false;
   const handle: NegativeSuiteHandle = {
     ok(condition, message): void {
+      if (settled) {
+        throw new Error(
+          `${suite}: handle used after settle — an assertion outside the settle window is not an execution`,
+        );
+      }
       if (condition) {
         passed += 1;
         console.log(`  ✓ ${message}`);
@@ -117,8 +133,12 @@ export async function runNegativeSuite(
       }
       const key = current ?? "<before any group>";
       executed.set(key, (executed.get(key) ?? 0) + 1);
+      emitEvent({ t: "assert", suite, group: key, ok: condition, msg: message });
     },
     group(label): void {
+      if (settled) {
+        throw new Error(`${suite}: handle used after settle — a group outside the settle window is not a registration`);
+      }
       if (!(label in section.groups)) {
         throw new Error(`${suite}: unregistered negative group "${label}" — the frozen ledger is the only source of groups`);
       }
@@ -127,6 +147,7 @@ export async function runNegativeSuite(
       }
       order.push(label);
       current = label;
+      emitEvent({ t: "group", suite, label });
     },
   };
   await body(handle);
@@ -154,5 +175,7 @@ export async function runNegativeSuite(
     throw new Error(`${suite}: frozen coverage violated — ${problems.join("; ")}`);
   }
   const summary = `${suite}: ${passed} passed, ${failed} failed (frozen coverage: ${section.total} assertions across ${frozenGroups.length} groups — every group ran exactly its frozen count)`;
+  emitEvent({ t: "settle", suite, passed, failed, total: section.total, groups: frozenGroups.length });
+  settled = true;
   return { passed, failed, summary };
 }
