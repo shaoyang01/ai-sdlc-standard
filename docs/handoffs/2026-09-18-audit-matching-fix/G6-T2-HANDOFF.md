@@ -1,6 +1,6 @@
 # G6-T2 交接（2026-09-21 公司机会话更新，接 2026-09-20 晚家用机收工态）
 
-> 状态（2026-09-26，最新在顶部）：**M2 全家族 47/47 + S-CRASH 中断-重入 + 验收报告齐备；外部独立复审 R1–R15 完毕，R15 判 FAIL 后 R15-H5（审计器重写为执行事件核验：求值点结构化事件 + handle settle 封闭 + 印行/事件交叉核对 + 双路 stderr + 存在性 pin）/ R15-H4（PR 五条崩溃路径逐条归属）已修复 @ce8b61c，R16 复审 prompt 已备**。PR #197（base `feature/loop-runtime-v1`，`b8923fc..ce8b61c` 62 commits，生产代码零 diff）CI：typecheck/standards/loop-patch-mutations 绿，ci-tests 失败 = 按 A′ 设计红的行为矩阵（R-G6-01 修复前必然）+ hermes-cli-executor-contract CI 并行抖动（本地隔离 21/0 恢复）。合并授权待 R16 PASS 后 Current User 裁决（分支保护禁直推主线）。
+> 状态（2026-09-27，最新在顶部）：**M2 全家族 47/47 + S-CRASH 中断-重入 + 验收报告齐备；外部独立复审 R1–R16 完毕，R16 判 FAIL 后 R16-H6/H7（spawnSync 双路捕获 + 严格事件解析 + 印行/事件逐条对应）/ R16-H5（基线引用与边界措辞对齐）已修复 @2ec9ecb，R17 复审 prompt 已备**。PR #197（base `feature/loop-runtime-v1`，`b8923fc..2ec9ecb` 64 commits，生产代码零 diff）CI：typecheck/standards/loop-patch-mutations 绿，ci-tests 失败 = 按 A′ 设计红的行为矩阵（R-G6-01 修复前必然）+ hermes-cli-executor-contract CI 并行抖动（本地隔离 21/0 恢复）。合并授权待 R17 PASS 后 Current User 裁决（分支保护禁直推主线）。
 > Control Plane 不变：G6/D-090-04 ACTIVE（CP PR #88 合并 `7222d6a`），product_commit 仍指 `e34a4a6`（G6 工作未上主线，均在 feature 分支）。R-G6-01（生产入口 c2/c3 checklist 证据链双症状）为完成门阻塞项，已裁决单独路由（decision record + 生产代码，超 D-090-04 授权）；G6 测试以 A′ surfaced 不掩盖。
 
 ## 2026-09-21 R2 独立复核：PASS（M1 构成 M2 可靠基线）
@@ -238,7 +238,21 @@ g6 矩阵 **12 passed / 0 failed**；tsc 0；全量套件 **1767 passed / 0 fail
 
 剩余（每步先请 Current User 确认）：PR #197 描述同步（R13 轮记录 + 审计器改动面）→ 独立复审（R14，范围 = R13-H1/H2/H3 闭环 + 全 CLOSED 面不回归 + 审计器自身元层次）→ PASS 后请 Current User 授权合并。
 
-## 2026-09-26 家用机会话：R15 复审 FAIL → R15-H5/H4 修复（@ce8b61c 待推）
+## 2026-09-27 家用机会话：R16 复审 FAIL → R16-H6/H7/H5 修复（@2ec9ecb 已推）
+
+**R16 判定 FAIL**（外部只读副本 @55d3cde；R15-H5 的六指定形态全部 CLOSED、已 CLOSED 面零回归；但复审方另构造两形态 + 一项表述问题）：
+
+1. **R16-H6 成功路径仍只取 stdout**：R15-H5 版的成功分支返回 stdout、失败分支才拼 stderr——入口退出 0、stdout 54 绿、stderr 1 红时，审计 **11/0** 且误记红行 0。修复：**spawnSync** 成功/失败两路均捕获 status + stdout + stderr；印行与事件逐条对应（红行 1 对事件红 0 → MISMATCH）。
+2. **R16-H7 仅核计数 + 解析静默丢弃**：① 印行与事件只比**数量**——改一条产物绿行文本（同数不同 ID）→ 审计 11/0；② 解析器静默丢弃非 JSON 事件行——合法 settle 后追加 1 条损坏 NDJSON → 审计 11/0。修复：**严格解析**（非 JSON/非事件对象按行号报出、审计失败；事件流缺失亦报出）+ **逐条对应**（印行断言文本与事件文本按多重集全等；矩阵场景事件携带 id 与 message）。
+3. **R16-H5 基线引用失实**：PR 两处与报告一行称 `a5e15a9` 为当前数据基线——该提交与 `ce8b61c` 同父、**非 HEAD 祖先**；「须伪造整个事件流」措辞强于实测（R16 事件伪造推演实测：补写个别一致记录即可通过）。修复：基线引用对齐 `ce8b61c`→`2ec9ecb` 链；边界措辞收窄为「单仓内补写个别一致事件记录仍可能通过（已声明的同仓同步修改边界），本层提价的是令每条印行与事件逐条互洽的成本形态」；`git diff --check` 空行修复。
+
+**验证**（数据基线 2ec9ecb）：tsc 0；基线审计 **11/0** 退出 0（每入口：损坏行 0、印行 vs 事件 one-to-one）；**三新形态**（退出 0 的 stderr 红行 / 同数不同 ID / settle 后追加损坏事件行）worktree 复刻全部 **10/1 退出 1**（各带专属诊断：MISMATCH / MISMATCH / corrupt stream lines 1）；**旧形态回返仍拒**（53+伪造绿行 10/1、settle 后红断言 10/1、settle 打桩 5/6）；全量 **173 文件**唯一文件级失败 = 按 A′ 设计红矩阵。改动面 tests/ + docs，生产代码零 diff；b8923fc..2ec9ecb 实算 **64 commits**。
+
+**元教训递进（第三次收窄）**：R13-H1——自述不是证据；R14-H1——改核执行痕迹（退出码/行数/ID）；R15-H5——印行仍是输出文本，改核求值点事件；**R16-H6/H7——事件核验本身还有两漏：成功路径的流捕获不对称、印行/事件只核数量不对应，且解析器对损坏行「静默丢弃」本身就是一种自述信任**。单仓 tamper-evident 边界不变；每轮提高的是伪造的成本形态与可见性。
+
+**剩余（每步先请 Current User 确认）**：PR #197 正文同步（R16 轮记录 + 基线/head 提交数 + 边界措辞收窄）→ 独立复审（R17，范围 = R16-H6/H7/H5 闭环复算 + 旧形态回返 + 全 CLOSED 面不回归 + 事件流元层次）→ PASS 后请 Current User 授权合并。
+
+## 2026-09-26 家用机会话：R15 复审 FAIL → R15-H5/H4 修复（@ce8b61c 已推）
 
 **R15 判定 FAIL**（外部只读副本 @ad209fa；R14-H1/H3 闭环判符合、已 CLOSED 面零回归；两项新阻塞）：
 
