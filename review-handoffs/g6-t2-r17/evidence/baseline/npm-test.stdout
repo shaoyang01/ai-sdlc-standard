@@ -1,0 +1,1146 @@
+
+> ai-sdlc-runtime@0.1.0 test
+> node scripts/run-tests-parallel.mjs
+
+PASS: OrderServiceImpl stays unarchived when only DeliveryOrderServiceImpl is named
+PASS: DeliveryOrderServiceImpl is archived by its own citation
+PASS: SoloServiceImpl is archived by its own citation
+PASS: an uncited entry stays unarchived (control: archiving still works)
+PASS: OrderServiceImpl stays unarchived when only named inside a Code Anchor cell
+PASS: a class cited ONLY by a table cell is still archived (no over-tightening)
+PASS: self-entry unit absent from unarchived core units
+PASS: self-entry unit absent from unarchived core units
+PASS: non-entry layer unit still reported when uncited (control)
+PASS: audit exits 1 (blocked-or-clean, no crash)
+PASS: entry inventory written
+PASS: interface ReviewService archived via DocC's citation of its unique impl ReviewServiceImpl
+PASS: interface StockManager archived by its own citation (control)
+PASS: impl StockManagerImpl archived via interface citation alias
+PASS: WeightService stays unarchived: twin WeightServiceImpl is ambiguous (2 packages)
+PASS: duplicated base simple name (2 TwinService) also disables the alias despite unique TwinServiceImpl
+PASS: OrphanPairService (layer) stays unarchived when nothing names the pair
+PASS: OrphanPairServiceImpl (entry) stays unarchived when nothing names the pair
+PASS: CacheService not aliased by the prefix-superset TwoCacheServiceImpl
+PASS: CacheServiceImpl not archived by the prefix-superset TwoCacheServiceImpl
+PASS: pair conflict reported once, under the interface name
+PASS: no duplicate Impl-side conflict row
+PASS: conflict count = 1 aliased pair + 1 kept Impl row (H2 family)
+PASS: Impl row kept: enum-classified interface has no conflict-report eligibility
+PASS: non-blocking interface itself still yields no conflict row
+PASS: table-channel alias is live: reason = table impl_alias=StockManager
+PASS: text-channel alias intact: reason = text impl alias=ReviewServiceImpl
+PASS: OrderMapper archived only by the real table name doc, not the generic-word doc (.sdlc/business_domain/01Domain/0101L2/010103Alias(别名通道).md)
+PASS: CalcManagerImpl archived only by owner-naming doc, not the ownerless generic-word doc (.sdlc/business_domain/01Domain/0101L2/010103Alias(别名通道).md)
+PASS: bare method-name Code Anchor cell is not evidence (AH-1)
+PASS: method evidence alive with in-row owner: reason = table method=process (AH-1 positive)
+PASS: uncited-chain persistence unit stays visible in unarchived core units (control)
+PASS: OrderMapper not attributed by the table-name-only doc (.sdlc/business_domain/01Domain/0101L2/010103Alias(别名通道).md)
+PASS: table-name-only doc in a second L2 manufactures no cross-domain conflict
+
+==== audit-entry-coverage regression summary: 34 passed, 0 failed ====
+ALL GREEN
+PASS: 1. empty repo dry-run: zero writes
+PASS: 1. empty repo dry-run: zero writes
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 2. empty repo formal: candidate skeleton + full machine artifact set
+PASS: 3. rerun on fresh init: auto-audit mode, no-op on knowledge files
+PASS: 3. rerun on fresh init: auto-audit mode, no-op on knowledge files
+PASS: 3. rerun on fresh init: auto-audit mode, no-op on knowledge files
+PASS: 3. rerun on fresh init: auto-audit mode, no-op on knowledge files
+PASS: 4. partial skeleton: rerun refills missing root docs, preserves existing
+PASS: 4. partial skeleton: rerun refills missing root docs, preserves existing
+PASS: 4. partial skeleton: rerun refills missing root docs, preserves existing
+PASS: 4. partial skeleton: rerun refills missing root docs, preserves existing
+PASS: 5. full curated business_domain: untouched, audit verdict FINDINGS not rewrite
+PASS: 5. full curated business_domain: untouched, audit verdict FINDINGS not rewrite
+PASS: 5. full curated business_domain: untouched, audit verdict FINDINGS not rewrite
+PASS: 5. full curated business_domain: untouched, audit verdict FINDINGS not rewrite
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 6. v3: legacy knowledge root routes to migration flow; --audit escape stays read-only advisory
+PASS: 7. missing git identity: formal fails, dry-run reports
+PASS: 7. missing git identity: formal fails, dry-run reports
+PASS: 7. missing git identity: formal fails, dry-run reports
+PASS: 7. missing git identity: formal fails, dry-run reports
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 8. confirmed domain map: routable 6-digit L4 + xx99 with Chinese names
+PASS: 9. invalid map fail-closed: missing field
+PASS: 9. invalid map fail-closed: missing field
+PASS: 9. invalid map fail-closed: duplicate id
+PASS: 9. invalid map fail-closed: duplicate id
+PASS: 9. invalid map fail-closed: path traversal
+PASS: 9. invalid map fail-closed: path traversal
+PASS: 9. invalid map fail-closed: empty array
+PASS: 9. invalid map fail-closed: empty array
+PASS: 9. invalid map fail-closed: template status
+PASS: 9. invalid map fail-closed: template status
+PASS: 10. declaration conflict: blocked, --update-declaration overrides
+PASS: 10. declaration conflict: blocked, --update-declaration overrides
+PASS: 10. declaration conflict: blocked, --update-declaration overrides
+PASS: 10. declaration conflict: blocked, --update-declaration overrides
+PASS: 11. downgrade protection: routed repo rerun keeps routed declaration
+PASS: 11. downgrade protection: routed repo rerun keeps routed declaration
+PASS: 11. downgrade protection: routed repo rerun keeps routed declaration
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 12. code-driven fill: entry scan, mechanical clustering, xx99 candidate docs
+PASS: 13. zero business semantics: rule sections empty with pending-deposit markers
+PASS: 13. zero business semantics: rule sections empty with pending-deposit markers
+PASS: 13. zero business semantics: rule sections empty with pending-deposit markers
+PASS: 13. zero business semantics: rule sections empty with pending-deposit markers
+PASS: 14. no business entries: skeleton + machine artifacts only, no candidate domains
+PASS: 14. no business entries: skeleton + machine artifacts only, no candidate domains
+PASS: 14. no business entries: skeleton + machine artifacts only, no candidate domains
+PASS: 14. no business entries: skeleton + machine artifacts only, no candidate domains
+PASS: 15. audit: retired-vocabulary residue detected file:line, never rewritten
+PASS: 15. audit: retired-vocabulary residue detected file:line, never rewritten
+PASS: 15. audit: retired-vocabulary residue detected file:line, never rewritten
+PASS: 15. audit: retired-vocabulary residue detected file:line, never rewritten
+PASS: 15. audit: retired-vocabulary residue detected file:line, never rewritten
+PASS: 16. audit: fills missing machine artifact only (create-if-missing)
+PASS: 16. audit: fills missing machine artifact only (create-if-missing)
+PASS: 16. audit: fills missing machine artifact only (create-if-missing)
+PASS: 16. audit: fills missing machine artifact only (create-if-missing)
+PASS: 17. audit: custom curated doc shape reported as difference, not rewritten
+PASS: 17. audit: custom curated doc shape reported as difference, not rewritten
+PASS: 17. audit: custom curated doc shape reported as difference, not rewritten
+PASS: 17. audit: custom curated doc shape reported as difference, not rewritten
+PASS: 18. machine artifact preserved when it exists with different content
+PASS: 18. machine artifact preserved when it exists with different content
+PASS: 18. machine artifact preserved when it exists with different content
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19. minimal entry-coverage skeleton drives the standard audit gate
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 19b. pre-R13 wrapper: preserved, actionable notice, audit reports the dead baked path
+PASS: 20. audit --dry-run: zero writes
+PASS: 20. audit --dry-run: zero writes
+PASS: 20. audit --dry-run: zero writes
+PASS: 21. sibling project-context data untouched by init
+PASS: 21. sibling project-context data untouched by init
+PASS: 21. sibling project-context data untouched by init
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 22. R2-H1 legacy root: zero-traversal proof (existence/link/permission) + map run
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 23. H2 scan narrowing: test dirs, non-process Processor, no-TLD L2, frontend ext filter
+PASS: 24. H3 invalid map fail-closed: draft status
+PASS: 24. H3 invalid map fail-closed: draft status
+PASS: 24. H3 invalid map fail-closed: 1-digit l4
+PASS: 24. H3 invalid map fail-closed: 1-digit l4
+PASS: 24. H3 invalid map fail-closed: 3-digit l4
+PASS: 24. H3 invalid map fail-closed: 3-digit l4
+PASS: 24. H3 invalid map fail-closed: 4-digit l4
+PASS: 24. H3 invalid map fail-closed: 4-digit l4
+PASS: 24. H3 invalid map fail-closed: non-digit id
+PASS: 24. H3 invalid map fail-closed: non-digit id
+PASS: 24. H3 invalid map fail-closed: duplicate full id
+PASS: 24. H3 invalid map fail-closed: duplicate full id
+PASS: 25. H3/H6 audit detects planted 8-digit L4 file
+PASS: 25. H3/H6 audit detects planted 8-digit L4 file
+PASS: 25. H3/H6 audit detects planted 8-digit L4 file
+PASS: 26. H4 candidate->routed upgrade: atomic pass on pristine baseline
+PASS: 26. H4 candidate->routed upgrade: atomic pass on pristine baseline
+PASS: 26. H4 candidate->routed upgrade: atomic pass on pristine baseline
+PASS: 26. H4 candidate->routed upgrade: atomic pass on pristine baseline
+PASS: 26. H4 candidate->routed upgrade: atomic pass on pristine baseline
+PASS: 27. H4 human-modified root doc: atomic block, zero partial write
+PASS: 27. H4 human-modified root doc: atomic block, zero partial write
+PASS: 27. H4 human-modified root doc: atomic block, zero partial write
+PASS: 27. H4 human-modified root doc: atomic block, zero partial write
+PASS: 27. H4 human-modified root doc: atomic block, zero partial write
+PASS: 28. H4 --update-declaration replaces declaration but never re-baselines docs
+PASS: 28. H4 --update-declaration replaces declaration but never re-baselines docs
+PASS: 28. H4 --update-declaration replaces declaration but never re-baselines docs
+PASS: 29. H4 routed rerun same map: idempotent no-op (cross-run stability)
+PASS: 29. H4 routed rerun same map: idempotent no-op (cross-run stability)
+PASS: 30. H6 residue scan: full .sdlc face, semantic-clause exemption, machine fields, reports
+PASS: 30. H6 residue scan: full .sdlc face, semantic-clause exemption, machine fields, reports
+PASS: 30. H6 residue scan: full .sdlc face, semantic-clause exemption, machine fields, reports
+PASS: 30. H6 residue scan: full .sdlc face, semantic-clause exemption, machine fields, reports
+PASS: 30. H6 residue scan: full .sdlc face, semantic-clause exemption, machine fields, reports
+PASS: 31. H6 state matrix: fake-routed
+PASS: 31. H6 state matrix: fake-routed
+PASS: 31. H6 state matrix: wrong-root
+PASS: 31. H6 state matrix: wrong-root
+PASS: 31. H6 state matrix: managed-drift
+PASS: 31. H6 state matrix: managed-drift
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 32. H5 profile artifacts: no YAML alias, standard gate consumes each actual artifact
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 33. R2-H2 map containment: ../ escape, in-repo symlink escape, template two-digit l4
+PASS: 34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance
+PASS: 34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance
+PASS: 34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance
+PASS: 34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance
+PASS: 34. R2-H3 routed map fingerprint: same-path edit / different-path / flag cannot advance
+PASS: 35. R2-H6 report finalization: repeated and concurrent audits never overwrite
+PASS: 35. R2-H6 report finalization: repeated and concurrent audits never overwrite
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 36. v3 decision-table matrix: 54 input combos x 3 read-only modes = 162 executions covering the nominal 108 cells, zero writes
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 37. A1-A8: NEW/EXISTING representative apply and idempotence combos
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 38. A9/A11: LEGACY_SDD DP1 flow (refuse without confirm; apply with confirm)
+PASS: 39. A10/A13/A14: LEGACY x existing new-surface combos are blocked (dual governance roots)
+PASS: 39. A10/A13/A14: LEGACY x existing new-surface combos are blocked (dual governance roots)
+PASS: 39. A10/A13/A14: LEGACY x existing new-surface combos are blocked (dual governance roots)
+PASS: 39. A10/A13/A14: LEGACY x existing new-surface combos are blocked (dual governance roots)
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 40. A12-A14/A16: LEGACY_SDLC_SDD full transform, knowledge preserved byte-identical, post-detect idempotent
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 41. A15/B8: mid-apply failure rolls back to pre-digests; plan drift rejected
+PASS: 42. B6/B10: unsafe legacy file blocks with C10; dual-root blocked zero-write
+PASS: 42. B6/B10: unsafe legacy file blocks with C10; dual-root blocked zero-write
+PASS: 42. B6/B10: unsafe legacy file blocks with C10; dual-root blocked zero-write
+PASS: 42. B6/B10: unsafe legacy file blocks with C10; dual-root blocked zero-write
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 43. B9/H5: un-negated retired vocabulary in migrated knowledge trips the gate and rolls back; negated clauses pass
+PASS: 44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked
+PASS: 44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked
+PASS: 44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked
+PASS: 44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked
+PASS: 44. G1-R1-H1: ancestor-symlink legacy root is contained, not walked
+PASS: 45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms
+PASS: 45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms
+PASS: 45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms
+PASS: 45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms
+PASS: 45. G1-R1-H2: content drift invalidates a confirmed plan; clean re-plan re-confirms
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 46. G1-R1-H4: fixed-field merges land in the new machine artifacts
+PASS: 47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING
+PASS: 47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING
+PASS: 47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING
+PASS: 47. P4 load-bearing fixture: pure C8 residue after migration keeps detection EXISTING
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 48. G1-R2-H1: migration through the AUDIT path still passes the residue gate
+PASS: 49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports
+PASS: 49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports
+PASS: 49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports
+PASS: 49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports
+PASS: 49. G1-R3-H1: explicit exit inside the transaction window rolls back and reports
+PASS: 50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges
+PASS: 50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges
+PASS: 50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges
+PASS: 50. G1-R3-H2: AUDIT-path migration runs the same fixed-field merges
+PASS: 51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports
+PASS: 51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports
+PASS: 51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports
+PASS: 51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports
+PASS: 51. G1-R4-H1: AUDIT scan errors become file-level gate violations with real failure reports
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 52. D091: NEW_EMPTY repo generates the full governance-corpus skeleton set (zero retired vocabulary, idempotent)
+PASS: 53. D091: EXISTING_CODE_NO_KNOWLEDGE generates corpus skeletons alongside the candidate scan
+PASS: 53. D091: EXISTING_CODE_NO_KNOWLEDGE generates corpus skeletons alongside the candidate scan
+PASS: 53. D091: EXISTING_CODE_NO_KNOWLEDGE generates corpus skeletons alongside the candidate scan
+PASS: 53. D091: EXISTING_CODE_NO_KNOWLEDGE generates corpus skeletons alongside the candidate scan
+PASS: 54. D091: AUDIT refills a deleted corpus skeleton and never touches human content
+PASS: 54. D091: AUDIT refills a deleted corpus skeleton and never touches human content
+PASS: 54. D091: AUDIT refills a deleted corpus skeleton and never touches human content
+PASS: 54. D091: AUDIT refills a deleted corpus skeleton and never touches human content
+PASS: 55. D091: un-adopted legacy corpus source blocks skeleton occupation
+PASS: 55. D091: un-adopted legacy corpus source blocks skeleton occupation
+PASS: 55. D091: un-adopted legacy corpus source blocks skeleton occupation
+PASS: 56. D091: without --adopt-governance-corpus the legacy corpus stays C8-in-place
+PASS: 56. D091: without --adopt-governance-corpus the legacy corpus stays C8-in-place
+PASS: 56. D091: without --adopt-governance-corpus the legacy corpus stays C8-in-place
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 57. D091: --adopt-governance-corpus adopts legacy memory with deterministic transformation and provenance
+PASS: 58. D091: LEGACY migration adopts coding_guide corpus one-stop (C12)
+PASS: 58. D091: LEGACY migration adopts coding_guide corpus one-stop (C12)
+PASS: 58. D091: LEGACY migration adopts coding_guide corpus one-stop (C12)
+PASS: 58. D091: LEGACY migration adopts coding_guide corpus one-stop (C12)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 59. D091: adoption destination differing from transformed source blocks (no overwrite/merge)
+PASS: 60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched
+PASS: 60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched
+PASS: 60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched
+PASS: 60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched
+PASS: 60. D091: redundant source identical to the persisted archive is a no-op; adopted destination untouched
+PASS: 61. D091: drifted source or wrong plan digest reject DP1 with zero writes
+PASS: 61. D091: drifted source or wrong plan digest reject DP1 with zero writes
+PASS: 61. D091: drifted source or wrong plan digest reject DP1 with zero writes
+PASS: 61. D091: drifted source or wrong plan digest reject DP1 with zero writes
+PASS: 62. D091: adoption --plan and --dry-run write nothing
+PASS: 63. D091: gate failure during adoption restores corpus source bytes and removes the destination
+PASS: 63. D091: gate failure during adoption restores corpus source bytes and removes the destination
+PASS: 63. D091: gate failure during adoption restores corpus source bytes and removes the destination
+PASS: 63. D091: gate failure during adoption restores corpus source bytes and removes the destination
+PASS: 63. D091: gate failure during adoption restores corpus source bytes and removes the destination
+PASS: 64. D091: escaping symlink and unreadable corpus file classify C10; flag+map conflict exits 2
+PASS: 64. D091: escaping symlink and unreadable corpus file classify C10; flag+map conflict exits 2
+PASS: 64. D091: escaping symlink and unreadable corpus file classify C10; flag+map conflict exits 2
+PASS: 64. D091: escaping symlink and unreadable corpus file classify C10; flag+map conflict exits 2
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 65. R2-P1-1: template-missing INIT keeps skips out of the plan and never half-initializes
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 66. R2-P1-2: ancestor-symlink root, corpus-destination symlink, in-repo source link all fail closed
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 67. R2-P1-3: archive collision blocks; dangling destination blocks; late-appearing destination aborts with zero writes
+PASS: 68. R2-P2-4: first-time adoption persists ORIGINAL bytes at the archive address and binds them in the report
+PASS: 68. R2-P2-4: first-time adoption persists ORIGINAL bytes at the archive address and binds them in the report
+PASS: 68. R2-P2-4: first-time adoption persists ORIGINAL bytes at the archive address and binds them in the report
+PASS: 68. R2-P2-4: first-time adoption persists ORIGINAL bytes at the archive address and binds them in the report
+PASS: 69. R2-P2-5: transformer never remaps .sdlc/legacy/.specify/** addresses (mixed live+archive content)
+PASS: 69. R2-P2-5: transformer never remaps .sdlc/legacy/.specify/** addresses (mixed live+archive content)
+PASS: 69. R2-P2-5: transformer never remaps .sdlc/legacy/.specify/** addresses (mixed live+archive content)
+PASS: 69. R2-P2-5: transformer never remaps .sdlc/legacy/.specify/** addresses (mixed live+archive content)
+PASS: 70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back
+PASS: 70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back
+PASS: 70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back
+PASS: 70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back
+PASS: 70. R2-P2-6: the true archive address passes the gate; a non-archive legacy/ prefix on an active doc fires it and rolls back
+PASS: 71. R2-P2-7: pending list captures the stage chain body and role-matrix rows with exact line numbers
+PASS: 71. R2-P2-7: pending list captures the stage chain body and role-matrix rows with exact line numbers
+PASS: 72. R2-S3: hostile --project-name values are inserted literally (no backreference interpretation)
+PASS: 72. R2-S3: hostile --project-name values are inserted literally (no backreference interpretation)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 73. R3-B1: nested destination symlink and .sdlc/legacy archive-base symlink block adoption (plan-level, zero outside writes)
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 74. R3-B1: dangling leaf symlink at a corpus destination is skipped (no write-through), link preserved
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 75. R3-B2: late prefix-writer content survives rollback; directory target is not a publication; source always restored
+PASS: 76. R3-B3: archive appearing after the plan is never overwritten; later writer preserved; source restored
+PASS: 76. R3-B3: archive appearing after the plan is never overwritten; later writer preserved; source restored
+PASS: 76. R3-B3: archive appearing after the plan is never overwritten; later writer preserved; source restored
+PASS: 76. R3-B3: archive appearing after the plan is never overwritten; later writer preserved; source restored
+PASS: 76. R3-B3: archive appearing after the plan is never overwritten; later writer preserved; source restored
+PASS: 77. R3-B5: FIFO and socket corpus entries classify C10 and block the plan (no hang, no move)
+PASS: 77. R3-B5: FIFO and socket corpus entries classify C10 and block the plan (no hang, no move)
+PASS: 77. R3-B5: FIFO and socket corpus entries classify C10 and block the plan (no hang, no move)
+FAIL: 77. R3-B5: FIFO and socket corpus entries classify C10 and block the plan (no hang, no move) -- 77: socket disturbed
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 78. R3-B4: empty adoption set (and repeat after prune) completes cleanly on /bin/bash 3.2; unsafe destination still blocks
+PASS: 79. R3-S4/B1: AUDIT report lists corpus skips; INIT skips unsafe nested path with notice
+PASS: 79. R3-S4/B1: AUDIT report lists corpus skips; INIT skips unsafe nested path with notice
+PASS: 79. R3-S4/B1: AUDIT report lists corpus skips; INIT skips unsafe nested path with notice
+PASS: 79. R3-S4/B1: AUDIT report lists corpus skips; INIT skips unsafe nested path with notice
+PASS: 79. R3-S4/B1: AUDIT report lists corpus skips; INIT skips unsafe nested path with notice
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 80. R4-F1: identical-content RETIRE through a symlinked/dangling archive path is blocked (plan + apply, zero outside writes, PRESERVE no-op kept)
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 81. R4-F1: symlinked .sdlc root — INIT/AUDIT skip every corpus skeleton with notice + report entry, adoption plan blocks
+PASS: 82. R4-F1: archive-ancestor symlink created after the plan blocks the apply with zero moves
+PASS: 82. R4-F1: archive-ancestor symlink created after the plan blocks the apply with zero moves
+PASS: 82. R4-F1: archive-ancestor symlink created after the plan blocks the apply with zero moves
+PASS: 82. R4-F1: archive-ancestor symlink created after the plan blocks the apply with zero moves
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 83. R4-F2: destination taken over after the transform (receipt registered) is an ownership conflict, not this transaction's output
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 84. R4-F3: differing archive created between plan and staging is never reused as the original-bytes binding
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 85. R4-F3: pre-occupied staging path (regular file or outside symlink) declines exclusive staging; occupant untouched
+PASS: 86. R4-F3: archive taken over after publication survives failure cleanup as an ownership conflict
+PASS: 86. R4-F3: archive taken over after publication survives failure cleanup as an ownership conflict
+PASS: 86. R4-F3: archive taken over after publication survives failure cleanup as an ownership conflict
+PASS: 86. R4-F3: archive taken over after publication survives failure cleanup as an ownership conflict
+PASS: 86. R4-F3: archive taken over after publication survives failure cleanup as an ownership conflict
+PASS: 87. R4-F3: directory appearing at the archive address fails the transaction; directory and owner data preserved; no nested staging leak
+PASS: 87. R4-F3: directory appearing at the archive address fails the transaction; directory and owner data preserved; no nested staging leak
+PASS: 87. R4-F3: directory appearing at the archive address fails the transaction; directory and owner data preserved; no nested staging leak
+PASS: 87. R4-F3: directory appearing at the archive address fails the transaction; directory and owner data preserved; no nested staging leak
+PASS: 87. R4-F3: directory appearing at the archive address fails the transaction; directory and owner data preserved; no nested staging leak
+PASS: 88. R4-F3: directory injected between the archive check and mv -n — nested move undone via ownership proof, no staging leak
+PASS: 88. R4-F3: directory injected between the archive check and mv -n — nested move undone via ownership proof, no staging leak
+PASS: 88. R4-F3: directory injected between the archive check and mv -n — nested move undone via ownership proof, no staging leak
+PASS: 88. R4-F3: directory injected between the archive check and mv -n — nested move undone via ownership proof, no staging leak
+PASS: 88. R4-F3: directory injected between the archive check and mv -n — nested move undone via ownership proof, no staging leak
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 89. R5-B1: rule-log append failure after a successful write — transformed output rolled back as OWNED, honest ROLLED_BACK, no self-residue conflicts
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: 90. R5-B1: no trustworthy receipt (garbled/empty stdout after write) — destination preserved, never unconditionally deleted, report INCOMPLETE
+PASS: W1. wrapper: --here alone initializes the current directory (no leaked empty arg)
+PASS: W1. wrapper: --here alone initializes the current directory (no leaked empty arg)
+PASS: W1. wrapper: --here alone initializes the current directory (no leaked empty arg)
+PASS: W2. wrapper: --legacy-speckit with the successor present is explained, not rc=2
+PASS: W2. wrapper: --legacy-speckit with the successor present is explained, not rc=2
+PASS: W2. wrapper: --legacy-speckit with the successor present is explained, not rc=2
+PASS: W3. wrapper: missing successor fails closed (exit 3) without the opt-in
+PASS: W3. wrapper: missing successor fails closed (exit 3) without the opt-in
+PASS: W3. wrapper: missing successor fails closed (exit 3) without the opt-in
+PASS: W4. wrapper: missing successor + opt-in + missing legacy script is still exit 3
+PASS: W4. wrapper: missing successor + opt-in + missing legacy script is still exit 3
+
+==== regression summary: 819 passed, 1 failed ====
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- exit 0
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- contains: INIT OK
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- manifest.md created
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- intake.manifest.json created
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- contains: requested_depth: STANDARD
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- contains: initial_depth_basis: normalized_proposal
+PASS: G3-F1: intake creates summary + intake.manifest.json + manifest via publisher init -- exit 0
+PASS: G3-F2: solution-design produces plan WITHOUT gate precondition (N4), ledger present -- exit 0
+PASS: G3-F2: solution-design produces plan WITHOUT gate precondition (N4), ledger present -- N4: no gate precondition in skill
+PASS: G3-F3: solution-gate scan+verdict (CONFIRMED) -> entry-update with gate fields -- exit 0
+PASS: G3-F3: solution-gate scan+verdict (CONFIRMED) -> entry-update with gate fields -- contains: decision_status: CONFIRMED
+PASS: G3-F4: task-planning -> implementation (evidence binding) -> entry-updates -- exit 0
+PASS: G3-F4: task-planning -> implementation (evidence binding) -> entry-updates -- exit 0
+PASS: G3-F4: task-planning -> implementation (evidence binding) -> entry-updates -- evidence binding in implementation record
+PASS: G3-F4: task-planning -> implementation (evidence binding) -> entry-updates -- manifest entry digest matches implementation record
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- finding OPEN in index
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- A4 DENIED with OPEN finding (mechanical predicate)
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- register earliest=bad-node rejected pre-write
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- resolve closed_by=implementation rejected (verifier must be discovering node)
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- contains: status: RESOLVED
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- contains: closed_by: code-review
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- contains: closure_bound_revision_id: REV2
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- V4 positive control: scan-source ACCEPTED on PWR copy
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- V4: non-scan OPEN finding ACCEPTED rejected (scan-source rule, all other PWR conditions valid)
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- V4 isolation: main chain manifest byte-unchanged
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- resolve closed_by != discovering node rejected
+PASS: G3-F5: code-review registers HIGH finding (OPEN) -> A4 blocked -> direct rework -> resolve -> unblocked -- exit 0
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- exit 0
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: requirement-intake
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: solution-design
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: solution-gate
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: task-planning
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: implementation
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: code-review
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- chain entry present: knowledge-sync
+PASS: G3-F6: knowledge-sync consumes routed declaration -> final entry-update -> all current -- all 7 entries current (full chain complete)
+PASS: G3-F7: publishSeq advanced only by declarations; lifecycle actions did not advance it -- publishSeq=8 (init + 7 entry-updates; finding actions did not advance)
+PASS: G3-F7: publishSeq advanced only by declarations; lifecycle actions did not advance it -- projectedThrough stays MANUAL
+PASS: G3-F8: naive hand-edit (digest not recomputed) -> CORRUPT_STOP; repair rebuilds baseline; publish resumes -- naive hand-edit -> MANIFEST_CORRUPT_STOP
+PASS: G3-F8: naive hand-edit (digest not recomputed) -> CORRUPT_STOP; repair rebuilds baseline; publish resumes -- exit 0
+PASS: G3-F8: naive hand-edit (digest not recomputed) -> CORRUPT_STOP; repair rebuilds baseline; publish resumes -- contains: fixture digest drift repair
+PASS: G3-F8: naive hand-edit (digest not recomputed) -> CORRUPT_STOP; repair rebuilds baseline; publish resumes -- exit 0
+PASS: G3-F8: naive hand-edit (digest not recomputed) -> CORRUPT_STOP; repair rebuilds baseline; publish resumes -- guarantee-A traceability intact without any git commit
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- exit 0
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- exit 0
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- exit 0
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- exit 0
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- contains: required_depth: DEEP
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- design stale in same publish (H4)
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- N8: escalation gate has coverage ledger
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- N8: escalation gap explicitly listed
+PASS: G3-F9: ESCALATED updates requiredDepth + marks design stale in same publish (H4) -- N8: ledger deletion IS detectable by content grep (mutation verified)
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- exit 0
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- exit 0
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- N8: '跨系统接口契约' present and marked as covered
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- N8: '状态机/回滚' present and marked as covered
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- N8: ledger item deletion IS detectable (mutation verified)
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- N8: cleared first item marking IS detectable
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- N8: cleared last item marking IS detectable
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- exit 0
+PASS: G3-F10: Re-Gate CONFIRMED(DEEP) after rework -> A1 eligible via check-admission -- contains: ADMISSION ELIGIBLE: task-planning
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- exit 0
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- merged publish registered scan finding
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- exit 0
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- ACCEPTED with bound ruling revision (H1 closure fields complete)
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- exit 0
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- contains: NO-OP REPLAY
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- H2: entry replay byte-identical (no-op verified)
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- H2: conflicting binding replay rejected
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- H2: entry replay byte-identical (no-op verified)
+PASS: G3-F11: merged publish (S3) registers scan finding; PWR accept with ruling revision; replay no-op (V3) -- H2: conflicting binding replay rejected
+PASS: G3-F12: stable paths (N2/N9) — no derived _R files, no third gate authority -- N2: no derived round-suffix files
+PASS: G3-F12: stable paths (N2/N9) — no derived _R files, no third gate authority -- N9: exactly two stable gate artifacts in clean chain
+PASS: G3-F12: stable paths (N2/N9) — no derived _R files, no third gate authority -- N9: third-authority file detectable by stable-path listing
+PASS: G3-F13: A3 consumer-side — implementation binding intact -> code-review ELIGIBLE (M1) -- exit 0
+PASS: G3-F13: A3 consumer-side — implementation binding intact -> code-review ELIGIBLE (M1) -- contains: ADMISSION ELIGIBLE: code-review
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- exit 0
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- contains: canonical-artifacts: PASS
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- manifest id mismatch rejected (exit 1)
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- contains: A9-7[manifest-id-mismatch]
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- missing path exits 2
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- contains: not a directory
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- no ruby backtrace on a usage error
+PASS: G3-F14: canonical-artifacts validator — pass, id cross-check, clean usage errors -- file argument exits 2
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- exit 0
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- publish: ledger-as-current rejected (exit 1)
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- contains: NON_CANONICAL_PATH
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- 
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- exit 0
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- publish: wrong requirement id rejected
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- contains: requirement id must match
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- publish: round suffix rejected
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- exit 0
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- validator catches ledger-as-current in the manifest (exit 1)
+PASS: G3-F15: publish path canonical gate (NEW-B1) + validator reads the fenced manifest (NEW-B2) -- contains: A9-6[gate-pointer]
+
+==== manual-chain fixture summary: 106 passed, 0 failed ====
+MANUAL_OPERATIONAL FIXTURE: ALL GREEN
+FAILED: tests/bootstrap-knowledge-target.test.sh
+FAILED: tests/agent-capability-binding.test.ts
+FAILED: tests/agent-cli-profile.test.ts
+FAILED: tests/agent-skill-registry.test.ts
+FAILED: tests/capability-gateway-source.test.ts
+FAILED: tests/capability-prompt-builder.test.ts
+FAILED: tests/cli-adapter-audit.test.ts
+FAILED: tests/codex-adapter.test.ts
+FAILED: tests/codex-cli-process-runner.test.ts
+FAILED: tests/codex-real-dispatch-fake-runner-integration.test.ts
+FAILED: tests/codex-real-dispatch-fake-runner-test-plan-contract.test.ts
+FAILED: tests/codex-real-dispatch-fallback-policy.test.ts
+FAILED: tests/codex-real-dispatch-gateway-integration-contract.test.ts
+FAILED: tests/codex-real-dispatch-gateway-wiring.test.ts
+FAILED: tests/codex-real-dispatch-guardrails-contract.test.ts
+FAILED: tests/codex-real-dispatch-observability-contract.test.ts
+FAILED: tests/codex-real-dispatch-output-parser-contract.test.ts
+FAILED: tests/codex-real-dispatch-prompt-builder-contract.test.ts
+FAILED: tests/codex-real-dispatch-readiness-review.test.ts
+FAILED: tests/codex-real-dispatch-real-runner.test.ts
+FAILED: tests/codex-real-dispatch-smoke-validation.test.ts
+FAILED: tests/e5-w3-file-pointer-transport.test.ts
+FAILED: tests/evolution-proposal-analyzer.test.ts
+FAILED: tests/execution-gateway.test.ts
+FAILED: tests/feedback-analyzer.test.ts
+FAILED: tests/g6-negative-coverage-audit.test.ts
+FAILED: tests/g6-parity-behavior-matrix.test.ts
+FAILED: tests/g6-parity-behavior-negative.test.ts
+FAILED: tests/g6-parity-comparator-negative.test.ts
+FAILED: tests/g6-parity-instrument-presence.test.ts
+FAILED: tests/g6-parity-matrix.test.ts
+FAILED: tests/hermes-cli-adapter-contract.test.ts
+FAILED: tests/hermes-cli-command-executor.test.ts
+FAILED: tests/hermes-cli-dry-run.test.ts
+FAILED: tests/hermes-cli-executor-contract.test.ts
+FAILED: tests/hermes-gateway-integration-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-controlled-rollout-plan.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-fallback-policy.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-gateway-integration-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-gateway-integration.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-guardrails.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-observability.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-operator-runbook.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-code-review-canary-executor.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-code-review-canary-gate.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-code-review-canary-session.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-controlled-enablement-plan.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-enablement-guard-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-expansion-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-final-readiness-review.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-operator-runbook.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-post-validation-review-template.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-gate.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-controlled-rollout-plan.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-fixture-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-guardrail-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-implementation-plan.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-observability-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-operator-acceptance.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-readiness-gate.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-rollback-contract.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-test-plan.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement-validation.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-shadow-enablement.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-phase-2-validation-checklist.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-post-enablement-review-template.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-readiness-review.test.ts
+FAILED: tests/hermes-gateway-real-dispatch-rollout-validation-checklist.test.ts
+FAILED: tests/hermes-gateway-real-dispatch.test.ts
+FAILED: tests/hermes-gateway-shadow-sidecar.test.ts
+FAILED: tests/hermes-runtime-attachment-contract.test.ts
+FAILED: tests/hermes-runtime-shadow-attachment-readiness-review.test.ts
+FAILED: tests/hermes-runtime-shadow-attachment-wiring-contract.test.ts
+FAILED: tests/hermes-runtime-shadow-attachment.test.ts
+FAILED: tests/kimi-cli-adapter-contract.test.ts
+FAILED: tests/kimi-cli-command-executor.test.ts
+FAILED: tests/kimi-cli-dry-run.test.ts
+FAILED: tests/kimi-cli-executor-contract.test.ts
+FAILED: tests/kimi-gateway-integration-contract.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-contract.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-fallback-policy.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-gateway.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-guardrails.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-observability.test.ts
+FAILED: tests/kimi-gateway-real-dispatch-readiness-review.test.ts
+FAILED: tests/kimi-gateway-real-dispatch.test.ts
+FAILED: tests/kimi-gateway-shadow-sidecar.test.ts
+FAILED: tests/kimi-output-normalizer.test.ts
+FAILED: tests/kimi-request-type-expansion-contract.test.ts
+FAILED: tests/kimi-runtime-attachment-contract.test.ts
+FAILED: tests/kimi-runtime-shadow-attachment.test.ts
+FAILED: tests/loop-artifact-revision.test.ts
+FAILED: tests/loop-artifact-store.test.ts
+FAILED: tests/loop-autonomous-delivery-loop.test.ts
+FAILED: tests/loop-c03-delivery-tail.test.ts
+FAILED: tests/loop-c03d-runtime-wiring.test.ts
+FAILED: tests/loop-capability-execution.test.ts
+FAILED: tests/loop-change-classification.test.ts
+FAILED: tests/loop-codex-implementation-adapter.test.ts
+FAILED: tests/loop-d087-six-scenario-matrix.test.ts
+FAILED: tests/loop-decision-delta-integrity.test.ts
+FAILED: tests/loop-delivery-checkpoint-store.test.ts
+FAILED: tests/loop-delivery-checkpoint.test.ts
+FAILED: tests/loop-delivery-publisher.test.ts
+FAILED: tests/loop-finding-lifecycle.test.ts
+FAILED: tests/loop-g4-r6-fix-round.test.ts
+FAILED: tests/loop-git-workspace.test.ts
+FAILED: tests/loop-governance-tail-result.test.ts
+FAILED: tests/loop-gw-diag-evidence.test.ts
+FAILED: tests/loop-gw-fix-run-real-reaches-spawn.test.ts
+FAILED: tests/loop-gw-prep.test.ts
+FAILED: tests/loop-intake-manifest.test.ts
+FAILED: tests/loop-manifest-entry-wiring.test.ts
+FAILED: tests/loop-manifest-ls-ps-matrix.test.ts
+FAILED: tests/loop-manifest-projection-exit.test.ts
+FAILED: tests/loop-manifest-projector.test.ts
+FAILED: tests/loop-manifest-r3-rework.test.ts
+FAILED: tests/loop-manifest-t5-parity.test.ts
+FAILED: tests/loop-manifest-yaml-parity-matrix.test.ts
+FAILED: tests/loop-patch-application.test.ts
+FAILED: tests/loop-posix-process-runner.test.ts
+FAILED: tests/loop-posix-runner-timeout-bound.test.ts
+FAILED: tests/loop-process-evidence-mapping.test.ts
+FAILED: tests/loop-production-coordinator.test.ts
+FAILED: tests/loop-production-entry.test.ts
+FAILED: tests/loop-regate-dispatch-window.test.ts
+FAILED: tests/loop-requirement-design-orchestrator.test.ts
+FAILED: tests/loop-run-cli.test.ts
+FAILED: tests/loop-run-concurrency.test.ts
+FAILED: tests/loop-run-from-intake.test.ts
+FAILED: tests/loop-run-provenance.test.ts
+FAILED: tests/loop-run-release.test.ts
+FAILED: tests/loop-run-requirement-query.test.ts
+FAILED: tests/loop-run-state.test.ts
+FAILED: tests/loop-run-store-v2-cutover-preflight.test.ts
+FAILED: tests/loop-run-store.test.ts
+FAILED: tests/loop-runtime-v2-cutover.test.ts
+FAILED: tests/loop-s05-retry-budget.test.ts
+FAILED: tests/loop-single-rail-contract.test.ts
+FAILED: tests/loop-validation-guards.test.ts
+FAILED: tests/loop-w5-invalid-output-no-advance.test.ts
+FAILED: tests/loop-w6a-process-evidence-recovery.test.ts
+FAILED: tests/loop-w6b1-resume-lease-window.test.ts
+FAILED: tests/loop-w6b2-human-action-artifact.test.ts
+FAILED: tests/loop-w6b3-attempt-workspace-three-state.test.ts
+FAILED: tests/loop-wp35-b-round1-corrections.test.ts
+FAILED: tests/loop-wp35-b-round2-corrections.test.ts
+FAILED: tests/loop-wp4-regate.test.ts
+FAILED: tests/loop-wp5-cross-entry.test.ts
+FAILED: tests/loop-wp6-completion-contracts.test.ts
+FAILED: tests/memory-routing-shadow.test.ts
+FAILED: tests/minimal-end-to-end-sdlc-flow.test.ts
+FAILED: tests/multi-agent-fake-runners.test.ts
+FAILED: tests/node-capability-contract.test.ts
+FAILED: tests/node-output-envelope.test.ts
+FAILED: tests/policy-memory-read.test.ts
+FAILED: tests/policy-memory.test.ts
+FAILED: tests/real-agent-adapter-capability-matrix.test.ts
+FAILED: tests/real-capability-adapter.test.ts
+FAILED: tests/real-capability-gateway.test.ts
+FAILED: tests/repository-capability-inventory.test.ts
+FAILED: tests/run-production.test.ts
+FAILED: tests/runtime-capabilities.test.ts
+FAILED: tests/skill-aware-execution-request.test.ts
+FAILED: tests/skill-flow-inventory.test.ts
+FAILED: tests/skill-flow-orchestrator-contract.test.ts
+FAILED: tests/skill-flow-runtime-integration-contract.test.ts
+FAILED: tests/skill-flow-shadow-orchestrator.test.ts
+FAILED: tests/system-capability-review.test.ts
+test_file_count: 173
+failed_file_count: 171
+elapsed_seconds: 400.8

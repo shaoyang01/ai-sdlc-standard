@@ -1,0 +1,9 @@
+/private/tmp/g6-t2-r17-f/tests/g6-parity/ledger-guard.ts:123
+        throw new Error(
+              ^
+
+Error: behavior negative: handle used after settle — an assertion outside the settle window is not an execution
+    at ok (/private/tmp/g6-t2-r17-f/tests/g6-parity/ledger-guard.ts:123:15)
+    at main (/private/tmp/g6-t2-r17-f/tests/g6-parity-behavior-negative.test.ts:771:3)
+
+Node.js v24.12.0

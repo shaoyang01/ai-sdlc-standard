@@ -1,0 +1,17 @@
+/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:73
+    throw new Error(
+          ^
+
+Error: frozen completing matrix register drifted vs the ledger — missing (in ledger, not in the register): S-CORE-LIGHT-PASS-first-R17-DIFFERENT — unexpected (in the register, not in the ledger): S-CORE-LIGHT-PASS-first
+    at assertScenarioLedger (/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:73:11)
+    at main (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:119:3)
+    at <anonymous> (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:168:1)
+    at Object.<anonymous> (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:168:6)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14)
+    at Object.transformer (/Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/register-BLUABhh3.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+
+Node.js v24.12.0

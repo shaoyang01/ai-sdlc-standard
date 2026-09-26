@@ -1,0 +1,20 @@
+--- /tmp/g6-t2-r17-review/tests/g6-parity-behavior-negative.test.ts	2026-09-26 23:30:08
++++ /tmp/g6-t2-r17-f/tests/g6-parity-behavior-negative.test.ts	2026-09-27 01:55:26
+@@ -744,7 +744,9 @@
+ 
+ async function main(): Promise<void> {
+   const ledger = loadFrozenLedger();
++  let postSettleOk!: (condition: boolean, message: string) => void;
+   const result = await runNegativeSuite("behavior negative", ledger.negatives.behavior, async (h) => {
++    postSettleOk = h.ok;
+     h.group("r1h1-core");
+     r1h1CorePins(h.ok);
+     h.group("absent-triple");
+@@ -766,6 +768,7 @@
+     h.group("registry-guard");
+     registryGuardPin(h.ok);
+   });
++  postSettleOk(false, "R17 after-settle real red assertion");
+   console.log(`\n==== g6 behavior negative summary: ${result.summary} ====`);
+   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
+   if (result.failed > 0) process.exit(1);

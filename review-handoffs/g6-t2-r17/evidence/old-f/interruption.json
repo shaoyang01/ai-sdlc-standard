@@ -1,0 +1,9 @@
+{
+  "status": "INTERRUPTED_BY_USER",
+  "audit_valid": false,
+  "audit_process_exit": 130,
+  "final_audit_exit_not_observed": true,
+  "direct_entry_exit": 1,
+  "restored_sha256": "d3919cf218012ac17ef30f1da45d0bfaf1ae945ecf01dbd28a789bd09f3e72a4",
+  "matches_frozen_bytes": true
+}

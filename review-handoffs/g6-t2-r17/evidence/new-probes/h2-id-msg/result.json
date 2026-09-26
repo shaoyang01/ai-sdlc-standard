@@ -1,0 +1,10 @@
+{
+  "entry_exit": 0,
+  "entry_green": 50,
+  "entry_red": 0,
+  "event_lines": 51,
+  "last_event_line": "{\"t\":\"scenario\",\"suite\":\"artifact-matrix\",\"id\":\"S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow\",\"ok\":true,\"msg\":\"S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow: artifact-layer normalized manifests deep-equal\"}",
+  "restored_sha256": "c15fcf5ad5ae6060f48ad323aec6c51d2102a83de2bc0ee33b00695202c572f5",
+  "reference_sha256": "c15fcf5ad5ae6060f48ad323aec6c51d2102a83de2bc0ee33b00695202c572f5",
+  "restored_exact": true
+}

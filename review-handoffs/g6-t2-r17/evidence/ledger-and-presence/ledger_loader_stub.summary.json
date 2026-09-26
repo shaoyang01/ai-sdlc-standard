@@ -1,0 +1,14 @@
+{
+  "tag": "ledger_loader_stub",
+  "exit": 1,
+  "green": 0,
+  "red": 0,
+  "event_kinds": {
+    "assert": 0,
+    "scenario": 0,
+    "group": 0,
+    "pin": 0,
+    "settle": 0
+  },
+  "summary": []
+}

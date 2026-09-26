@@ -1,0 +1,9 @@
+/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:175
+    throw new Error(`${suite}: frozen coverage violated — ${problems.join("; ")}`);
+          ^
+
+Error: comparator negative: frozen coverage violated — group count drift: identical: executed 2, frozen 3; total drift: executed 37, frozen 38 (1 assertion(s) lost)
+    at runNegativeSuite (/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:175:11)
+    at async main (/private/tmp/g6-t2-r17-reg/tests/g6-parity-comparator-negative.test.ts:75:18)
+
+Node.js v24.12.0

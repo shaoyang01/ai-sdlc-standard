@@ -1,0 +1,3406 @@
+find: /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T//kt-regression.8aVQOC/t41/.sdlc/business_domain/00old.md: No such file or directory
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])
+                                                        ~~~~~~^^^^^^^^^^^^^
+PermissionError: [Errno 1] Operation not permitted
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6142.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6142.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6143.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6143.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6145.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6145.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6147.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6147.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6150.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6150.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6182.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6182.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6184.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6184.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6188.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6188.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6195.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6195.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6204.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6204.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6247.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6247.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6255.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6255.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6256.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6256.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6257.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6257.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6260.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6260.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6299.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6299.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6300.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6300.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6301.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6301.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6312.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6312.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6314.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6314.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6330.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6330.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6348.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6348.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6350.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6350.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6354.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6354.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6358.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6358.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6413.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6413.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6414.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6414.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6416.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6416.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6417.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6417.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6418.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6418.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6425.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6425.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6429.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6429.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6432.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6432.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6434.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6434.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6450.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6450.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6470.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6470.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6471.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6471.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6472.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6472.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6479.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6479.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6490.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6490.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6493.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6493.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6495.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6495.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6503.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6503.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6525.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6525.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6539.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6539.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6540.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6540.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6541.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6541.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6542.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6542.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6543.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6543.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6553.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6553.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6559.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6559.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6566.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6566.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6572.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6572.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6573.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6573.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6576.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6576.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6583.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6583.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6586.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6586.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6589.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6589.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6590.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6590.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6591.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6591.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6595.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6595.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6601.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6601.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6613.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6613.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6617.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6617.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6620.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6620.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6623.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6623.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6641.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6641.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6644.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6644.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6653.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6653.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6656.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6656.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6657.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6657.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6661.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6661.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6688.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6688.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6689.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6689.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6695.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6695.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6697.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6697.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6698.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6698.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6699.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6699.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6704.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6704.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6705.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6705.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6707.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6707.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6708.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6708.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6709.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6709.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6728.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6728.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6742.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6742.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6749.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6749.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6751.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6751.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6763.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6763.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6780.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6780.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6781.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6781.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6784.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6784.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6786.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6786.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6807.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6807.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6808.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6808.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6812.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6812.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6813.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6813.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6814.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6814.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6829.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6829.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6834.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6834.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6835.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6835.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6836.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6836.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6837.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6837.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6838.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6838.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6882.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6882.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6885.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6885.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6909.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6909.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6914.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6914.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6917.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6917.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6921.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6921.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6941.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6941.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6943.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6943.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6945.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6945.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6976.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6976.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6984.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6984.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6986.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6986.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6989.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6989.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6998.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/6998.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7001.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7001.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7002.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7002.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7003.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7003.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7006.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7006.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7007.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7007.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7008.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7008.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7009.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7009.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7010.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7010.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7014.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7014.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7025.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7025.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7026.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7026.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7027.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7027.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7028.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7028.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7029.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7029.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7054.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7054.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7056.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7056.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7057.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7057.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7058.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7058.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7059.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7059.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7062.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7062.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7063.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7063.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7085.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7085.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7088.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7088.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7092.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7092.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7097.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7097.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7110.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7110.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7117.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7117.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7121.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7121.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7128.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7128.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7129.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7129.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7134.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7134.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7157.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7157.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7158.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7158.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7165.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7165.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7167.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7167.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7170.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7170.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7171.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7171.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7174.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7174.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7175.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7175.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/40187.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/40187.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/40190.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/40190.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7185.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7185.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7191.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7191.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7201.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7201.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7202.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7202.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7204.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7204.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7213.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7213.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7220.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7220.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7239.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7239.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7260.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7260.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7269.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7269.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7272.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7272.pipe',
+  port: -1
+}
+
+Node.js v24.12.0
+node:net:1918
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7273.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at Server.listen (node:net:2119:5)
+    at file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31537
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:53:31515)
+    at async file:///Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/cli.mjs:55:459 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/tsx-501/7273.pipe',
+  port: -1
+}
+
+Node.js v24.12.0

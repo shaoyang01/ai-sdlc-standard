@@ -1,0 +1,10 @@
+{
+  "entry_exit": 0,
+  "entry_green": 54,
+  "entry_red": 0,
+  "event_lines": 67,
+  "last_event_line": "{\"t\":\"foreign\",\"suite\":\"behavior negative\"}",
+  "restored_sha256": "d3919cf218012ac17ef30f1da45d0bfaf1ae945ecf01dbd28a789bd09f3e72a4",
+  "reference_sha256": "d3919cf218012ac17ef30f1da45d0bfaf1ae945ecf01dbd28a789bd09f3e72a4",
+  "restored_exact": true
+}

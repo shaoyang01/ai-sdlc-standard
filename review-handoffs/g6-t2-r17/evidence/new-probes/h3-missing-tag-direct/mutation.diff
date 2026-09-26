@@ -1,0 +1,19 @@
+--- tests/g6-parity-behavior-negative.test.ts
++++ tests/g6-parity-behavior-negative.test.ts
+@@ -20,7 +20,7 @@
+ import { compareBehaviorLayer } from "./g6-parity/behavior-comparator";
+ import { makeStores } from "./g6-parity/runtime-face";
+ import { assertScenarioLedger, loadFrozenLedger, runNegativeSuite } from "./g6-parity/ledger-guard";
+-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
++import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+ import { tmpdir } from "node:os";
+ import { join } from "node:path";
+ import type { FactScript, NodeFact, ScenarioSpec } from "./g6-parity/types";
+@@ -768,6 +768,7 @@
+   });
+   console.log(`\n==== g6 behavior negative summary: ${result.summary} ====`);
+   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
++  if (process.env.G6_EVENT_STREAM) appendFileSync(process.env.G6_EVENT_STREAM, '{"notAnEvent":true}\n');
+   if (result.failed > 0) process.exit(1);
+ }
+ 

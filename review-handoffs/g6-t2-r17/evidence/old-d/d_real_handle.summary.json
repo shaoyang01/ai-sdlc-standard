@@ -1,0 +1,39 @@
+{
+  "direct": {
+    "tag": "d_real_handle.direct",
+    "exit": 0,
+    "green": 54,
+    "red": 0,
+    "event_kinds": {
+      "assert": 53,
+      "scenario": 0,
+      "group": 10,
+      "pin": 1,
+      "settle": 0
+    },
+    "summary": [
+      "==== g6 behavior negative summary: behavior negative: 53 passed, 0 failed (frozen coverage: 54 assertions across 10 groups) ===="
+    ]
+  },
+  "audit": {
+    "tag": "d_real_handle.audit",
+    "exit": 1,
+    "green": 18,
+    "red": 1,
+    "event_kinds": {
+      "assert": 0,
+      "scenario": 0,
+      "group": 0,
+      "pin": 0,
+      "settle": 0
+    },
+    "summary": [
+      "  ✓ wrapper probe: a handle used after settle is rejected (post-settle assertions cannot slip in)",
+      "  ✓ comparator negative: under audit — exit 0, 38 assertion EVENTS across 5 groups (frozen 38), 1 settle event(s), corrupt stream lines 0, printed vs events: one-to-one",
+      "  ✓ artifact matrix: exit 0, register pin ran (event from the guard), 50 scenario EVENTS (all passed) vs the ledger's 50; corrupt stream lines 0; printed vs events: one-to-one (printed green 50 / red 0)",
+      "  ✓ behavior matrix: exit 1 (A' red by design), 50 failing scenario EVENTS vs ledger completing 50, 4 passing vs ledger over-limit 4; register pins 3/3 ran (events from the guard); pins: bucket 50/50 zero new cause, non-dim-9 0, crash 6/6, over-limit 4/0 — corrupt stream lines 0; printed vs events: one-to-one (printed green 4 / red 50)",
+      "==== g6 negative-coverage audit summary: 10 passed, 1 failed ====",
+      "  ✗ behavior negative: under audit — exit 0, 53 assertion EVENTS across 10 groups (frozen 54), 0 settle event(s), corrupt stream lines 0, printed vs events: MISMATCH"
+    ]
+  }
+}

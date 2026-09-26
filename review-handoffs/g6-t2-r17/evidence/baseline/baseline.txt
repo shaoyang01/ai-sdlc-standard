@@ -1,0 +1,3 @@
+HEAD=7ec2dc6aa353c2aa488543e546ba1cf87cce27d9
+node=v24.12.0
+ruby=ruby 3.3.12 (2026-07-16 revision 0581089df9) [arm64-darwin25]

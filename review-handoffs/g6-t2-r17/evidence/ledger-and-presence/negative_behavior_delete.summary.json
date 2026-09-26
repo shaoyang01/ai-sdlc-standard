@@ -1,0 +1,17 @@
+{
+  "tag": "negative_behavior_delete",
+  "exit": 1,
+  "green": 53,
+  "red": 0,
+  "event_kinds": {
+    "assert": 53,
+    "scenario": 0,
+    "group": 10,
+    "pin": 1,
+    "settle": 0
+  },
+  "summary": [
+    "    throw new Error(`${suite}: frozen coverage violated — ${problems.join(\"; \")}`);",
+    "Error: behavior negative: frozen coverage violated — group count drift: registry-guard: executed 4, frozen 5; total drift: executed 53, frozen 54 (1 assertion(s) lost)"
+  ]
+}

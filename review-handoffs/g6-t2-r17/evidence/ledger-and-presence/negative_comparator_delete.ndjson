@@ -1,0 +1,42 @@
+{"t":"group","suite":"comparator negative","label":"identical"}
+{"t":"assert","suite":"comparator negative","group":"identical","ok":true,"msg":"the three artifact-layer dimensions judge MATCH"}
+{"t":"assert","suite":"comparator negative","group":"identical","ok":true,"msg":"the six behavior-layer dimensions are NOT_JUDGED, never MATCH"}
+{"t":"group","suite":"comparator negative","label":"whitelist-drops"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field projection_provenance mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field declaration_log mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field publish_seq mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field projected_through mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field updated_at mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field corrections mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field repair_records mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped head field manifest_digest mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped entry field source_event_ref mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped entry field updated_at mutated → still equal"}
+{"t":"assert","suite":"comparator negative","group":"whitelist-drops","ok":true,"msg":"dropped entry field execution mutated → still equal"}
+{"t":"group","suite":"comparator negative","label":"out-of-drop-set"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated entry digest → NOT equal with raw diff path (entries.0.digest: manual=\"6d2e913f693dd1639575ebc352dd9c1d9d2e32eb1a4cde54a970796ada72373c\" runtime=\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\")"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated entry version → NOT equal with raw diff path (entries.0.version: manual=\"1.0.0\" runtime=\"9.9.9\")"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated entry status → NOT equal with raw diff path (entries.0.status: manual=\"current\" runtime=\"stale\")"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated entry artifact_path → NOT equal with raw diff path (entries.0.artifact_path: manual=\"00-需求资料/20260920-S-CORE-STANDARD-PASS-first_需求摘要.md\" runtime=\"00-需求资料/forged.md\")"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated entry node id → NOT equal with raw diff path (entries.0.node: manual=\"requirement-intake\" runtime=\"forged-node\")"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated findingIndex → NOT equal with raw diff path"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"mutated non-dropped head field (title) → NOT equal"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"missing entry → NOT equal"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"extra entry → NOT equal"}
+{"t":"assert","suite":"comparator negative","group":"out-of-drop-set","ok":true,"msg":"H4 reproduction (intake digest drift) → NOT all-MATCH"}
+{"t":"group","suite":"comparator negative","label":"catch-up-scoped-exemptions"}
+{"t":"assert","suite":"comparator negative","group":"catch-up-scoped-exemptions","ok":true,"msg":"catch-up regime: basename-only path difference is the D-7 exemption (still equal)"}
+{"t":"assert","suite":"comparator negative","group":"catch-up-scoped-exemptions","ok":true,"msg":"catch-up regime: directory-segment path difference still FAILS (exemption is basename-only)"}
+{"t":"assert","suite":"comparator negative","group":"catch-up-scoped-exemptions","ok":true,"msg":"catch-up regime: digest difference still FAILS"}
+{"t":"assert","suite":"comparator negative","group":"catch-up-scoped-exemptions","ok":true,"msg":"takeover regime: the same basename difference FAILS (exemptions are catch-up-only)"}
+{"t":"group","suite":"comparator negative","label":"d17-real-baseline"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17 real baseline: the proven closure-row id flip compares equal"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17 real baseline: the closure row exists (the old branch was skipped)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: a forged closure-row id FAILS (the exemption requires per-row proof)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: the real id flip FAILS under the takeover regime (exemptions are catch-up-only)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: a store-proven id on an unpaired row FAILS (pairing is required)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: an OPEN row's id flip FAILS (closure rows only)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: two proven closure rows (distinct per-row ids) compare equal"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: a row carrying a SIBLING finding's store id FAILS (per-row proof)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: a duplicated pairing (two rows on one identity) FAILS (one-to-one)"}
+{"t":"assert","suite":"comparator negative","group":"d17-real-baseline","ok":true,"msg":"D-17: an OPEN row's id flip FAILS (closure rows only)"}

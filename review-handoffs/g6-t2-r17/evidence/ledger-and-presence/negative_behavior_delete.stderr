@@ -1,0 +1,9 @@
+/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:175
+    throw new Error(`${suite}: frozen coverage violated — ${problems.join("; ")}`);
+          ^
+
+Error: behavior negative: frozen coverage violated — group count drift: registry-guard: executed 4, frozen 5; total drift: executed 53, frozen 54 (1 assertion(s) lost)
+    at runNegativeSuite (/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:175:11)
+    at async main (/private/tmp/g6-t2-r17-reg/tests/g6-parity-behavior-negative.test.ts:746:18)
+
+Node.js v24.12.0

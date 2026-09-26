@@ -1,0 +1,1 @@
+  ✗ artifact matrix: exit 0, register pin ran (event from the guard), 50 scenario EVENTS (all passed) vs the ledger's 50; corrupt stream lines 0; printed vs events: MISMATCH (printed green 50 / red 0)

@@ -1,0 +1,25 @@
+{
+  "status": "interrupted_by_user_request; no audit verdict",
+  "session": 16801,
+  "process_exit": 130,
+  "source_sha256_after_restore": "c15fcf5ad5ae6060f48ad323aec6c51d2102a83de2bc0ee33b00695202c572f5",
+  "partial_event_files": {
+    "behavior-matrix.ndjson": {
+      "events": 34,
+      "saved_as": "/tmp/g6-t2-r17-old2/.review-r17-old/e_49_fake_id.audit.partial.behavior-matrix.ndjson"
+    },
+    "artifact-matrix.ndjson": {
+      "events": 49,
+      "saved_as": "/tmp/g6-t2-r17-old2/.review-r17-old/e_49_fake_id.audit.partial.artifact-matrix.ndjson"
+    },
+    "behavior negative.ndjson": {
+      "events": 66,
+      "saved_as": "/tmp/g6-t2-r17-old2/.review-r17-old/e_49_fake_id.audit.partial.behavior_negative.ndjson"
+    },
+    "comparator negative.ndjson": {
+      "events": 44,
+      "saved_as": "/tmp/g6-t2-r17-old2/.review-r17-old/e_49_fake_id.audit.partial.comparator_negative.ndjson"
+    }
+  },
+  "interruption_trace": "KeyboardInterrupt while subprocess.run capture_output awaited original auditor; finally printed RESTORED tests/g6-parity-matrix.test.ts byte-identical to frozen"
+}

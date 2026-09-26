@@ -1,0 +1,10 @@
+--- /tmp/g6-t2-r17-review/tests/g6-parity-matrix.test.ts	2026-09-26 23:30:08
++++ tests/g6-parity-matrix.test.ts	2026-09-27 00:00:05
+@@ -154,6 +154,7 @@
+   console.log("");
+   console.log(`==== g6 parity M1 summary: ${tally.passed} passed, ${tally.failed} failed ====`);
+   console.log(`(artifact layer only: ${judged} of ${NINE_DIMENSIONS.length} dimensions judged here; behavior layer + remaining 40 scenarios = M2)`);
++  emitEvent({ t: "pin", suite: "scenario-ledger", name: "register", label: "completing matrix", ok: false, size: 0, frozen: 50 });
+   if (tally.failed > 0) process.exit(1);
+ }
+ 

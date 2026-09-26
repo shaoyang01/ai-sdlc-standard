@@ -1,0 +1,16 @@
+G6 negative-coverage auditor (R13-H1/R14-H1/R15-H5): execution-EVENT verified, not line-counted
+  ✓ the ledger file's own seal verifies (content digest recomputed in this file)
+  ✓ the ledger content matches the guard module's code seal (a loader stub cannot launder this)
+  ✓ probe a1
+  ✓ probe a2
+  ✓ probe b1
+  ✓ wrapper probe: the committed guard settles an exact body green
+  ✓ probe a1
+  ✓ probe b1
+  ✓ wrapper probe: a deleted assertion fails the settle
+  ✓ wrapper probe: an empty body fails the settle
+  ✓ wrapper probe: a duplicated group fails the settle
+  ✓ probe a1
+  ✓ probe a2
+  ✓ probe b1
+  ✓ wrapper probe: a handle used after settle is rejected (post-settle assertions cannot slip in)

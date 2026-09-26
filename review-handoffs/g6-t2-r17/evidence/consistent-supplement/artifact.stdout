@@ -1,0 +1,54 @@
+G6 parity matrix M2: 49 scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's 50 unique IDs)
+  ✓ S-CORE-LIGHT-FAIL-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS_WITH_RISK-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-BLOCKED_UNKNOWN-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-FAIL-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS_WITH_RISK-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-BLOCKED_UNKNOWN-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-FAIL-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS_WITH_RISK-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-BLOCKED_UNKNOWN-first: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS_WITH_RISK-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS_WITH_RISK-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-FAIL-multiround: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-FAIL-multiround: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-FAIL-multiround: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS-reviewwave: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS-reviewwave: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-reviewwave: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS_WITH_RISK-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-PASS_WITH_RISK-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS_WITH_RISK-review-regate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-FAIL-requirement-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-requirement-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-feedback-regate-post-review: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-DEEP-PASS-feedback-regate-post-gate: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-FAIL-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-STANDARD-FAIL-upgrade: artifact-layer normalized manifests deep-equal
+  ✓ S-MANIFEST-STANDARD-reconcile: artifact-layer normalized manifests deep-equal
+  ✓ S-MANIFEST-STANDARD-corrupt: fail-closed MANIFEST_CORRUPT_STOP as required
+  ✓ S-CRASH-STANDARD-post-gate-verdict-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-CRASH-STANDARD-post-gate-verdict-double-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-CRASH-STANDARD-post-finding-migration-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-CRASH-STANDARD-post-finding-migration-double-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-CRASH-STANDARD-pre-manifest-write-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-CRASH-STANDARD-pre-manifest-write-double-resume: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-new-project-STANDARD-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-new-project-STANDARD-FAIL-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-existing-code-STANDARD-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-existing-code-STANDARD-FAIL-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-original-sdd-STANDARD-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-original-sdd-STANDARD-FAIL-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-original-sdlc-sdd-STANDARD-PASS-first: artifact-layer normalized manifests deep-equal
+  ✓ S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow: artifact-layer normalized manifests deep-equal
+  ✓ S-CORE-LIGHT-PASS-first: artifact-layer normalized manifests deep-equal
+
+==== g6 parity M1 summary: 50 passed, 0 failed ====
+(artifact layer only: 3 of 9 dimensions judged here; behavior layer + remaining 40 scenarios = M2)

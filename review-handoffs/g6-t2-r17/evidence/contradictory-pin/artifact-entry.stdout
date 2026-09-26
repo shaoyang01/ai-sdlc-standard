@@ -1,0 +1,4 @@
+G6 parity matrix M2: 50 scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's 50 unique IDs)
+
+==== g6 parity M1 summary: 0 passed, 50 failed ====
+(artifact layer only: 3 of 9 dimensions judged here; behavior layer + remaining 40 scenarios = M2)

@@ -1,0 +1,7 @@
+  ✗ wrapper probe: a deleted assertion fails the settle
+  ✗ wrapper probe: an empty body fails the settle
+  ✗ wrapper probe: a duplicated group fails the settle
+  ✗ wrapper probe: a handle used after settle is rejected (post-settle assertions cannot slip in)
+  ✗ behavior negative: under audit — exit 0, 0 assertion EVENTS across 10 groups (frozen 54), 0 settle event(s), corrupt stream lines 0, printed vs events: one-to-one
+  ✗ comparator negative: under audit — exit 0, 0 assertion EVENTS across 5 groups (frozen 38), 0 settle event(s), corrupt stream lines 1, printed vs events: one-to-one
+    corrupt event stream: <event stream missing>

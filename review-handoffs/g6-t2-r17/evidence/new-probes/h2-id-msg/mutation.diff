@@ -1,0 +1,20 @@
+--- tests/g6-parity-matrix.test.ts
++++ tests/g6-parity-matrix.test.ts
+@@ -39,7 +39,7 @@
+ function ok(condition: boolean, message: string, tally: Tally): void {
+   if (condition) {
+     tally.passed += 1;
+-    console.log(`  ✓ ${message}`);
++    console.log(`  ✓ ${tally.passed === 1 ? message.replace(/^\S+/, "S-R17-PRINT-ONLY") : message}`);
+   } else {
+     tally.failed += 1;
+     console.error(`  ✗ ${message}`);
+@@ -47,7 +47,7 @@
+   // R15-H5/R16-H7: the scenario judge is the evaluation point — emit the
+   // structured event here (id AND message), so the auditor can match the
+   // printed lines to events one by one, not merely count them.
+-  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition, msg: message });
++  emitEvent({ t: "scenario", suite: "artifact-matrix", id: message.split(/[\s:]/)[0] ?? "", ok: condition, msg: tally.passed === 1 ? message.replace(/^\S+/, "S-R17-PRINT-ONLY") : message });
+ }
+ 
+ function runScenario(specId: string): ComparisonResult {

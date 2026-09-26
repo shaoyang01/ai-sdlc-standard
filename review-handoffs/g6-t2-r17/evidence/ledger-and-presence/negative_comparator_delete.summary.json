@@ -1,0 +1,17 @@
+{
+  "tag": "negative_comparator_delete",
+  "exit": 1,
+  "green": 37,
+  "red": 0,
+  "event_kinds": {
+    "assert": 37,
+    "scenario": 0,
+    "group": 5,
+    "pin": 0,
+    "settle": 0
+  },
+  "summary": [
+    "    throw new Error(`${suite}: frozen coverage violated — ${problems.join(\"; \")}`);",
+    "Error: comparator negative: frozen coverage violated — group count drift: identical: executed 2, frozen 3; total drift: executed 37, frozen 38 (1 assertion(s) lost)"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "missing": "tests/g6-parity-matrix.test.ts",
+  "tag": "presence_delete_5",
+  "exit": 1,
+  "green": 7,
+  "red": 1,
+  "event_kinds": {
+    "assert": 0,
+    "scenario": 0,
+    "group": 0,
+    "pin": 0,
+    "settle": 0
+  },
+  "summary": [
+    "==== g6 instrument presence summary: 7 passed, 1 failed ===="
+  ]
+}

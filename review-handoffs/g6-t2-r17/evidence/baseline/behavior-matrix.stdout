@@ -1,0 +1,14 @@
+G6 parity behavior layer: 50 scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, production-entry trace + merged judgment; registers pinned against the frozen ledger: 50 completing + 4 over-limit + 6 crash)
+
+==== g6 parity behavior summary: 0 passed, 50 failed ====
+(merged judgment: artifact layer dims 3/4/5 + behavior layer dims 1/2/6/7/8/9 — 6 dims judged by the production-entry trace)
+==== g6 dim-9 known-cause bucket (R-G6-01): 50/50 divergences are the routed production cause; new-cause divergences: 0 ====
+(pinned signatures: BLOCKED + reason in {closureReviewDone, pathEntry per-invocation loss} + artifactRef present — the pin fails on a new cause or signature drift; denominator pinned at the frozen ledger's 50 completing scenarios)
+==== g6 non-dim-9 divergences: 0 (must be 0 — any non-dim-9 divergence is a regression, independent of the R-G6-01 bucket) ====
+==== g6 crash-recovery facts: 6/6 registry scenarios returned non-null facts (must be 6/6 with every crashPoint present — R8-H3/R9-H1; denominator = the frozen ledger's crash register) ====
+  ✓ S-CORE-LIGHT-FAIL-overlimit-pause: behavior 6/6 MATCH; durable over-limit terminal REGATE_ROUND_BUDGET_EXHAUSTED
+  ✓ S-CORE-STANDARD-FAIL-overlimit-pause: behavior 6/6 MATCH; durable over-limit terminal REGATE_ROUND_BUDGET_EXHAUSTED
+  ✓ S-CORE-DEEP-FAIL-overlimit-pause: behavior 6/6 MATCH; durable over-limit terminal REGATE_ROUND_BUDGET_EXHAUSTED
+  ✓ S-CORE-STANDARD-BU-overlimit-pause: behavior 6/6 MATCH; durable over-limit terminal REGATE_ROUND_BUDGET_EXHAUSTED
+==== g6 parity over-limit pause (behavior layer only): 4 passed, 0 failed ====
+(artifact layer NOT judged: pending gate rows carry no revision triple — not counted in the artifact-layer pass count; register pinned at the frozen ledger's 4 scenarios — pausePassed must equal it)

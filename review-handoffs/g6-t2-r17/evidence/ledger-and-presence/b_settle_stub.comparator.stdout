@@ -1,0 +1,5 @@
+G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mutations
+G6 comparator negative matrix (G6T2-R1-H4): one real PASS pair + mutations
+
+==== g6 comparator negative summary: comparator negative: 0 passed, 0 failed (frozen coverage: 38 assertions) ====
+(drop-set exemptions pinned; 3 artifact-layer dimensions judge, 6 behavior-layer NOT_JUDGED)

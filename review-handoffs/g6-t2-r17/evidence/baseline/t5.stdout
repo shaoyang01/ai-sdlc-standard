@@ -1,0 +1,40 @@
+G5-T5 parity — real manual chain vs runtime face (gate #1)
+  ✓ the real publisher produced the manual trace
+  ✓ takeover-B accepts the real manual trace ({"kind":"PUBLISHED","manifestPath":"/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/t5-parity-Z8gsMk/lib-manual/manifest.md","manifestDigest":"sha256:532f4545f5b55835799e3bc77fc045a53f14c3d1fc1e21b9a34244fcdb53ddbf","tookOver":true})
+  ✓ replay after takeover is NO_OP
+  ✓ replay is byte-identical (gate: 同输入重放逐字节一致)
+  ✓ normalized manual trace equals the runtime-taken-over document (gate #1)
+G5-T5 residuals — MISMATCH through the production door
+  ✓ baseline chain completed (12 nodes)
+  ✓ true divergence stops the run (JOURNAL_MANIFEST_MISMATCH_STOP)
+  ✓ the mismatch exit is the canonical blocked envelope
+  ✓ no re-entry target is offered
+G5-T5 residuals — real D-9 DEFERRED then publish
+  ✓ pending revision defers the projection ({"kind":"DEFERRED","reason":"recovery.pendingRevisionMaterialization is non-null (D-9)"})
+  ✓ DEFERRED leaves the manifest bytes untouched
+  ✓ after materialization the projection publishes ({"kind":"PUBLISHED","manifestPath":"/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/t5-defer-VQ9gOq/library/req-t5-parity/manifest.md","manifestDigest":"sha256:eeffee9e4e1301812ea20489eef331f6014ea715925a77b07a1a7f1674d60466","tookOver":true})
+  ✓ projected_through advanced to the journal head (4)
+G5-T5-R1 rework — real publisher products are readable end to end
+  ✓ the title-less init really emits an empty single-quoted scalar
+  ✓ the empty scalar parses back as an empty string (was: unterminated-quote throw)
+  ✓ the folded reason inside a seq-item map reassembles value-exact
+  ✓ the sibling inner keys still parse after the fold
+G5-T5-R2 rework — §6.2.6 repair full flow
+  ✓ the repair record survives the republication
+  ✓ both drifted bindings are recorded (2)
+  ✓ the first corrected entry names its node
+  ✓ the recorded digest is preserved verbatim
+  ✓ the corrected digest is the artifact's real digest
+  ✓ the baseline reset note is read back exactly
+  ✓ the flat corrections list also parses (same nested shape)
+G5-T5-R2 rework — ACCEPTED mixed V9
+  ✓ the store accepted the risk on the scan-source finding
+  ✓ the takeover of the accepted-state manifest settles ({"kind":"PUBLISHED","manifestPath":"/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/t5-accepted-3Uk51d/library/req-t5-parity/manifest.md","manifestDigest":"sha256:b23b5add69279bf364b24e12e56906725d3eb010c5b4e1784099475f1cf3467e","tookOver":true})
+  ✓ the mixed publish lands the tail and the acceptance together ({"kind":"PUBLISHED","manifestPath":"/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/t5-accepted-3Uk51d/library/req-t5-parity/manifest.md","manifestDigest":"sha256:234f6eedb63049d57b8033d8bfcfe9904947697562665b0a1a237a55ace7e336","tookOver":false})
+  ✓ the scan finding projects as ACCEPTED (ACCEPTED_RISK -> ACCEPTED)
+  ✓ the risk acceptor is recorded as the formal verdict
+  ✓ the journal tail's entry landed in the same publish
+  ✓ the tail node's entry is current after the mixed publish
+  ✓ no other artifact binding moved (V9: unrelated entries untouched)
+
+g5t5-parity: 32 passed, 0 failed

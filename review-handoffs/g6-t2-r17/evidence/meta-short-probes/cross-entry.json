@@ -1,0 +1,10 @@
+{
+  "first_exit": 0,
+  "second_exit": 0,
+  "future_lines": [
+    "{\"t\":\"scenario\",\"suite\":\"artifact-matrix\",\"id\":\"seed\",\"ok\":true,\"msg\":\"seed\"}",
+    "{\"t\":\"scenario\",\"suite\":\"artifact-matrix\",\"id\":\"real\",\"ok\":true,\"msg\":\"real\"}"
+  ],
+  "first_stdout": "future preseeded",
+  "second_stdout": "later run emitted"
+}

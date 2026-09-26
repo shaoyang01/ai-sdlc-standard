@@ -1,0 +1,2 @@
+{"t":"scenario","suite":"artifact-matrix","id":"seed","ok":true,"msg":"seed"}
+{"t":"scenario","suite":"artifact-matrix","id":"real","ok":true,"msg":"real"}

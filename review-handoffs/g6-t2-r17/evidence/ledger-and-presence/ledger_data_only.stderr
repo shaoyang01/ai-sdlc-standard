@@ -1,0 +1,17 @@
+/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:49
+    throw new Error(
+          ^
+
+Error: frozen ledger seal mismatch: content digest sha256:2c19a24f5826a285072b4404b72c92487a507c2d1a995967c8e412c0ddde75bc, sealed sha256:5bc9326000b1b1730c0f68ff3398b837eeb830a45318df990a1639a062ae8315 — the ledger is the instrument's anchor data; edit it only through a coverage decision (and re-seal deliberately)
+    at loadFrozenLedger (/private/tmp/g6-t2-r17-reg/tests/g6-parity/ledger-guard.ts:49:11)
+    at main (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:119:52)
+    at <anonymous> (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:168:1)
+    at Object.<anonymous> (/private/tmp/g6-t2-r17-reg/tests/g6-parity-matrix.test.ts:168:6)
+    at Module._compile (node:internal/modules/cjs/loader:1761:14)
+    at Object.transformer (/Users/eric/meicai/projects/ai-sdlc-standard/node_modules/tsx/dist/register-BLUABhh3.cjs:9:3252)
+    at Module.load (node:internal/modules/cjs/loader:1481:32)
+    at Module._load (node:internal/modules/cjs/loader:1300:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:245:24)
+
+Node.js v24.12.0

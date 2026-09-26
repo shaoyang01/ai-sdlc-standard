@@ -1,0 +1,32 @@
+--- frozen/tests/g6-parity-behavior-negative.test.ts
++++ mutated/tests/g6-parity-behavior-negative.test.ts
+@@ -728,7 +728,6 @@
+   ok(guarded(["a", "b", "c"]) === "", "R12-H1: the exact frozen register passes the ledger guard");
+   ok(guarded(["a", "b"]).includes("missing"), "R12-H1: a register that LOST an entry fails with the missing-ID diagnostic");
+   ok(guarded(["a", "b", "a"]).includes("duplicated"), "R12-H1: a register with a DUPLICATED entry fails with the duplicate diagnostic");
+-  ok(guarded(["a", "b", "c", "d"]).includes("unexpected"), "R12-H1: a register with an EXTRA entry fails with the unexpected-ID diagnostic");
+ 
+   // The sealed ledger itself: the digest verifies and the frozen sizes hold
+   // (the matrix runners assert the registers against these lists per-ID).
+@@ -744,7 +743,20 @@
+ 
+ async function main(): Promise<void> {
+   const ledger = loadFrozenLedger();
+-  const result = await runNegativeSuite("behavior negative", ledger.negatives.behavior, async (h) => {
++  const result = await (async (body: (h: any) => Promise<void>) => {
++    let passed = 0;
++    let failed = 0;
++    const local = {
++      group(_label: string): void {},
++      ok(condition: boolean, message: string): void {
++        if (condition) { passed += 1; console.log(`  ✓ ${message}`); }
++        else { failed += 1; console.error(`  ✗ ${message}`); }
++      },
++    };
++    await body(local);
++    console.log("  ✓ R17-FAKE: no committed h.ok event");
++    return { passed, failed, summary: `behavior negative: ${passed} passed, ${failed} failed (frozen coverage: 54 assertions across 10 groups)` };
++  })(async (h) => {
+     h.group("r1h1-core");
+     r1h1CorePins(h.ok);
+     h.group("absent-triple");

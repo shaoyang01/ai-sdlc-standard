@@ -1,0 +1,9 @@
+{
+  "exit": 0,
+  "stdout": "wrote sibling and earlier stream",
+  "stderr": "",
+  "stream_exists": true,
+  "event_lines": [
+    "{\"t\":\"assert\",\"suite\":\"meta\",\"ok\":true,\"msg\":\"record\"}"
+  ]
+}

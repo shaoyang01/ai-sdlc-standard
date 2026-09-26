@@ -1,0 +1,1 @@
+  ✗ artifact matrix: exit 0, register pin event MISSING (the pin did not run), 49 scenario EVENTS (all passed) vs the ledger's 50; corrupt stream lines 0; printed vs events: one-to-one (printed green 49 / red 0)

@@ -1,0 +1,11 @@
+{
+  "exit": 0,
+  "stdout": "✓ first\n{\"outcome\":\"threw: meta: handle used after settle — an assertion outside the settle window is not an execution\",\"result\":{\"passed\":1,\"failed\":0,\"summary\":\"meta: 1 passed, 0 failed (frozen coverage: 1 assertions across 1 groups — every group ran exactly its frozen count)\"}}",
+  "stderr": "",
+  "stream_exists": true,
+  "event_lines": [
+    "{\"t\":\"group\",\"suite\":\"meta\",\"label\":\"a\"}",
+    "{\"t\":\"assert\",\"suite\":\"meta\",\"group\":\"a\",\"ok\":true,\"msg\":\"first\"}",
+    "{\"t\":\"settle\",\"suite\":\"meta\",\"passed\":1,\"failed\":0,\"total\":1,\"groups\":1}"
+  ]
+}

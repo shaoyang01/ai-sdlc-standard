@@ -1,0 +1,10 @@
+G6 acceptance-instrument presence pin (R15 suggestion)
+  ✓ instrument file present: negative-coverage auditor (tests/g6-negative-coverage-audit.test.ts)
+  ✓ instrument file present: frozen ledger (sealed data) (tests/g6-parity/frozen-ledger.json)
+  ✓ instrument file present: ledger guard (seal + wrapper) (tests/g6-parity/ledger-guard.ts)
+  ✓ instrument file present: event stream (execution events) (tests/g6-parity/event-stream.ts)
+  ✓ instrument file present: artifact matrix runner (tests/g6-parity-matrix.test.ts)
+  ✓ instrument file present: behavior negative suite (tests/g6-parity-behavior-negative.test.ts)
+  ✓ instrument file present: comparator negative suite (tests/g6-parity-comparator-negative.test.ts)
+
+==== g6 instrument presence summary: 7 passed, 1 failed ====

@@ -1,0 +1,11 @@
+--- tests/g6-parity-matrix.test.ts
++++ tests/g6-parity-matrix.test.ts
+@@ -39,7 +39,7 @@
+ function ok(condition: boolean, message: string, tally: Tally): void {
+   if (condition) {
+     tally.passed += 1;
+-    console.log(`  ✓ ${message}`);
++    console.log(`  ✓ ${tally.passed === 1 ? message + " :: R17-TEXT-ONLY" : message}`);
+   } else {
+     tally.failed += 1;
+     console.error(`  ✗ ${message}`);

@@ -1,0 +1,3 @@
+
+==== g6 behavior negative summary: behavior negative: 0 passed, 0 failed (frozen coverage: 54 assertions) ====
+(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)

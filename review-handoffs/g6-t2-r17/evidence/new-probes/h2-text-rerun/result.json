@@ -1,0 +1,12 @@
+{
+  "audit_exit": 1,
+  "audit_diagnostic": [
+    "  ✓ behavior negative: under audit — exit 0, 54 assertion EVENTS across 10 groups (frozen 54), 1 settle event(s), corrupt stream lines 0, printed vs events: one-to-one",
+    "  ✓ comparator negative: under audit — exit 0, 38 assertion EVENTS across 5 groups (frozen 38), 1 settle event(s), corrupt stream lines 0, printed vs events: one-to-one",
+    "==== g6 negative-coverage audit summary: 10 passed, 1 failed ====",
+    "  ✗ artifact matrix: exit 0, register pin ran (event from the guard), 50 scenario EVENTS (all passed) vs the ledger's 50; corrupt stream lines 0; printed vs events: MISMATCH (printed green 50 / red 0)"
+  ],
+  "restored_sha256": "c15fcf5ad5ae6060f48ad323aec6c51d2102a83de2bc0ee33b00695202c572f5",
+  "reference_sha256": "c15fcf5ad5ae6060f48ad323aec6c51d2102a83de2bc0ee33b00695202c572f5",
+  "restored_exact": true
+}

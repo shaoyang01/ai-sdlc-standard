@@ -1,0 +1,80 @@
+{
+  "stderr-only": {
+    "printed_green": 54,
+    "printed_red": 1,
+    "event_green": 54,
+    "event_red": 0,
+    "printed_event_multiset_equal": false,
+    "valid_tagged_events": 66,
+    "corrupt": [],
+    "foreign_tags": [],
+    "scenario_id_message_conflicts": []
+  },
+  "same-count-id-msg-contradiction": {
+    "printed_green": 50,
+    "printed_red": 0,
+    "event_green": 50,
+    "event_red": 0,
+    "printed_event_multiset_equal": true,
+    "valid_tagged_events": 51,
+    "corrupt": [],
+    "foreign_tags": [],
+    "scenario_id_message_conflicts": [
+      {
+        "id": "S-CORE-LIGHT-PASS-first",
+        "message_id": "S-R17-PRINT-ONLY"
+      }
+    ]
+  },
+  "invalid-json": {
+    "printed_green": 54,
+    "printed_red": 0,
+    "event_green": 54,
+    "event_red": 0,
+    "printed_event_multiset_equal": true,
+    "valid_tagged_events": 66,
+    "corrupt": [
+      {
+        "line": 67,
+        "reason": "invalid JSON"
+      }
+    ],
+    "foreign_tags": [],
+    "scenario_id_message_conflicts": [],
+    "loose_skip_event_count": 66,
+    "loose_skip_settle_count": 1,
+    "loose_skip_assert_count": 54
+  },
+  "missing-tag": {
+    "printed_green": 54,
+    "printed_red": 0,
+    "event_green": 54,
+    "event_red": 0,
+    "printed_event_multiset_equal": true,
+    "valid_tagged_events": 66,
+    "corrupt": [
+      {
+        "line": 67,
+        "reason": "not event object"
+      }
+    ],
+    "foreign_tags": [],
+    "scenario_id_message_conflicts": []
+  },
+  "foreign-tag": {
+    "printed_green": 54,
+    "printed_red": 0,
+    "event_green": 54,
+    "event_red": 0,
+    "printed_event_multiset_equal": true,
+    "valid_tagged_events": 67,
+    "corrupt": [],
+    "foreign_tags": [
+      {
+        "line": 67,
+        "tag": "foreign"
+      }
+    ],
+    "scenario_id_message_conflicts": []
+  }
+}

@@ -1,0 +1,67 @@
+{"t":"group","suite":"behavior negative","label":"r1h1-core"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"conforming trace: all six behavior dimensions MATCH"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"R-G6-01: a BLOCKED handoff on a COMPLETED chain DIVERGEs (never MATCH)"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 9: a missing handoff triple refuses to judge (never a silent MATCH)"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 9: the expected artifact ref missing → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 9: a reason drift → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 2: a round missing its scan binding entry → DIVERGE (counts would have passed)"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 2: a misattempted binding entry → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 7: forward progress after a FAIL verdict → DIVERGE (admission violation)"}
+{"t":"assert","suite":"behavior negative","group":"r1h1-core","ok":true,"msg":"dim 7: the reflow jumping to the wrong node → DIVERGE"}
+{"t":"group","suite":"behavior negative","label":"absent-triple"}
+{"t":"assert","suite":"behavior negative","group":"absent-triple","ok":true,"msg":"dim 9: ABSENT expectation with a fabricated reason → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"absent-triple","ok":true,"msg":"dim 9: ABSENT expectation with a fabricated ref → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"absent-triple","ok":true,"msg":"dim 9: the over-limit ABSENT triple (all null) MATCHes"}
+{"t":"group","suite":"behavior negative","label":"real-run-pin"}
+{"t":"assert","suite":"behavior negative","group":"real-run-pin","ok":true,"msg":"real run: the entry's handoff is BLOCKED/'code review closure review not done' while the chain COMPLETED (R-G6-01 observed)"}
+{"t":"assert","suite":"behavior negative","group":"real-run-pin","ok":true,"msg":"real run: the comparator DIVERGEs on that handoff (no MATCH on BLOCKED)"}
+{"t":"group","suite":"behavior negative","label":"wp1-feedback"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"real run: the WP-1 record is journal-verified in the trace (FEEDBACK_DRIVEN_CHANGE/CLASSIFIED/gen 1→2, trigger solution-gate@1)"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"dim 7: the declared + journal-verified WP-1 generation restart to requirement-intake MATCHes (F post-gate)"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"dim 7: the same restart WITHOUT the declared WP-1 trigger DIVERGEs"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: the real trajectory with the WP-1 record evidence stripped → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a wrong-record-type WP-1 entry → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a non-CLASSIFIED WP-1 record → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a wrong-generation WP-1 record (gen 2→3 against a run at gen 2) → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a WP-1 record with no generation binding → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a WP-1 record attributed to the wrong trigger round → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: a WP-1 record attributed to the wrong trigger capability → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"real run: the generation-2 intake is observed at attempt 2"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R3-H1: the new-generation intake re-dispatched at attempt 1 → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R4-H2: a declared restart whose next dispatch is FORWARD (no WP-1 record) → DIVERGE (no forward mask)"}
+{"t":"assert","suite":"behavior negative","group":"wp1-feedback","ok":true,"msg":"R4-H2: a declared restart jumping to a non-intake node → DIVERGE"}
+{"t":"group","suite":"behavior negative","label":"two-generation"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the legal dual-generation wave (records gen 1 and 2, run at gen 3) MATCHes"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the legal dual-generation trace passes all six behavior dimensions"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the first wave's record carrying the wrong generation → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the last wave's record carrying the wrong generation → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the run's final generation drifting past the last declared wave → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"two-generation","ok":true,"msg":"R4-H1: the second declared wave with no journal record → DIVERGE"}
+{"t":"group","suite":"behavior negative","label":"mixed-kind"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the legal gate→review wave (records gen 1+2, run at gen 3) MATCHes"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the legal gate→review trace passes all six behavior dimensions"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the gate→review chain with the REVIEW (last) wave's record stripped → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the gate→review chain with the review wave's attribution blanked → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the gate→review chain with the final generation drifted 3→4 → DIVERGE"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the legal review→gate wave (records gen 1+2, run at gen 3) MATCHes"}
+{"t":"assert","suite":"behavior negative","group":"mixed-kind","ok":true,"msg":"R5-H1: the review→gate chain with the REVIEW (first) wave's record stripped → DIVERGE"}
+{"t":"group","suite":"behavior negative","label":"crash-seed-tamper"}
+{"t":"assert","suite":"behavior negative","group":"crash-seed-tamper","ok":true,"msg":"S-CRASH: a re-entry against a tampered published manifest fails closed (MANIFEST_CORRUPT_STOP) — the crash-resume path never silently continues"}
+{"t":"group","suite":"behavior negative","label":"crash-refusal-window"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the self-digest-tampered library is refused (MANIFEST_CORRUPT_STOP) and never rewritten — the refused bytes survive the driver"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the self-digest refusal reports no vacuous crash facts (lostWrite/redrive stay false)"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the entry digest-tampered library is refused (MANIFEST_CORRUPT_STOP) and never rewritten — the refused bytes survive the driver"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the entry digest refusal reports no vacuous crash facts (lostWrite/redrive stay false)"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the sealed cursor ahead of the journal-tampered library is refused (JOURNAL_MANIFEST_MISMATCH_STOP) and never rewritten — the refused bytes survive the driver"}
+{"t":"assert","suite":"behavior negative","group":"crash-refusal-window","ok":true,"msg":"R8-H4: the sealed cursor ahead of the journal refusal reports no vacuous crash facts (lostWrite/redrive stay false)"}
+{"t":"group","suite":"behavior negative","label":"crash-post-rollback"}
+{"t":"assert","suite":"behavior negative","group":"crash-post-rollback","ok":true,"msg":"R9-H2: a refusal after the lost-write rollback is terminal — the double-resume branch does not run and the refused bytes survive the driver"}
+{"t":"group","suite":"behavior negative","label":"registry-guard"}
+{"t":"pin","suite":"scenario-ledger","name":"register","label":"unit","ok":true,"size":3,"frozen":3}
+{"t":"assert","suite":"behavior negative","group":"registry-guard","ok":true,"msg":"R12-H1: the exact frozen register passes the ledger guard"}
+{"t":"assert","suite":"behavior negative","group":"registry-guard","ok":true,"msg":"R12-H1: a register that LOST an entry fails with the missing-ID diagnostic"}
+{"t":"assert","suite":"behavior negative","group":"registry-guard","ok":true,"msg":"R12-H1: a register with a DUPLICATED entry fails with the duplicate diagnostic"}
+{"t":"assert","suite":"behavior negative","group":"registry-guard","ok":true,"msg":"R12-H1: a register with an EXTRA entry fails with the unexpected-ID diagnostic"}
+{"t":"assert","suite":"behavior negative","group":"registry-guard","ok":true,"msg":"R12-H1: the sealed ledger loads with the frozen sizes (50/4/6 scenarios, 54/38 negative assertions)"}
+{"t":"settle","suite":"behavior negative","passed":54,"failed":0,"total":54,"groups":10}
+{"notAnEvent":true}

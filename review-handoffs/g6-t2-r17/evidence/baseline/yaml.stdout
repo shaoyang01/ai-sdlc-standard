@@ -1,0 +1,164 @@
+G5-T5 parity matrix — leading indicators force double quotes
+  ✓ -lead: byte-identical
+  ✓ ?-lead: byte-identical
+  ✓ :-lead: byte-identical
+  ✓ dash-space: byte-identical
+  ✓ comma: byte-identical
+  ✓ bracket: byte-identical
+  ✓ brace: byte-identical
+  ✓ hash: byte-identical
+  ✓ amp: byte-identical
+  ✓ star: byte-identical
+  ✓ bang: byte-identical
+  ✓ pipe: byte-identical
+  ✓ gt: byte-identical
+  ✓ pct: byte-identical
+  ✓ at: byte-identical
+  ✓ backtick: byte-identical
+  ✓ pre-quoted: byte-identical
+  ✓ lone-dash: byte-identical
+  ✓ lone-?: byte-identical
+  ✓ lone-:: byte-identical
+  ✓ dot-lead-word: byte-identical
+  ✓ plus-lead-word: byte-identical
+  ✓ tilde-lead-word: byte-identical
+G5-T5 parity matrix — numeric / bool resolvable forms
+  ✓ neg1: byte-identical
+  ✓ plus1: byte-identical
+  ✓ neg05: byte-identical
+  ✓ neg15: byte-identical
+  ✓ neg0: byte-identical
+  ✓ plus123: byte-identical
+  ✓ dot5: byte-identical
+  ✓ inf: byte-identical
+  ✓ neginf: byte-identical
+  ✓ plusinf: byte-identical
+  ✓ dotINF: byte-identical
+  ✓ nan: byte-identical
+  ✓ tilde: byte-identical
+  ✓ lone-dot: byte-identical
+  ✓ int42: byte-identical
+  ✓ zero: byte-identical
+  ✓ lead0: byte-identical
+  ✓ lead017: byte-identical
+  ✓ float15: byte-identical
+  ✓ true: byte-identical
+  ✓ True: byte-identical
+  ✓ yes: byte-identical
+  ✓ no: byte-identical
+  ✓ on: byte-identical
+  ✓ off: byte-identical
+  ✓ sex12: byte-identical
+  ✓ sex123: byte-identical
+  ✓ sexlegal: byte-identical
+  ✓ ts1: byte-identical
+  ✓ ts2: byte-identical
+  ✓ broknoct: byte-identical
+  ✓ hex1f: byte-identical
+  ✓ bin: byte-identical
+  ✓ underscore: byte-identical
+  ✓ underscore-float: byte-identical
+  ✓ dot-end: byte-identical
+  ✓ y: byte-identical
+  ✓ n: byte-identical
+  ✓ Y: byte-identical
+  ✓ N: byte-identical
+  ✓ e3: byte-identical
+  ✓ float-e3: byte-identical
+  ✓ oct0o: byte-identical
+  ✓ sexillegal: byte-identical
+  ✓ sex-bad2: byte-identical
+  ✓ sex-bad3: byte-identical
+  ✓ underscore-lead: byte-identical
+G5-T5 parity matrix — plain mid-string indicators
+  ✓ apos-mid: byte-identical
+  ✓ dquote-mid: byte-identical
+  ✓ question-mid: byte-identical
+  ✓ colon-mid: byte-identical
+  ✓ dash-mid: byte-identical
+  ✓ dot-mid: byte-identical
+  ✓ plus-mid: byte-identical
+  ✓ yes-mid: byte-identical
+  ✓ nbsp: byte-identical
+  ✓ u00a1: byte-identical
+  ✓ u1000: byte-identical
+  ✓ both-quotes single-doubled: byte-identical
+  ✓ trailing space single: byte-identical
+  ✓ trailing tab double: byte-identical
+  ✓ leading space double: byte-identical
+  ✓ empty single: byte-identical
+  ✓ mid tab double: byte-identical
+G5-T5 parity matrix — escape forms (uppercase hex, shorthand names)
+  ✓ ctl 0x01: byte-identical
+  ✓ DEL uppercase hex: byte-identical
+  ✓ NUL shorthand: byte-identical
+  ✓ BEL shorthand: byte-identical
+  ✓ BS shorthand: byte-identical
+  ✓ VT shorthand: byte-identical
+  ✓ FF shorthand: byte-identical
+  ✓ ESC shorthand: byte-identical
+  ✓ C1 0x80: byte-identical
+  ✓ C1 0x9E: byte-identical
+  ✓ NEL shorthand: byte-identical
+  ✓ astral uppercase 8-hex: byte-identical
+  ✓ astral U+10000: byte-identical
+G5-T5 parity matrix — Unicode line separators (single + continuation)
+  ✓ LS mid: byte-identical
+  ✓ PS mid: byte-identical
+  ✓ LS multiple: byte-identical
+  ✓ LS tail keeps the continuation indent: byte-identical
+G5-T5 parity matrix — embedded LF: block literals and fallbacks
+  ✓ clean block strip: byte-identical
+  ✓ three-line block: byte-identical
+  ✓ trailing LF clip block: byte-identical
+  ✓ interior empty line: byte-identical
+  ✓ two interior empty lines: byte-identical
+  ✓ first-line leading space -> explicit indent: byte-identical
+  ✓ empty first line -> explicit indent: byte-identical
+  ✓ later-line leading space preserved: byte-identical
+  ✓ tab on line -> double escapes: byte-identical
+  ✓ trailing space on line -> double escapes: byte-identical
+  ✓ LF only -> double escapes: byte-identical
+G5-T5 parity matrix — line folding past column 80
+  ✓ plain fold at column 80 (16+4 words): byte-identical
+  ✓ double-quoted fold (leading quote form): byte-identical
+  ✓ nested fold indent = owning indent + 2: byte-identical
+  ✓ sequence item fold: byte-identical
+G5-T5-R1 rework — compact nested sequence fold geometry
+  ✓ nested sequence fold breakpoint and continuation indent match Psych: byte-identical
+G5-T5 parity matrix — compact nested sequences
+  ✓ nested sequences compact (got "---\nl:\n- - a\n  - b\n- - c\n")
+G5-T5 parity matrix — nested block literal carries the deeper indent
+  ✓ nested block literal (got "---\nouter:\n  inner: |-\n    x\n    y\n    z\n")
+G5-T5-R1 rework — five classes that were undeclared inequivalences
+  ✓ merge-key sentinel takes the !!str branch: byte-identical
+  ✓ bad-month: invalid calendar stays plain (Psych rescue -> String): byte-identical
+  ✓ bad-day: invalid calendar stays plain (Psych rescue -> String): byte-identical
+  ✓ bad-hour: invalid calendar stays plain (Psych rescue -> String): byte-identical
+  ✓ non-leap: invalid calendar stays plain (Psych rescue -> String): byte-identical
+  ✓ valid leap date still single-quoted: byte-identical
+  ✓ raw LS inside a block line keeps the +2 continuation: byte-identical
+  ✓ single trailing LF takes the single-quoted fold: byte-identical
+G5-T5 parity matrix — round-trips through the strict reader
+  ✓ block strip: round-trip preserves the string
+  ✓ block three lines: round-trip preserves the string
+  ✓ block clip: round-trip preserves the string
+  ✓ block interior empty: round-trip preserves the string
+  ✓ block explicit indent: round-trip preserves the string
+  ✓ double escapes: round-trip preserves the string
+  ✓ double trailing space line: round-trip preserves the string
+  ✓ LS mid: round-trip preserves the string
+  ✓ LS multiple: round-trip preserves the string
+  ✓ NEL escape: round-trip preserves the string
+  ✓ escapes: round-trip preserves the string
+  ✓ fold plain: round-trip preserves the string
+  ✓ fold quoted: round-trip preserves the string
+  ✓ merge sentinel: round-trip preserves the string
+  ✓ invalid date plain: round-trip preserves the string
+  ✓ block with raw LS: round-trip preserves the string
+  ✓ single trailing LF fold: round-trip preserves the string
+  ✓ empty scalar: round-trip preserves the string
+  ✓ underscore int: round-trip preserves the string
+  ✓ broken octal: round-trip preserves the string
+
+g5t5-matrix: 150 passed, 0 failed

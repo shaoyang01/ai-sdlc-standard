@@ -1,0 +1,10 @@
+--- tests/g6-parity-behavior-negative.test.ts
++++ tests/g6-parity-behavior-negative.test.ts
+@@ -768,6 +768,7 @@
+   });
+   console.log(`\n==== g6 behavior negative summary: ${result.summary} ====`);
+   console.log(`(R1-H1: the real handoff triple is the verdict basis; a BLOCKED handoff never prints MATCH)`);
++  console.error("  ✗ R17 stderr-only diagnostic");
+   if (result.failed > 0) process.exit(1);
+ }
+ 

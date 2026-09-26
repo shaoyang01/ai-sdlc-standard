@@ -1,0 +1,30 @@
+{
+  "direct_entry_exit": 0,
+  "header": "G6 parity matrix M2: 49 scenarios (S-CORE families + S-MANIFEST + S-CRASH + S-INIT, artifact layer; register pinned against the frozen ledger's 50 unique IDs)",
+  "printed_green": 50,
+  "printed_red": 0,
+  "scenario_events": 50,
+  "register_pin": {
+    "t": "pin",
+    "suite": "scenario-ledger",
+    "name": "register",
+    "label": "completing matrix",
+    "ok": true,
+    "size": 50,
+    "frozen": 50
+  },
+  "summary": [
+    "==== g6 parity M1 summary: 50 passed, 0 failed ===="
+  ],
+  "checks": {
+    "exit_zero": true,
+    "corrupt_zero": true,
+    "register_pin_ok": true,
+    "id_unique": true,
+    "ids_equal_frozen": true,
+    "all_scenarios_green": true,
+    "printed_events_equal": true
+  },
+  "artifact_auditor_predicate_all_true": true,
+  "corrupt_lines": []
+}

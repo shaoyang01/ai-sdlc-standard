@@ -1,0 +1,286 @@
+find: /var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T//kt-regression.boD1BI/t41/.sdlc/business_domain/00old.md: No such file or directory
+  ✗ S-CORE-LIGHT-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-FAIL-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS_WITH_RISK-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-BLOCKED_UNKNOWN-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-FAIL-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS_WITH_RISK-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-BLOCKED_UNKNOWN-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-FAIL-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS_WITH_RISK-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-BLOCKED_UNKNOWN-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS_WITH_RISK-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS_WITH_RISK-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-FAIL-multiround: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-FAIL-multiround: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-FAIL-multiround: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS-reviewwave: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS-reviewwave: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-reviewwave: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-PASS_WITH_RISK-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-PASS_WITH_RISK-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS_WITH_RISK-review-regate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-FAIL-requirement-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-requirement-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-feedback-regate-post-review: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-DEEP-PASS-feedback-regate-post-gate: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-LIGHT-FAIL-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CORE-STANDARD-FAIL-upgrade: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-MANIFEST-STANDARD-reconcile: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-MANIFEST-STANDARD-corrupt: artifact fail-closed MANIFEST_CORRUPT_STOP (artifact layer only); behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-CRASH-STANDARD-post-gate-verdict-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true refusedStable=true
+  ✗ S-CRASH-STANDARD-post-gate-verdict-double-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true doubleNoOp=true refusedStable=true
+  ✗ S-CRASH-STANDARD-post-finding-migration-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true refusedStable=true
+  ✗ S-CRASH-STANDARD-post-finding-migration-double-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true doubleNoOp=true refusedStable=true
+  ✗ S-CRASH-STANDARD-pre-manifest-write-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true lostWrite=true redrive=true refusedStable=true
+  ✗ S-CRASH-STANDARD-pre-manifest-write-double-resume: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/development path entry not allowed: no formal_verdict event with materialized depth found; code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required)); crash interrupt@boundary=true reDispatch=0 manifestCaughtUp=true lostWrite=true redrive=true doubleNoOp=true refusedStable=true
+  ✗ S-INIT-new-project-STANDARD-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-new-project-STANDARD-FAIL-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-existing-code-STANDARD-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-existing-code-STANDARD-FAIL-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-original-sdd-STANDARD-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-original-sdd-STANDARD-FAIL-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-original-sdlc-sdd-STANDARD-PASS-first: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+  ✗ S-INIT-original-sdlc-sdd-STANDARD-FAIL-reflow: artifact deep-equal; behavior final-handoff(terminal at knowledge-sync vs expected knowledge-sync; handoff BLOCKED/code review closure review not done (ref present) vs expected READY_FOR_MANUAL_GIT_HANDOFF/- (ref required))
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Preparing worktree (detached HEAD 2144944)
+Preparing worktree (new branch 'codex/e2')
+Preparing worktree (new branch 'codex/e3')
+Preparing worktree (new branch 'codex/e4')
+Preparing worktree (new branch 'codex/e5')
+Preparing worktree (new branch 'codex/e6')
+Preparing worktree (new branch 'codex/e7')
+fatal: validation failed, cannot remove working tree: '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-iB1PPO/ctrl/workspaces/v1/274a0f9a0e5423f8f669f62126181d1e1edf0b337274195a7128a628abba4844/.git' is not a .git file, error code 5
+error: cannot delete branch 'codex/e8' used by worktree at '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-iB1PPO/ctrl/workspaces/v1/274a0f9a0e5423f8f669f62126181d1e1edf0b337274195a7128a628abba4844'
+Preparing worktree (new branch 'codex/e10')
+Preparing worktree (new branch 'codex/e11')
+Preparing worktree (new branch 'codex/e12')
+Preparing worktree (new branch 'codex/e14-other')
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+fatal: '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-dIrZOr/ctrl/workspaces/v1/93ff465a3d2d23f0db4c90ca5a7e0168cab426456061d7f7907be0de4f2d5bd5' is not a working tree
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Preparing worktree (new branch 'codex/h2a')
+error: cannot delete branch 'codex/h2a' used by worktree at '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-WCZIAX/ctrl/workspaces/v1/45b5cbf9981d403c923a727b5ec42a6864487e81d87cf00615bdd945350501a2'
+Preparing worktree (new branch 'codex/h2b')
+error: cannot delete branch 'codex/h2b' used by worktree at '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-WCZIAX/ctrl/workspaces/v1/908471742f75971b87d647adf4e9f36ddd11c03abe40d02af2a35ec751f1f85f'
+Preparing worktree (new branch 'codex/h2c')
+error: cannot delete branch 'codex/h2c' used by worktree at '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-WCZIAX/h2c-other'
+error: branch 'codex/h4b' not found
+Preparing worktree (checking out 'codex/h5a')
+error: branch 'codex/h5d' not found
+fatal: '/private/var/folders/kr/ghjtf54n2_9d091718xznyw00000gn/T/l03r1c1-WCZIAX/ctrl/workspaces/v1/8d8374252a9cc199b11d0b07162216b2a89b4982e0423d959813a3699a5c93ea' is not a working tree
+/opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych/parser.rb:62:in `_native_parse': (<unknown>): did not find expected node content while parsing a block node at line 4 column 3 (Psych::SyntaxError)
+	from /opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych/parser.rb:62:in `parse'
+	from /opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych.rb:455:in `parse_stream'
+	from /opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych.rb:399:in `parse'
+	from /opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych.rb:323:in `safe_load'
+	from /opt/homebrew/Cellar/ruby@3.3/3.3.12/lib/ruby/3.3.0/psych.rb:369:in `load'
+	from -e:1:in `<main>'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+Switched to a new branch 'feat/loop-runtime-v1'
+Switched to branch 'main'
+LOOP_RUN_ERROR INTAKE_NOT_CONFIRMED: intake manifest status is "draft"; only status:"confirmed" may start a run (human gate, design §3)
+LOOP_RUN_ERROR BASE_SHA_RESOLVE_FAILED: repositoryPath/controlRoot unusable for git probing: INVALID_INPUT
